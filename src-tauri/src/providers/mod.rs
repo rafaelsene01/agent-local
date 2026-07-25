@@ -1,4 +1,5 @@
 pub mod custom;
+pub mod embedded;
 pub mod lmstudio;
 pub mod ollama;
 
