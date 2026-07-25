@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft } from "lucide-react";
 import { useUiStore } from "../../store/uiStore";
 import { ConnectionsList } from "./ConnectionsList";
+import { ModelsList } from "./ModelsList";
 
 type Tab = "connections" | "models";
 
@@ -41,11 +42,7 @@ export function ConnectionsPanel() {
       </div>
 
       <div className="mx-auto w-full max-w-2xl px-6 py-6">
-        {tab === "connections" ? (
-          <ConnectionsList />
-        ) : (
-          <p className="text-sm text-[var(--text-secondary)]">{t("connections.modelsComingSoon")}</p>
-        )}
+        {tab === "connections" ? <ConnectionsList /> : <ModelsList />}
       </div>
     </div>
   );

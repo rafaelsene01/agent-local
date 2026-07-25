@@ -46,7 +46,22 @@
     "add": "Add",
     "tabConnections": "Connections",
     "tabModels": "Models",
-    "modelsComingSoon": "Model management is coming in the next task."
+    "installedModels": "Installed models",
+    "noEnabledConnections": "Enable a connection to see its installed models.",
+    "noInstalledModels": "No installed models yet.",
+    "active": "Active",
+    "useModel": "Use this model",
+    "downloadModels": "Download models",
+    "showAllModels": "Show all, even if not recommended",
+    "ramUnknown": "Couldn't detect your system memory — showing every model.",
+    "notRecommended": "Not recommended",
+    "download": "Download",
+    "downloaded": "Downloaded",
+    "downloadError": "Download failed",
+    "noConnectionForProvider": "No enabled connection supports this provider",
+    "manualPull": "Download by name or link",
+    "manualPullPlaceholder": "Model name (Ollama) or Hugging Face link (LM Studio)",
+    "pull": "Download"
   },
   "settings": {
     "title": "Settings",

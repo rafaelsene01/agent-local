@@ -46,7 +46,22 @@
     "add": "Adicionar",
     "tabConnections": "Conexões",
     "tabModels": "Modelos",
-    "modelsComingSoon": "A gestão de modelos chega na próxima tarefa."
+    "installedModels": "Modelos instalados",
+    "noEnabledConnections": "Habilite uma conexão para ver seus modelos instalados.",
+    "noInstalledModels": "Nenhum modelo instalado ainda.",
+    "active": "Ativo",
+    "useModel": "Usar este modelo",
+    "downloadModels": "Baixar modelos",
+    "showAllModels": "Mostrar todos, mesmo não recomendados",
+    "ramUnknown": "Não foi possível detectar a memória do sistema — mostrando todos os modelos.",
+    "notRecommended": "Não recomendado",
+    "download": "Baixar",
+    "downloaded": "Baixado",
+    "downloadError": "Falha no download",
+    "noConnectionForProvider": "Nenhuma conexão habilitada suporta este provedor",
+    "manualPull": "Baixar por nome ou link",
+    "manualPullPlaceholder": "Nome do modelo (Ollama) ou link do Hugging Face (LM Studio)",
+    "pull": "Baixar"
   },
   "settings": {
     "title": "Configurações",
