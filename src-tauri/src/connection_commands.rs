@@ -1,15 +1,6 @@
 use crate::connections::{self, Connection, ConnectionManager, ConnectionStatus};
-use crate::db::DbState;
-use rusqlite::Connection as SqlConnection;
+use crate::db::{require_conn, DbState};
 use tauri::State;
-
-fn require_conn<'a>(
-    guard: &'a std::sync::MutexGuard<'a, Option<SqlConnection>>,
-) -> Result<&'a SqlConnection, String> {
-    guard
-        .as_ref()
-        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
-}
 
 /// Seeds the known Ollama/LM Studio candidates (disabled by default) the
 /// first time they're missing, then live-checks every connection's status —
@@ -32,11 +23,16 @@ pub async fn list_connections(db: State<'_, DbState>) -> Result<Vec<Connection>,
         connections::list_connections(sql)?
     };
 
-    let mut refreshed = Vec::with_capacity(base_list.len());
-    for conn in base_list {
-        let status = manager.refresh_status(&conn).await;
-        refreshed.push(Connection { status, ..conn });
-    }
+    // Checked concurrently, but collected in the original order: the list
+    // must not reshuffle depending on which runtime answered first (C-02).
+    let refreshed = futures_util::future::join_all(base_list.into_iter().map(|conn| {
+        let manager = &manager;
+        async move {
+            let status = manager.refresh_status(&conn).await;
+            Connection { status, ..conn }
+        }
+    }))
+    .await;
     Ok(refreshed)
 }
 

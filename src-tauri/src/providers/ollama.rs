@@ -1,4 +1,4 @@
-use super::{
+use super::{HEALTH_CHECK_TIMEOUT, 
     ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress,
     PullStatus,
 };
@@ -75,6 +75,7 @@ impl ProviderClient for OllamaClient {
         let resp = self
             .client
             .get(format!("{}/api/tags", self.base_url))
+            .timeout(HEALTH_CHECK_TIMEOUT)
             .send()
             .await?;
         if resp.status().is_success() {

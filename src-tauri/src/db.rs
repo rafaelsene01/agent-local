@@ -94,6 +94,16 @@ pub fn apply_migrations(conn: &mut Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// The database only exists after the user finishes onboarding (AD-011), so
+/// every command has to answer "is there a database yet?" the same way.
+pub fn require_conn<'a>(
+    guard: &'a std::sync::MutexGuard<'a, Option<Connection>>,
+) -> Result<&'a Connection, String> {
+    guard
+        .as_ref()
+        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
+}
+
 pub fn open(db_file: &Path) -> Result<Connection, String> {
     let mut conn = Connection::open(db_file).map_err(|e| e.to_string())?;
     apply_migrations(&mut conn)?;

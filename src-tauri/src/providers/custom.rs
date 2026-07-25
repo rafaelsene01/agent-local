@@ -1,4 +1,4 @@
-use super::{ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress};
+use super::{HEALTH_CHECK_TIMEOUT, ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::time::Duration;
@@ -39,6 +39,7 @@ impl ProviderClient for CustomClient {
         let resp = self
             .client
             .get(format!("{}/v1/models", self.base_url))
+            .timeout(HEALTH_CHECK_TIMEOUT)
             .send()
             .await?;
         if resp.status().is_success() {

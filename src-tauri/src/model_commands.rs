@@ -1,5 +1,5 @@
 use crate::connections::{self, Connection, ConnectionManager};
-use crate::db::DbState;
+use crate::db::{require_conn, DbState};
 use crate::models::catalog::{curated_models, CuratedModelInfo};
 use crate::providers::{ConfigApplied, GpuOffload, InstalledModel, PullProgress};
 use crate::system_info;
@@ -7,14 +7,6 @@ use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
-
-fn require_conn<'a>(
-    guard: &'a std::sync::MutexGuard<'a, Option<SqlConnection>>,
-) -> Result<&'a SqlConnection, String> {
-    guard
-        .as_ref()
-        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
-}
 
 fn get_or_create_model_config(
     sql: &SqlConnection,

@@ -4,7 +4,13 @@ pub mod ollama;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
+
+/// Every provider lives on localhost, so an unreachable one should fail fast
+/// instead of holding the Conexões screen for the client-wide 5s. Applied
+/// per-request rather than on the client, which also serves model downloads.
+pub const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Serialize, Clone)]
 pub struct InstalledModel {

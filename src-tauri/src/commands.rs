@@ -1,15 +1,9 @@
-use crate::db::DbState;
+use crate::db::{require_conn, DbState};
 use crate::models::{Chat, Message};
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::params;
 use tauri::State;
 use uuid::Uuid;
-
-fn require_conn<'a>(guard: &'a std::sync::MutexGuard<'a, Option<Connection>>) -> Result<&'a Connection, String> {
-    guard
-        .as_ref()
-        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
-}
 
 #[tauri::command]
 pub fn create_chat(db: State<DbState>, title: Option<String>) -> Result<Chat, String> {
