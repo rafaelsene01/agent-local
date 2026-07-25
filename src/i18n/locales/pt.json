@@ -34,7 +34,19 @@
       "available": "Pelo menos uma conexão habilitada está disponível",
       "unavailable": "Conexões habilitadas estão indisponíveis",
       "none": "Nenhuma conexão habilitada"
-    }
+    },
+    "empty": "Nenhuma conexão disponível ainda",
+    "retry": "Tentar novamente",
+    "enabled": "Habilitada",
+    "addManual": "Adicionar conexão customizada",
+    "providerCustom": "Customizado (OpenAI-compatible)",
+    "providerOllama": "Ollama",
+    "providerLmStudio": "LM Studio",
+    "baseUrlPlaceholder": "http://localhost:PORTA",
+    "add": "Adicionar",
+    "tabConnections": "Conexões",
+    "tabModels": "Modelos",
+    "modelsComingSoon": "A gestão de modelos chega na próxima tarefa."
   },
   "settings": {
     "title": "Configurações",

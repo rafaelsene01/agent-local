@@ -34,7 +34,19 @@
       "available": "At least one enabled connection is available",
       "unavailable": "Enabled connections are unavailable",
       "none": "No connection enabled"
-    }
+    },
+    "empty": "No connection available yet",
+    "retry": "Retry",
+    "enabled": "Enabled",
+    "addManual": "Add a custom connection",
+    "providerCustom": "Custom (OpenAI-compatible)",
+    "providerOllama": "Ollama",
+    "providerLmStudio": "LM Studio",
+    "baseUrlPlaceholder": "http://localhost:PORT",
+    "add": "Add",
+    "tabConnections": "Connections",
+    "tabModels": "Models",
+    "modelsComingSoon": "Model management is coming in the next task."
   },
   "settings": {
     "title": "Settings",
