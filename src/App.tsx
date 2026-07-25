@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { ChatPanel } from "./components/Chat/ChatPanel";
 import { SettingsPanel } from "./components/Settings/SettingsPanel";
+import { ConnectionsPanel } from "./components/Connections/ConnectionsPanel";
 import { Wizard } from "./components/Onboarding/Wizard";
 import { useConfigStore } from "./store/configStore";
 import { useUiStore } from "./store/uiStore";
@@ -25,7 +26,13 @@ function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-app)]">
       <Sidebar />
-      {activeView === "settings" ? <SettingsPanel /> : <ChatPanel />}
+      {activeView === "settings" ? (
+        <SettingsPanel />
+      ) : activeView === "connections" ? (
+        <ConnectionsPanel />
+      ) : (
+        <ChatPanel />
+      )}
     </div>
   );
 }
