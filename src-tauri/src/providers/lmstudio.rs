@@ -1,4 +1,5 @@
-use super::{HEALTH_CHECK_TIMEOUT, 
+use super::openai_stream;
+use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, 
     ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress,
     PullStatus,
 };
@@ -213,4 +214,23 @@ impl ProviderClient for LmStudioClient {
             note,
         })
     }
+
+    /// LM Studio serves the OpenAI dialect, so streaming is the shared parser.
+    async fn stream_chat(
+        &self,
+        model: &str,
+        messages: Vec<ChatMessage>,
+        context_length: Option<u32>,
+        _gpu_offload: Option<GpuOffload>,
+    ) -> Result<ChatStream, ProviderError> {
+        openai_stream::stream_chat_completions(
+            &self.client,
+            &self.base_url,
+            model,
+            messages,
+            context_length,
+        )
+        .await
+    }
+
 }

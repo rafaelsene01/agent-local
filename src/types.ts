@@ -20,6 +20,33 @@ export interface AppConfig {
   onboarding_completed: boolean;
 }
 
+/** Mirrors `DocumentStatus` in rag/pipeline.rs. Everything before `ready` is
+ *  a processing step; only `ready` documents are searchable. */
+export type DocumentStatus =
+  | "queued"
+  | "parsing"
+  | "chunking"
+  | "embedding"
+  | "ready"
+  | "error";
+
+export interface DocumentRecord {
+  id: string;
+  filename: string;
+  file_path: string;
+  size_bytes: number;
+  status: DocumentStatus;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentStatusEvent {
+  id: string;
+  status: DocumentStatus;
+  error_message: string | null;
+}
+
 export type ConnectionProvider = "ollama" | "lmstudio" | "custom" | "embedded";
 export type ConnectionStatus = "available" | "unavailable" | "unknown";
 

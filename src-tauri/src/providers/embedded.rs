@@ -1,6 +1,6 @@
 use super::{
-    custom::CustomClient, ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError,
-    PullProgress,
+    custom::CustomClient, ChatMessage, ChatStream, ConfigApplied, GpuOffload, InstalledModel,
+    ProviderClient, ProviderError, PullProgress,
 };
 use crate::runtime::model;
 use async_trait::async_trait;
@@ -41,6 +41,18 @@ impl ProviderClient for EmbeddedClient {
 
     /// `identifier` is a direct `.gguf` URL (EMBED-13) — there is no registry
     /// to pull by name from, unlike Ollama.
+    async fn stream_chat(
+        &self,
+        model: &str,
+        messages: Vec<ChatMessage>,
+        context_length: Option<u32>,
+        gpu_offload: Option<GpuOffload>,
+    ) -> Result<ChatStream, ProviderError> {
+        self.client()?
+            .stream_chat(model, messages, context_length, gpu_offload)
+            .await
+    }
+
     async fn pull_model(
         &self,
         identifier: &str,

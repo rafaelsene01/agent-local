@@ -75,6 +75,47 @@ CREATE TABLE IF NOT EXISTS embedded_runtime (
 );
 ";
 
+/// `status` is the document's position in the parse → chunk → embed pipeline;
+/// only `ready` documents are searchable, so a crash mid-processing leaves a
+/// row that can be re-queued instead of a half-indexed document.
+const MIGRATION_4_DOCUMENTS: &str = "
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+";
+
+/// Attachments live per chat and die with it (AD-004): the files sit under
+/// `chats/<id>/tmp/` and their vectors under the `chat:<id>` namespace.
+/// `injected_whole` is a terminal status for files small enough to go into the
+/// prompt verbatim, which skips chunking and embedding entirely.
+const MIGRATION_5_CHAT_ATTACHMENTS: &str = "
+ALTER TABLE chats ADD COLUMN use_global_rag INTEGER NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS chat_attachments (
+    id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL,
+    message_id TEXT,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    extracted_text TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_chat_id ON chat_attachments(chat_id);
+";
+
 /// Ordered list of schema versions. A migration is applied only when
 /// `PRAGMA user_version` is below its number, which is what makes a column
 /// change reach databases that already exist on disk — `CREATE TABLE IF NOT
@@ -83,6 +124,8 @@ const MIGRATIONS: &[(u32, &str)] = &[
     (1, MIGRATION_1_INITIAL),
     (2, MIGRATION_2_SINGLE_ACTIVE_CONNECTION),
     (3, MIGRATION_3_EMBEDDED_RUNTIME),
+    (4, MIGRATION_4_DOCUMENTS),
+    (5, MIGRATION_5_CHAT_ATTACHMENTS),
 ];
 
 fn user_version(conn: &Connection) -> Result<u32, String> {

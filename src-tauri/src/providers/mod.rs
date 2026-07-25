@@ -1,6 +1,7 @@
 pub mod custom;
 pub mod embedded;
 pub mod lmstudio;
+pub mod openai_stream;
 pub mod ollama;
 
 use async_trait::async_trait;
@@ -125,6 +126,40 @@ impl From<reqwest::Error> for ProviderError {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+impl ChatMessage {
+    pub fn system(content: impl Into<String>) -> Self {
+        ChatMessage {
+            role: "system".to_string(),
+            content: content.into(),
+        }
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        ChatMessage {
+            role: "user".to_string(),
+            content: content.into(),
+        }
+    }
+}
+
+/// One incremental piece of the answer. `done` arrives on its own at the end,
+/// which is what lets the caller persist the accumulated message exactly once.
+#[derive(Debug, Clone)]
+pub struct ChatToken {
+    pub delta: String,
+    pub done: bool,
+}
+
+pub type ChatStream = std::pin::Pin<
+    Box<dyn futures_util::Stream<Item = Result<ChatToken, ProviderError>> + Send>,
+>;
+
 #[async_trait]
 pub trait ProviderClient: Send + Sync {
     async fn health_check(&self) -> Result<(), ProviderError>;
@@ -140,4 +175,12 @@ pub trait ProviderClient: Send + Sync {
         context_length: Option<u32>,
         gpu_offload: Option<GpuOffload>,
     ) -> Result<ConfigApplied, ProviderError>;
+
+    async fn stream_chat(
+        &self,
+        model: &str,
+        messages: Vec<ChatMessage>,
+        context_length: Option<u32>,
+        gpu_offload: Option<GpuOffload>,
+    ) -> Result<ChatStream, ProviderError>;
 }

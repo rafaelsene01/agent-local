@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar/Sidebar";
 import { ChatPanel } from "./components/Chat/ChatPanel";
 import { SettingsPanel } from "./components/Settings/SettingsPanel";
 import { ConnectionsPanel } from "./components/Connections/ConnectionsPanel";
+import { DocumentsPanel } from "./components/Documents/DocumentsPanel";
 import { Wizard } from "./components/Onboarding/Wizard";
 import { useConfigStore } from "./store/configStore";
 import { useUiStore } from "./store/uiStore";
@@ -30,6 +31,8 @@ function App() {
         <SettingsPanel />
       ) : activeView === "connections" ? (
         <ConnectionsPanel />
+      ) : activeView === "documents" ? (
+        <DocumentsPanel />
       ) : (
         <ChatPanel />
       )}

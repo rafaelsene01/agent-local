@@ -4,10 +4,12 @@ mod config_commands;
 mod connection_commands;
 mod connections;
 mod db;
+mod document_commands;
 mod embedded_commands;
 mod model_commands;
 mod models;
 mod providers;
+mod rag;
 mod runtime;
 mod system_info;
 
@@ -70,7 +72,15 @@ pub fn run() {
             };
             app.manage(DbState(Mutex::new(existing_conn)));
             app.manage(SidecarState::empty());
+
+            if let Ok(Some(cfg)) = config::load_config(app.handle()) {
+                // Keeps the embedding model inside the user's chosen folder
+                // (AD-008) instead of a hidden per-user cache.
+                rag::embedding::set_cache_dir(cfg.base_path_buf().join("models"));
+            }
+
             autostart_sidecar(app.handle());
+            document_commands::requeue_unfinished_documents(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -102,6 +112,9 @@ pub fn run() {
             embedded_commands::stop_embedded_runtime,
             embedded_commands::embedded_runtime_status,
             embedded_commands::download_embedded_model,
+            document_commands::import_documents,
+            document_commands::list_documents,
+            document_commands::delete_document,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

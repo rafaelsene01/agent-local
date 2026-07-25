@@ -25,7 +25,21 @@
   },
   "documents": {
     "title": "Documents",
-    "placeholder": "Knowledge base (RAG) arrives in a future milestone."
+    "placeholder": "No documents yet",
+    "panelDescription": "Documents you import here become searchable by every chat.",
+    "import": "Import documents",
+    "importing": "Importing…",
+    "empty": "No document imported yet.",
+    "statusQueued": "Queued",
+    "statusParsing": "Reading",
+    "statusChunking": "Splitting",
+    "statusEmbedding": "Indexing",
+    "statusReady": "Ready",
+    "statusError": "Failed",
+    "remove": "Remove",
+    "retryHint": "Remove it and import again.",
+    "supportedFormats": "PDF, DOCX, TXT and MD",
+    "fileDialogTitle": "Choose documents"
   },
   "connections": {
     "title": "Connections",

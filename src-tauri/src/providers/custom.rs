@@ -1,4 +1,5 @@
-use super::{HEALTH_CHECK_TIMEOUT, ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress};
+use super::openai_stream;
+use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::time::Duration;
@@ -95,4 +96,23 @@ impl ProviderClient for CustomClient {
             ),
         })
     }
+
+    /// A custom connection is OpenAI-compatible by definition (CONN-01 AC4).
+    async fn stream_chat(
+        &self,
+        model: &str,
+        messages: Vec<ChatMessage>,
+        context_length: Option<u32>,
+        _gpu_offload: Option<GpuOffload>,
+    ) -> Result<ChatStream, ProviderError> {
+        openai_stream::stream_chat_completions(
+            &self.client,
+            &self.base_url,
+            model,
+            messages,
+            context_length,
+        )
+        .await
+    }
+
 }

@@ -34,4 +34,19 @@ futures-util = "0.3"
 zip = "2"
 tar = "0.4"
 flate2 = "1"
+# RAG stack (M5). Versions confirmed on crates.io on 2026-07-25; `dotext` was
+# rejected for DOCX because its last release is from 2017.
+# `ort-load-dynamic` instead of the default static ONNX Runtime: the prebuilt
+# static lib needs the MSVC 2022 STL (`__std_find_trivial_8`), which VS 2019
+# Build Tools doesn't provide. The DLL is fetched at runtime, the same pattern
+# the embedded llama.cpp runtime already uses.
+fastembed = { version = "5", default-features = false, features = [
+    "ort-load-dynamic",
+    "hf-hub-native-tls",
+] }
+lancedb = "0.31"
+arrow-array = "58"
+arrow-schema = "58"
+pdf-extract = "0.12"
+docx-rs = "0.4"
 

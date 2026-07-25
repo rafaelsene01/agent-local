@@ -25,7 +25,21 @@
   },
   "documents": {
     "title": "Documentos",
-    "placeholder": "Base de conhecimento (RAG) chega em um próximo milestone."
+    "placeholder": "Nenhum documento ainda",
+    "panelDescription": "Documentos importados aqui ficam pesquisáveis por todos os chats.",
+    "import": "Importar documentos",
+    "importing": "Importando…",
+    "empty": "Nenhum documento importado ainda.",
+    "statusQueued": "Na fila",
+    "statusParsing": "Lendo",
+    "statusChunking": "Dividindo",
+    "statusEmbedding": "Indexando",
+    "statusReady": "Pronto",
+    "statusError": "Falhou",
+    "remove": "Remover",
+    "retryHint": "Remova e importe de novo.",
+    "supportedFormats": "PDF, DOCX, TXT e MD",
+    "fileDialogTitle": "Escolha os documentos"
   },
   "connections": {
     "title": "Conexões",
