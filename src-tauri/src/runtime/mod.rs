@@ -3,6 +3,7 @@ pub mod download;
 pub mod model;
 pub mod process;
 pub mod release;
+pub mod store;
 
 /// Only these two are shipped as prebuilt llama.cpp binaries by the project
 /// for the platforms this milestone targets; anything else makes the embedded

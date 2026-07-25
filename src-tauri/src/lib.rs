@@ -4,6 +4,7 @@ mod config_commands;
 mod connection_commands;
 mod connections;
 mod db;
+mod embedded_commands;
 mod model_commands;
 mod models;
 mod providers;
@@ -11,12 +12,45 @@ mod runtime;
 mod system_info;
 
 use db::DbState;
+use runtime::process::SidecarState;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
+
+/// Starts the sidecar at boot when it was already set up and its connection
+/// is the active one, so the user doesn't have to re-click anything after a
+/// restart (EMBED-06). Any failure here is logged and ignored: the app must
+/// still open, with the connection simply reporting unavailable.
+fn autostart_sidecar(app: &tauri::AppHandle) {
+    let (row, is_active) = {
+        let db = app.state::<DbState>();
+        let Ok(guard) = db.0.lock() else { return };
+        let Some(sql) = guard.as_ref() else { return };
+        let Ok(row) = runtime::store::load(sql) else {
+            return;
+        };
+        let is_active = connections::active_connection(sql)
+            .ok()
+            .flatten()
+            .is_some_and(|c| c.provider == "embedded");
+        (row, is_active)
+    };
+
+    if !is_active || !row.is_ready() {
+        return;
+    }
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        match embedded_commands::start_sidecar_from_row(&handle, &row).await {
+            Ok(port) => println!("embedded runtime listening on 127.0.0.1:{port}"),
+            Err(e) => eprintln!("failed to start embedded runtime: {e}"),
+        }
+    });
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -35,6 +69,8 @@ pub fn run() {
                 _ => None,
             };
             app.manage(DbState(Mutex::new(existing_conn)));
+            app.manage(SidecarState::empty());
+            autostart_sidecar(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -61,7 +97,28 @@ pub fn run() {
             model_commands::set_active_model,
             model_commands::get_active_pair,
             model_commands::configure_model,
+            embedded_commands::setup_embedded_runtime,
+            embedded_commands::start_embedded_runtime,
+            embedded_commands::stop_embedded_runtime,
+            embedded_commands::embedded_runtime_status,
+            embedded_commands::download_embedded_model,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Window events aren't enough to catch every quit path; RunEvent is the
+    // reliable hook for killing the child process (EMBED-07).
+    app.run(|handle, event| {
+        if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+            if let Some(mut sidecar) = handle
+                .state::<SidecarState>()
+                .0
+                .lock()
+                .ok()
+                .and_then(|mut guard| guard.take())
+            {
+                sidecar.kill();
+            }
+        }
+    });
 }
