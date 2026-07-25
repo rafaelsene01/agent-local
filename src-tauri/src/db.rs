@@ -44,11 +44,31 @@ CREATE TABLE IF NOT EXISTS model_configs (
 CREATE INDEX IF NOT EXISTS idx_model_configs_connection ON model_configs(connection_id);
 ";
 
+/// Only one connection may be active at a time (AD-021). The rename carries
+/// the previously enabled flags over, and the normalization collapses any
+/// pre-existing "several enabled" state down to the oldest one. The keeper is
+/// snapshotted into a temp table first so the UPDATE cannot depend on when
+/// SQLite evaluates the subquery relative to the rows it is rewriting.
+const MIGRATION_2_SINGLE_ACTIVE_CONNECTION: &str = "
+ALTER TABLE connections RENAME COLUMN enabled TO is_active;
+
+CREATE TEMP TABLE _keep_active AS
+    SELECT id FROM connections WHERE is_active = 1 ORDER BY created_at ASC, id ASC LIMIT 1;
+
+UPDATE connections SET is_active = 0
+    WHERE is_active = 1 AND id NOT IN (SELECT id FROM _keep_active);
+
+DROP TABLE _keep_active;
+";
+
 /// Ordered list of schema versions. A migration is applied only when
 /// `PRAGMA user_version` is below its number, which is what makes a column
 /// change reach databases that already exist on disk — `CREATE TABLE IF NOT
 /// EXISTS` alone would silently no-op there.
-const MIGRATIONS: &[(u32, &str)] = &[(1, MIGRATION_1_INITIAL)];
+const MIGRATIONS: &[(u32, &str)] = &[
+    (1, MIGRATION_1_INITIAL),
+    (2, MIGRATION_2_SINGLE_ACTIVE_CONNECTION),
+];
 
 fn user_version(conn: &Connection) -> Result<u32, String> {
     conn.query_row("PRAGMA user_version", [], |row| row.get(0))
@@ -119,6 +139,50 @@ mod tests {
         for expected in ["chats", "messages", "connections", "model_configs"] {
             assert!(tables.contains(&expected.to_string()), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn fresh_database_uses_is_active_column() {
+        let conn = migrated_in_memory();
+        let mut stmt = conn.prepare("PRAGMA table_info(connections)").unwrap();
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+
+        assert!(columns.contains(&"is_active".to_string()));
+        assert!(!columns.contains(&"enabled".to_string()));
+    }
+
+    #[test]
+    fn migrating_a_v1_database_keeps_only_the_oldest_enabled_connection() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_1_INITIAL).unwrap();
+        conn.pragma_update(None, "user_version", 1u32).unwrap();
+        conn.execute_batch(
+            "INSERT INTO connections (id, provider, base_url, enabled, created_at) VALUES
+                ('a', 'ollama', 'http://localhost:11434', 1, '2026-07-01T00:00:00Z'),
+                ('b', 'lmstudio', 'http://localhost:1234', 1, '2026-07-02T00:00:00Z');",
+        )
+        .unwrap();
+
+        apply_migrations(&mut conn).unwrap();
+
+        assert_eq!(user_version(&conn).unwrap(), 2);
+        let active: Vec<String> = conn
+            .prepare("SELECT id FROM connections WHERE is_active = 1")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(active, vec!["a".to_string()]);
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM connections", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(total, 2, "migration must not drop existing connections");
     }
 
     #[test]
