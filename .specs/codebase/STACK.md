@@ -1,0 +1,60 @@
+# Tech Stack
+
+**Analyzed:** 2026-07-25 (após M3 / `connections-models`)
+
+## Core
+
+- Framework: Tauri 2 (Rust backend + webview nativo do SO) — AD-001
+- Language: Rust (edition 2021) no backend; TypeScript ~5.8 no frontend
+- Runtime: webview do SO (WebView2 no Windows / WebKitGTK no Linux); binário Rust como processo host
+- Package manager: npm (frontend) + cargo (backend)
+- Crate name: `tauri-app` / lib `tauri_app_lib`; produto `LocalMind`, identifier `com.localmind.app`
+
+## Frontend
+
+- UI Framework: React 19 (`react` ^19.1, `react-dom` ^19.1)
+- Build: Vite 7 (`@vitejs/plugin-react`), dev server fixo em `:1420` (exigido por `tauri.conf.json` `devUrl`)
+- Styling: Tailwind CSS v4 via `@tailwindcss/postcss` — **sem `tailwind.config.js`** (config CSS-first, AD-006). Temas por CSS variables em `src/styles/themes.css`
+- State Management: Zustand ^5 (4 stores independentes, sem store raiz)
+- i18n: i18next ^26 + react-i18next ^17 — EN default, PT disponível (AD-007)
+- Ícones: lucide-react ^1.26
+- Form Handling: nenhuma lib — `useState` + `onSubmit` manual
+
+## Backend
+
+- API Style: comandos Tauri (`#[tauri::command]` + `invoke_handler`), não HTTP. 22 comandos registrados em `lib.rs`
+- Database: SQLite via `rusqlite` 0.31 (feature `bundled` — compila o SQLite junto, sem dependência do SO). Sem ORM; SQL literal com `params![]`
+- HTTP client: `reqwest` 0.12 (features `json`, `stream`) para falar com Ollama/LM Studio
+- Async: `tokio` 1 (features `sync`, `time`) + `tauri::async_runtime`; `async-trait` 0.1 para o trait `ProviderClient` ser dyn-compatible; `futures-util` 0.3 para `bytes_stream()`
+- Serialização: `serde` 1 (derive) + `serde_json` 1
+- IDs: `uuid` 1 (v4); timestamps `chrono` 0.4 em RFC3339 (string)
+- Sistema: `sysinfo` 0.39 (RAM total)
+
+## Plugins Tauri
+
+- `tauri-plugin-opener` 2 (do template, pouco usado)
+- `tauri-plugin-dialog` 2 (`pick_folder` no wizard/configurações)
+- Capability única `default` (`src-tauri/capabilities/default.json`): `core:default`, `opener:default`, `dialog:default`
+
+## Testing
+
+- Unit: `cargo test` nativo (8 testes hoje, todos em `#[cfg(test)] mod tests` co-locados)
+- Integration: nenhum runner configurado
+- E2E: nenhum
+- Frontend: **nenhum** framework de teste instalado (sem Vitest/RTL) — ver CONCERNS.md
+- Detalhes e gates: `.specs/codebase/TESTING.md`
+
+## External Services
+
+- LLM runtime local: Ollama (`:11434`, API própria `/api/tags`, `/api/pull`)
+- LLM runtime local: LM Studio (`:1234`, API nativa v1 `/api/v1/*`)
+- LLM genérico: qualquer servidor OpenAI-compatible (`/v1/models`) via conexão manual
+- Nenhum serviço de nuvem, telemetria ou auth externa — o app é offline-first por premissa (PROJECT.md)
+
+## Development Tools
+
+- Compilador Rust: rustc/cargo 1.97.1, toolchain `stable-x86_64-pc-windows-msvc` (MSVC Build Tools necessários no Windows)
+- CLI: `@tauri-apps/cli` ^2 (`npm run tauri dev` / `build`)
+- Type check: `tsc` roda antes do Vite build (`npm run build` = `tsc && vite build`)
+- Linter/formatter: **nenhum configurado** (sem ESLint, Prettier, rustfmt.toml, clippy.toml) — ver CONCERNS.md
+- CI: **nenhum** (sem `.github/workflows`) — planejado para M8
