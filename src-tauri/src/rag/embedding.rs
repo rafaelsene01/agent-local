@@ -40,10 +40,24 @@ pub fn set_cache_dir(dir: PathBuf) {
     let _ = MODEL_CACHE_DIR.set(dir);
 }
 
+/// Serializes the first initialization. Without it, two documents indexing at
+/// the same time (which DOC-07 explicitly allows) both start downloading the
+/// model into the same cache and corrupt each other — observed as
+/// "Failed to retrieve onnx/model.onnx".
+static INIT_LOCK: Mutex<()> = Mutex::new(());
+
 /// Loaded lazily and kept for the process lifetime: initialization downloads
 /// (first run) and unpacks an ONNX model, far too expensive per document.
 /// `TextEmbedding::embed` takes `&mut self`, hence the Mutex.
 fn embedder() -> Result<&'static Mutex<TextEmbedding>, EmbeddingError> {
+    if let Some(existing) = EMBEDDER.get() {
+        return Ok(existing);
+    }
+
+    let _init = INIT_LOCK
+        .lock()
+        .map_err(|e| EmbeddingError::ModelUnavailable(e.to_string()))?;
+    // Another caller may have finished while this one waited for the lock.
     if let Some(existing) = EMBEDDER.get() {
         return Ok(existing);
     }
@@ -87,4 +101,58 @@ pub fn embed_query(text: &str) -> Result<Vec<f32>, EmbeddingError> {
     vectors
         .pop()
         .ok_or_else(|| EmbeddingError::Failed("nenhum vetor retornado".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cosine(a: &[f32], b: &[f32]) -> f32 {
+        let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+        let norm = |v: &[f32]| v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        dot / (norm(a) * norm(b))
+    }
+
+    /// Excluded from the default run because it downloads ~120MB of model on
+    /// first use and needs `ORT_DYLIB_PATH` pointing at an ONNX Runtime.
+    /// Run with: `cargo test embedding -- --ignored --nocapture`
+    #[test]
+    #[ignore = "downloads the embedding model; needs ORT_DYLIB_PATH"]
+    fn related_sentences_land_closer_than_unrelated_ones() {
+        let vectors = embed_passages(&[
+            "O gato dorme no sofá da sala.".to_string(),
+            "Um gato está dormindo no sofá.".to_string(),
+            "A taxa de juros subiu no último trimestre.".to_string(),
+        ])
+        .expect("embedding failed");
+
+        assert_eq!(vectors.len(), 3);
+        assert_eq!(vectors[0].len(), EMBEDDING_DIM);
+
+        let related = cosine(&vectors[0], &vectors[1]);
+        let unrelated = cosine(&vectors[0], &vectors[2]);
+        println!("related={related:.4} unrelated={unrelated:.4}");
+        assert!(
+            related > unrelated,
+            "paraphrases must be closer than unrelated text ({related} vs {unrelated})"
+        );
+    }
+
+    /// The model is multilingual precisely so a Portuguese question can find
+    /// an English passage (AD-007 ships both languages).
+    #[test]
+    #[ignore = "downloads the embedding model; needs ORT_DYLIB_PATH"]
+    fn the_same_meaning_matches_across_languages() {
+        let passages = embed_passages(&[
+            "The invoice must be paid within thirty days.".to_string(),
+            "Bananas grow in tropical climates.".to_string(),
+        ])
+        .expect("embedding failed");
+        let query = embed_query("Qual é o prazo para pagar a fatura?").expect("embedding failed");
+
+        let invoice = cosine(&query, &passages[0]);
+        let bananas = cosine(&query, &passages[1]);
+        println!("invoice={invoice:.4} bananas={bananas:.4}");
+        assert!(invoice > bananas);
+    }
 }

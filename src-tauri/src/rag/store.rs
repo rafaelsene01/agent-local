@@ -267,4 +267,79 @@ mod tests {
     fn quotes_in_filter_values_are_escaped() {
         assert_eq!(escape_sql("o'brien"), "o''brien");
     }
+
+    fn fake_chunk(id: &str, text: &str, seed: f32) -> EmbeddedChunk {
+        EmbeddedChunk {
+            id: id.to_string(),
+            text: text.to_string(),
+            vector: vec![seed; EMBEDDING_DIM],
+            chunk_index: 0,
+        }
+    }
+
+    /// Hits a real LanceDB on disk, so it is excluded from the default run.
+    /// Run with: `cargo test store -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "writes a real LanceDB table to a temp folder"]
+    async fn namespaces_are_isolated_and_deletes_remove_only_their_rows() {
+        let dir = std::env::temp_dir().join(format!("localmind-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = VectorStore::open(&dir).await.unwrap();
+
+        store
+            .upsert("global", "doc-a", vec![fake_chunk("1", "conteúdo global", 0.1)])
+            .await
+            .unwrap();
+        store
+            .upsert(
+                &chat_namespace("chat-1"),
+                "att-b",
+                vec![fake_chunk("2", "anexo do chat", 0.9)],
+            )
+            .await
+            .unwrap();
+
+        let query = vec![0.1f32; EMBEDDING_DIM];
+        let global_hits = store.search("global", &query, 10).await.unwrap();
+        assert_eq!(global_hits.len(), 1, "one namespace must not see the other");
+        assert_eq!(global_hits[0].doc_id, "doc-a");
+
+        let chat_hits = store
+            .search(&chat_namespace("chat-1"), &query, 10)
+            .await
+            .unwrap();
+        assert_eq!(chat_hits.len(), 1);
+        assert_eq!(chat_hits[0].text, "anexo do chat");
+
+        // Deleting the chat's namespace must leave the global one untouched.
+        store.delete_namespace(&chat_namespace("chat-1")).await.unwrap();
+        assert!(store
+            .search(&chat_namespace("chat-1"), &query, 10)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(store.search("global", &query, 10).await.unwrap().len(), 1);
+
+        store.delete_by_doc("global", "doc-a").await.unwrap();
+        assert!(store.search("global", &query, 10).await.unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Searching before anything was ever indexed is a normal state (DOC-11).
+    #[tokio::test]
+    #[ignore = "touches the filesystem"]
+    async fn searching_an_empty_store_returns_nothing_instead_of_failing() {
+        let dir = std::env::temp_dir().join(format!("localmind-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = VectorStore::open(&dir).await.unwrap();
+
+        let hits = store
+            .search("global", &vec![0.0; EMBEDDING_DIM], 5)
+            .await
+            .unwrap();
+
+        assert!(hits.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

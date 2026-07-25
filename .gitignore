@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# fastembed drops its ONNX model here when no cache dir is set (tests do
+# that). The app itself points the cache at the user's base folder.
+src-tauri/.fastembed_cache/
