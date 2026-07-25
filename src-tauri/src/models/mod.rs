@@ -1,3 +1,6 @@
+pub mod catalog;
+pub mod memory_estimate;
+
 use serde::Serialize;
 
 #[derive(Debug, Serialize, Clone)]
