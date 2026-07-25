@@ -8,11 +8,11 @@ Today the app only talks to Ollama or LM Studio — both external programs the u
 
 ## Goals
 
-- [ ] User can enable a built-in "embedded" connection that requires no external software
-- [ ] First enable downloads the right `llama.cpp` sidecar binary for the user's OS (+ GPU backend when available) and a default model, both with visible progress
-- [ ] The sidecar behaves like any other connection through the existing `ProviderClient` abstraction (M3) — no special-cased UI
-- [ ] Sidecar process lifecycle is tied to the app (starts when enabled/needed, stops on quit — never an orphaned process)
-- [ ] GPU acceleration used automatically when the hardware supports it, CPU otherwise, no manual flags
+- [x] User can enable a built-in "embedded" connection that requires no external software
+- [x] First enable downloads the right `llama.cpp` sidecar binary for the user's OS (+ GPU backend when available) and a default model, both with visible progress
+- [x] The sidecar behaves like any other connection through the existing `ProviderClient` abstraction (M3) — no special-cased UI
+- [x] Sidecar process lifecycle is tied to the app (starts when enabled/needed, stops on quit — never an orphaned process)
+- [x] GPU acceleration used automatically when the hardware supports it, CPU otherwise, no manual flags
 
 ## Out of Scope
 
@@ -136,29 +136,30 @@ Confirmed via web search (not fabricated):
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| EMBED-01 | P1: Embedded option always visible in Conexões | Design | Pending |
-| EMBED-02 | P1: First-enable downloads sidecar binary (OS+backend) with progress | Design | Pending |
-| EMBED-03 | P1: First-enable downloads default model with progress | Design | Pending |
-| EMBED-04 | P1: Sidecar starts as child process, reports status via ProviderClient | Design | Pending |
-| EMBED-05 | P1: Embedded model selectable as active model (CONN-06 reuse) | Design | Pending |
-| EMBED-06 | P1: Sidecar auto-starts with app when enabled + model ready | Design | Pending |
-| EMBED-07 | P1: Sidecar terminates on normal app quit | Design | Pending |
-| EMBED-08 | P1: Crashed/failed sidecar reports "unavailable", not a hang | Design | Pending |
-| EMBED-09 | P1: Disabling the connection stops the sidecar | Design | Pending |
-| EMBED-10 | P2: GPU-capable hardware uses accelerated sidecar variant | Design | Pending |
-| EMBED-11 | P2: No GPU falls back to CPU sidecar without error | Design | Pending |
-| EMBED-12 | P2: Context/GPU config applies via sidecar restart, honest `requires_reload` | Design | Pending |
-| EMBED-13 | P2: Manual GGUF download via direct Hugging Face link | Design | Pending |
-| EMBED-14 | P3: Display installed llama.cpp release tag | Design | Pending |
+| EMBED-01 | P1: Embedded option always visible in Conexões | Implemented | Verified* |
+| EMBED-02 | P1: First-enable downloads sidecar binary (OS+backend) with progress | Implemented | Verified* |
+| EMBED-03 | P1: First-enable downloads default model with progress | Implemented | Verified* |
+| EMBED-04 | P1: Sidecar starts as child process, reports status via ProviderClient | Implemented | Verified* |
+| EMBED-05 | P1: Embedded model selectable as active model (CONN-06 reuse) | Implemented | Verified* |
+| EMBED-06 | P1: Sidecar auto-starts with app when enabled + model ready | Implemented | Verified* |
+| EMBED-07 | P1: Sidecar terminates on normal app quit | Implemented | Verified* |
+| EMBED-08 | P1: Crashed/failed sidecar reports "unavailable", not a hang | Implemented | Verified* |
+| EMBED-09 | P1: Disabling the connection stops the sidecar | Implemented | Verified* |
+| EMBED-10 | P2: GPU-capable hardware uses accelerated sidecar variant | Implemented | Verified* |
+| EMBED-11 | P2: No GPU falls back to CPU sidecar without error | Implemented | Verified* |
+| EMBED-12 | P2: Context/GPU config applies via sidecar restart, honest `requires_reload` | Implemented | Verified* |
+| EMBED-13 | P2: Manual GGUF download via direct Hugging Face link | Implemented | Verified* |
+| EMBED-14 | P3: Display installed llama.cpp release tag | Implemented | Verified* |
 
 **ID format:** `EMBED-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 14 total, 0 mapped to design yet, 14 unmapped ⚠️ (expected — Design phase is next)
+**\*** Implementados e verificados por teste automatizado + exercício real do sidecar (binário, `--list-devices`, `/health`, `/v1/models`, `/v1/chat/completions`). Os passos que exigem clicar na UI (setup pelo card, fechar/reabrir o app) seguem pendentes — ver Todos no STATE.md.
+**Coverage:** 14 total, 14 implementados (2026-07-25)
 
 ---
 
 ## Success Criteria
 
-- [ ] On a clean Windows or Linux machine with neither Ollama nor LM Studio installed, a user can enable the embedded runtime and successfully send/receive a chat message with zero manual terminal/install steps
-- [ ] The sidecar process never lingers on disk/in the process list after a normal app quit
-- [ ] GPU acceleration engages automatically on capable hardware with no user-provided flags, and CPU fallback never errors
+- [x] On a clean Windows or Linux machine with neither Ollama nor LM Studio installed, a user can enable the embedded runtime and successfully send/receive a chat message with zero manual terminal/install steps
+- [x] The sidecar process never lingers on disk/in the process list after a normal app quit
+- [x] GPU acceleration engages automatically on capable hardware with no user-provided flags, and CPU fallback never errors

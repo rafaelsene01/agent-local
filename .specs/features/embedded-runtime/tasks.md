@@ -3,7 +3,7 @@
 **Design**: `.specs/features/embedded-runtime/design.md`
 **Spec**: `.specs/features/embedded-runtime/spec.md`
 **Pré-requisito**: `single-active-connection` executado (T1 de lá entrega a infra de migração que a T3 daqui usa)
-**Status**: Draft
+**Status**: Complete (2026-07-25) — exceto os itens de T16 que exigem clique na UI, listados abaixo
 
 ---
 
@@ -52,11 +52,11 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `pub fn require_conn(...)` existe só em `db.rs`
-- [ ] Nenhum dos três arquivos define a função localmente
-- [ ] Mensagem de erro em português preservada, idêntica à atual
-- [ ] Gate check passa: `cd src-tauri && cargo test`
-- [ ] Test count: 8 testes passam (nenhum a menos)
+- [x] `pub fn require_conn(...)` existe só em `db.rs`
+- [x] Nenhum dos três arquivos define a função localmente
+- [x] Mensagem de erro em português preservada, idêntica à atual
+- [x] Gate check passa: `cd src-tauri && cargo test`
+- [x] Test count: 8 testes passam (nenhum a menos)
 
 **Tests**: none (refactor puro, coberto pelos testes existentes)
 **Gate**: build
@@ -74,10 +74,10 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Health checks rodam concorrentes via `futures_util::future::join_all`
-- [ ] Timeout por client reduzido de 5s para 2s (é `localhost`)
-- [ ] Ordem da lista retornada é estável (não depende de quem respondeu primeiro)
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] Health checks rodam concorrentes via `futures_util::future::join_all`
+- [x] Timeout por client reduzido de 5s para 2s (é `localhost`)
+- [x] Ordem da lista retornada é estável (não depende de quem respondeu primeiro)
+- [x] Gate check passa: `cd src-tauri && cargo check`
 - [ ] Verificação manual: com nada rodando, a sidebar carrega em ~2s, não ~10s
 
 **Tests**: none (comando Tauri I/O)
@@ -96,11 +96,11 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Migração 3 cria `embedded_runtime` conforme o design (singleton via `CHECK (id = 1)`)
-- [ ] `SUBDIRS` inclui `"runtime"`; `ensure_folder_structure` cria a pasta
-- [ ] Teste: banco existente em `user_version = 2` migra para 3 sem perder dados
-- [ ] Gate check passa: `cd src-tauri && cargo test db::`
-- [ ] Test count: 6 testes passam
+- [x] Migração 3 cria `embedded_runtime` conforme o design (singleton via `CHECK (id = 1)`)
+- [x] `SUBDIRS` inclui `"runtime"`; `ensure_folder_structure` cria a pasta
+- [x] Teste: banco existente em `user_version = 2` migra para 3 sem perder dados
+- [x] Gate check passa: `cd src-tauri && cargo test db::`
+- [x] Test count: 6 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -118,12 +118,12 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE — **os nomes de asset já foram confirmados ao vivo** (ver design.md Research Findings); não pesquisar de novo, mas também não inventar variações
 
 **Done when**:
-- [ ] `resolve_latest()` faz `GET api.github.com/repos/ggml-org/llama.cpp/releases/latest` com header `User-Agent` (a API rejeita sem ele)
-- [ ] `pick_asset(assets, os, backend)` é **pura** e casa por sufixo exato: `-bin-win-vulkan-x64.zip`, `-bin-win-cpu-x64.zip`, `-bin-ubuntu-vulkan-x64.tar.gz`, `-bin-ubuntu-x64.tar.gz`
-- [ ] Teste com fixture contendo a lista real de assets do `b10107` (inclusive `cuda-12.4`, `hip-radeon`, `ubuntu-vulkan-arm64`): cada combinação SO+backend escolhe exatamente o arquivo esperado
-- [ ] Teste: asset ausente devolve `None`, não um palpite
-- [ ] Gate check passa: `cd src-tauri && cargo test runtime::release`
-- [ ] Test count: 5 testes passam
+- [x] `resolve_latest()` faz `GET api.github.com/repos/ggml-org/llama.cpp/releases/latest` com header `User-Agent` (a API rejeita sem ele)
+- [x] `pick_asset(assets, os, backend)` é **pura** e casa por sufixo exato: `-bin-win-vulkan-x64.zip`, `-bin-win-cpu-x64.zip`, `-bin-ubuntu-vulkan-x64.tar.gz`, `-bin-ubuntu-x64.tar.gz`
+- [x] Teste com fixture contendo a lista real de assets do `b10107` (inclusive `cuda-12.4`, `hip-radeon`, `ubuntu-vulkan-arm64`): cada combinação SO+backend escolhe exatamente o arquivo esperado
+- [x] Teste: asset ausente devolve `None`, não um palpite
+- [x] Gate check passa: `cd src-tauri && cargo test runtime::release`
+- [x] Test count: 5 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -143,15 +143,15 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Dependências `zip`, `tar`, `flate2` adicionadas
-- [ ] `download_with_progress` grava em `<dest>.part` e só renomeia ao concluir
-- [ ] Progresso emitido usando `PullProgress` (mesmo contrato da UI existente)
-- [ ] Checagem de espaço livre antes de começar, a partir do `Content-Length`
-- [ ] `extract` despacha por extensão e falha explicitamente em extensão desconhecida
-- [ ] Teste: `extract` de um `.zip` pequeno criado no próprio teste produz os arquivos esperados
-- [ ] Teste: arquivo `.part` não vira arquivo final quando o download é abortado
-- [ ] Gate check passa: `cd src-tauri && cargo test runtime::download`
-- [ ] Test count: 3 testes passam
+- [x] Dependências `zip`, `tar`, `flate2` adicionadas
+- [x] `download_with_progress` grava em `<dest>.part` e só renomeia ao concluir
+- [x] Progresso emitido usando `PullProgress` (mesmo contrato da UI existente)
+- [x] Checagem de espaço livre antes de começar, a partir do `Content-Length`
+- [x] `extract` despacha por extensão e falha explicitamente em extensão desconhecida
+- [x] Teste: `extract` de um `.zip` pequeno criado no próprio teste produz os arquivos esperados
+- [x] Teste: arquivo `.part` não vira arquivo final quando o download é abortado
+- [x] Gate check passa: `cd src-tauri && cargo test runtime::download`
+- [x] Test count: 3 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -169,13 +169,13 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `probe_devices(binary)` executa com timeout e devolve `GpuAvailable(nome)` | `CpuOnly` | `BinaryFailed(msg)`
-- [ ] Parsing da saída é feito por função **pura** separada (`classify_output(stdout, stderr, exit_ok)`) para poder testar sem binário
-- [ ] Teste: saída contendo `Vulkan0: NVIDIA GeForce RTX 2060 (6144 MiB, 5136 MiB free)` → `GpuAvailable`
-- [ ] Teste: saída sem device Vulkan → `CpuOnly`
-- [ ] Teste: exit code de falha / stderr de biblioteca ausente → `BinaryFailed`
-- [ ] Gate check passa: `cd src-tauri && cargo test runtime::detect`
-- [ ] Test count: 4 testes passam
+- [x] `probe_devices(binary)` executa com timeout e devolve `GpuAvailable(nome)` | `CpuOnly` | `BinaryFailed(msg)`
+- [x] Parsing da saída é feito por função **pura** separada (`classify_output(stdout, stderr, exit_ok)`) para poder testar sem binário
+- [x] Teste: saída contendo `Vulkan0: NVIDIA GeForce RTX 2060 (6144 MiB, 5136 MiB free)` → `GpuAvailable`
+- [x] Teste: saída sem device Vulkan → `CpuOnly`
+- [x] Teste: exit code de falha / stderr de biblioteca ausente → `BinaryFailed`
+- [x] Gate check passa: `cd src-tauri && cargo test runtime::detect`
+- [x] Test count: 4 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -193,12 +193,12 @@ Phase 4 — Frontend
 **Tools**: MCP: `web search`/HTTP — **verificação obrigatória**: fazer um `HEAD`/`GET` real na URL candidata (`huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf`) e confirmar 200 + `Content-Length` plausível (~2.4GB) antes de gravar no código. A URL **não** foi confirmada ao vivo durante o design — está marcada como incerteza declarada. Não assumir.
 
 **Done when**:
-- [ ] URL do modelo padrão confirmada por requisição real (status 200, tamanho coerente) e registrada como constante com comentário citando a data da verificação
-- [ ] `download_default_model(dest, progress)` e `download_model_from_url(url, dest, progress)` (EMBED-13) implementados
-- [ ] URL que não termina em `.gguf` é rejeitada com mensagem clara
-- [ ] Teste: validação de URL aceita `.gguf` e rejeita o resto (função pura)
-- [ ] Gate check passa: `cd src-tauri && cargo test runtime::model`
-- [ ] Test count: 2 testes passam
+- [x] URL do modelo padrão confirmada por requisição real (status 200, tamanho coerente) e registrada como constante com comentário citando a data da verificação
+- [x] `download_default_model(dest, progress)` e `download_model_from_url(url, dest, progress)` (EMBED-13) implementados
+- [x] URL que não termina em `.gguf` é rejeitada com mensagem clara
+- [x] Teste: validação de URL aceita `.gguf` e rejeita o resto (função pura)
+- [x] Gate check passa: `cd src-tauri && cargo test runtime::model`
+- [x] Test count: 2 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -218,15 +218,15 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE — flags já confirmadas no design (`-m`, `-c`, `-ngl`, `--host`, `--port`, `/health`)
 
 **Done when**:
-- [ ] `free_port()` faz bind em `127.0.0.1:0`, lê a porta e solta
-- [ ] `spawn(cfg)` monta os args (`-m`, `-c` quando houver, `-ngl`, `--host 127.0.0.1`, `--port`) e sobe o processo
-- [ ] Após spawn, faz polling de `GET /health` até `{"status":"ok"}` ou timeout, devolvendo erro claro no timeout (EMBED-08)
-- [ ] `kill()` é idempotente (chamar duas vezes não entra em pânico)
-- [ ] `SidecarState(Mutex<Option<RunningSidecar>>)` definido
-- [ ] Teste: `free_port()` devolve porta > 0 e duas chamadas seguidas não devolvem a mesma porta ocupada
-- [ ] Teste: montagem de args é função pura testável — `-ngl 0` quando CPU, `-ngl -1` quando GPU, `-c` omitido quando `None`
-- [ ] Gate check passa: `cd src-tauri && cargo test runtime::process`
-- [ ] Test count: 4 testes passam
+- [x] `free_port()` faz bind em `127.0.0.1:0`, lê a porta e solta
+- [x] `spawn(cfg)` monta os args (`-m`, `-c` quando houver, `-ngl`, `--host 127.0.0.1`, `--port`) e sobe o processo
+- [x] Após spawn, faz polling de `GET /health` até `{"status":"ok"}` ou timeout, devolvendo erro claro no timeout (EMBED-08)
+- [x] `kill()` é idempotente (chamar duas vezes não entra em pânico)
+- [x] `SidecarState(Mutex<Option<RunningSidecar>>)` definido
+- [x] Teste: `free_port()` devolve porta > 0 e duas chamadas seguidas não devolvem a mesma porta ocupada
+- [x] Teste: montagem de args é função pura testável — `-ngl 0` quando CPU, `-ngl -1` quando GPU, `-c` omitido quando `None`
+- [x] Gate check passa: `cd src-tauri && cargo test runtime::process`
+- [x] Test count: 4 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -244,11 +244,11 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE — padrão `RunEvent` confirmado no design
 
 **Done when**:
-- [ ] `app.manage(SidecarState(...))` no `setup`
-- [ ] `.run(tauri::generate_context!())` trocado por `.build(...)?` + `.run(move |app, event| …)` para poder tratar eventos
-- [ ] `RunEvent::ExitRequested` (e `RunEvent::Exit`) chamam `kill()` no sidecar, se houver
-- [ ] No boot: se `embedded_runtime` tem `binary_path` **e** `model_path` válidos e a conexão embutida está ativa, sobe o sidecar automaticamente (EMBED-06)
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] `app.manage(SidecarState(...))` no `setup`
+- [x] `.run(tauri::generate_context!())` trocado por `.build(...)?` + `.run(move |app, event| …)` para poder tratar eventos
+- [x] `RunEvent::ExitRequested` (e `RunEvent::Exit`) chamam `kill()` no sidecar, se houver
+- [x] No boot: se `embedded_runtime` tem `binary_path` **e** `model_path` válidos e a conexão embutida está ativa, sobe o sidecar automaticamente (EMBED-06)
+- [x] Gate check passa: `cd src-tauri && cargo check`
 
 **Tests**: none (wiring de framework, não testável sem runner de integração Tauri)
 **Gate**: build
@@ -268,11 +268,11 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `health_check` e `list_installed_models` delegam ao `CustomClient` apontando pra `http://127.0.0.1:<porta>`
-- [ ] Sidecar não rodando → `ProviderError::Unavailable` (não pânico, não hang) — EMBED-08
-- [ ] `pull_model` baixa `.gguf` por URL para `<base_path>/models/` (EMBED-13)
-- [ ] `configure_model` devolve `ConfigApplied { requires_reload: true, note: … }` explicando que a config só vale no próximo start (EMBED-12)
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] `health_check` e `list_installed_models` delegam ao `CustomClient` apontando pra `http://127.0.0.1:<porta>`
+- [x] Sidecar não rodando → `ProviderError::Unavailable` (não pânico, não hang) — EMBED-08
+- [x] `pull_model` baixa `.gguf` por URL para `<base_path>/models/` (EMBED-13)
+- [x] `configure_model` devolve `ConfigApplied { requires_reload: true, note: … }` explicando que a config só vale no próximo start (EMBED-12)
+- [x] Gate check passa: `cd src-tauri && cargo check`
 
 **Tests**: none (provider I/O HTTP — matriz do TESTING.md diz "none")
 **Gate**: build
@@ -290,12 +290,12 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `setup_embedded_runtime` orquestra: resolver release → escolher asset Vulkan → baixar → extrair → probe → (se `BinaryFailed`, baixar asset CPU) → baixar modelo padrão → persistir em `embedded_runtime`
-- [ ] Progresso de cada etapa emitido como `embedded-setup-progress`
-- [ ] `start_embedded_runtime` / `stop_embedded_runtime` / `embedded_runtime_status` implementados; stop também roda ao desativar a conexão (EMBED-09)
-- [ ] SO fora de Windows/Linux → status "indisponível na plataforma", sem tentar baixar
-- [ ] Todos registrados em `lib.rs`
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] `setup_embedded_runtime` orquestra: resolver release → escolher asset Vulkan → baixar → extrair → probe → (se `BinaryFailed`, baixar asset CPU) → baixar modelo padrão → persistir em `embedded_runtime`
+- [x] Progresso de cada etapa emitido como `embedded-setup-progress`
+- [x] `start_embedded_runtime` / `stop_embedded_runtime` / `embedded_runtime_status` implementados; stop também roda ao desativar a conexão (EMBED-09)
+- [x] SO fora de Windows/Linux → status "indisponível na plataforma", sem tentar baixar
+- [x] Todos registrados em `lib.rs`
+- [x] Gate check passa: `cd src-tauri && cargo check`
 
 **Tests**: none (comando Tauri de orquestração)
 **Gate**: build
@@ -313,12 +313,12 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `detect_known_connections` inclui o candidato `embedded` (sempre presente, independente de Ollama/LM Studio — EMBED-01)
-- [ ] `provider_for` roteia `"embedded"` para `EmbeddedClient` (não cai no `_ => CustomClient`)
-- [ ] Ativar a conexão embutida usa exatamente o mesmo caminho de `single-active-connection` — nenhum caso especial
-- [ ] Teste: `detect_known_connections` devolve 3 candidatos, incluindo `embedded`
-- [ ] Gate check passa: `cd src-tauri && cargo test connections::`
-- [ ] Test count: 5 testes passam
+- [x] `detect_known_connections` inclui o candidato `embedded` (sempre presente, independente de Ollama/LM Studio — EMBED-01)
+- [x] `provider_for` roteia `"embedded"` para `EmbeddedClient` (não cai no `_ => CustomClient`)
+- [x] Ativar a conexão embutida usa exatamente o mesmo caminho de `single-active-connection` — nenhum caso especial
+- [x] Teste: `detect_known_connections` devolve 3 candidatos, incluindo `embedded`
+- [x] Gate check passa: `cd src-tauri && cargo test connections::`
+- [x] Test count: 5 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -336,10 +336,10 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `EmbeddedRuntimeStatus` e `EmbeddedSetupStage` em `types.ts`, espelhando o Rust (atenção ao C-03 — espelhamento é manual)
-- [ ] Wrappers tipados para os 5 comandos de T11
-- [ ] Store escuta `embedded-setup-progress` e expõe estágio + progresso
-- [ ] Gate check passa: `npm run build`
+- [x] `EmbeddedRuntimeStatus` e `EmbeddedSetupStage` em `types.ts`, espelhando o Rust (atenção ao C-03 — espelhamento é manual)
+- [x] Wrappers tipados para os 5 comandos de T11
+- [x] Store escuta `embedded-setup-progress` e expõe estágio + progresso
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: build
@@ -357,13 +357,13 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Estado "não instalado" mostra o que será baixado e o tamanho (~2.4GB do modelo) **antes** de começar
-- [ ] Barras de progresso distintas para binário e modelo, alimentadas pelo evento
-- [ ] Quando cai para CPU, informa isso explicitamente (EMBED-11) — não finge que ligou GPU
-- [ ] Erro tem botão de tentar de novo
-- [ ] Plataforma não suportada mostra motivo, sem botão de download
-- [ ] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
-- [ ] Gate check passa: `npm run build`
+- [x] Estado "não instalado" mostra o que será baixado e o tamanho (~2.4GB do modelo) **antes** de começar
+- [x] Barras de progresso distintas para binário e modelo, alimentadas pelo evento
+- [x] Quando cai para CPU, informa isso explicitamente (EMBED-11) — não finge que ligou GPU
+- [x] Erro tem botão de tentar de novo
+- [x] Plataforma não suportada mostra motivo, sem botão de download
+- [x] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: build
@@ -381,10 +381,10 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Linha da conexão embutida mostra `release_tag` e backend (`vulkan`/`cpu`) — EMBED-14
-- [ ] Selecionável como conexão ativa pelo mesmo radio das demais (sem caso especial)
-- [ ] Toda string nova tem chave i18n nos dois idiomas
-- [ ] Gate check passa: `npm run build`
+- [x] Linha da conexão embutida mostra `release_tag` e backend (`vulkan`/`cpu`) — EMBED-14
+- [x] Selecionável como conexão ativa pelo mesmo radio das demais (sem caso especial)
+- [x] Toda string nova tem chave i18n nos dois idiomas
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: build
@@ -402,11 +402,11 @@ Phase 4 — Frontend
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `npm run build` passa e `npm run tauri dev` sobe até `Finished` + `Running`
+- [x] `npm run build` passa e `npm run tauri dev` sobe até `Finished` + `Running`
 - [ ] Setup completo executado na UI: binário baixado, modelo baixado, sidecar sobe, status vira "disponível"
-- [ ] `curl http://127.0.0.1:<porta>/v1/models` lista o modelo (prova que é OpenAI-compatible de verdade)
-- [ ] `curl -X POST http://127.0.0.1:<porta>/v1/chat/completions -d '…'` devolve uma resposta gerada (prova que o modelo carregou e infere)
-- [ ] Backend escolhido (`vulkan` ou `cpu`) bate com o hardware da máquina de teste
+- [x] `curl http://127.0.0.1:<porta>/v1/models` lista o modelo (prova que é OpenAI-compatible de verdade)
+- [x] `curl -X POST http://127.0.0.1:<porta>/v1/chat/completions -d '…'` devolve uma resposta gerada (prova que o modelo carregou e infere)
+- [x] Backend escolhido (`vulkan` ou `cpu`) bate com o hardware da máquina de teste
 - [ ] Fechar o app → `tasklist`/`ps` confirma que `llama-server` sumiu (EMBED-07)
 - [ ] Reabrir o app com a conexão embutida ativa → sidecar sobe sozinho (EMBED-06)
 

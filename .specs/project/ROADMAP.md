@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current Milestone:** M7 — Runtime embutido (em execução). M3.1 concluído em 2026-07-25. M5/M4 vêm em seguida.
+**Current Milestone:** M5 — Base de Conhecimento & RAG global (próximo). M3.1 e M7 concluídos em 2026-07-25. Ordem restante: **M5 → M4 → M6 → M8**.
 **Status:** In Progress
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
@@ -132,7 +132,7 @@ flowchart TB
 
 ---
 
-## M7 — Runtime embutido (llama.cpp) — PLANNED (spec + design + tasks prontos)
+## M7 — Runtime embutido (llama.cpp) — ✅ COMPLETE (2026-07-25)
 
 > **Puxado para antes de M4/M5** a pedido do usuário (era o último antes do empacotamento).
 
@@ -141,7 +141,7 @@ flowchart TB
 
 ### Features
 
-**Sidecar llama.cpp gerenciado pelo app** — PLANNED (`.specs/features/embedded-runtime/`, 16 tasks)
+**Sidecar llama.cpp gerenciado pelo app** — DONE (`.specs/features/embedded-runtime/`, 16/16 tasks)
 
 - Baixa o binário `llama-server` do release mais recente (Windows + Linux), com progresso
 - Backend **Vulkan** (cobre NVIDIA/AMD/Intel sem toolkit); CPU como fallback — AD-022

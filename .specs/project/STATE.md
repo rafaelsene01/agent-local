@@ -1,11 +1,27 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M3.1 (`single-active-connection`) implementado — 10/10 tasks, 15 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos (verificação manual clicando na UI ainda pendente). Executando agora o M7 (`embedded-runtime`, 16 tasks). Contexto anterior: M3 implementado e verificado. Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Current Work:** M3.1 (`single-active-connection`, 10/10) e M7 (`embedded-runtime`, 16/16) implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-024: M7 (embedded-runtime) implementado — 16/16 tasks (2026-07-25)
+
+**Decision:** Executado o `tasks.md` completo de `embedded-runtime` (T1-T16). Módulo `runtime/` novo (`release`, `download`, `detect`, `model`, `process`, `store`), `providers::embedded::EmbeddedClient`, `embedded_commands.rs`, conexão `embedded` semeada sempre, e `EmbeddedRuntimeCard` na aba Conexões.
+**Reason:** Segundo item da fila, confirmado pelo usuário no escopo "M3.1 + M7".
+**Verificação real (não só compilação):**
+- Release `b10107` resolvido ao vivo pela API do GitHub; os 4 sufixos que o `pick_asset` casa existem de fato no release.
+- URL do GGUF do Phi-3.5 (única incerteza declarada do design) confirmada: 200 + `content-length` 2.393.232.672 (~2,39 GB).
+- Binário Vulkan baixado e extraído; `llama-server --list-devices` respondeu `Vulkan0: NVIDIA GeForce RTX 3060 (12329 MiB, 11550 MiB free)` — formato idêntico ao que o `classify_output` parseia.
+- Sidecar subido com as flags exatas que o app monta (`-m`, `--host 127.0.0.1`, `--port`, `-ngl -1`): `/health` devolveu `{"status":"ok"}`, `/v1/models` listou o modelo (o que o `CustomClient` parseia) e `/v1/chat/completions` gerou resposta. 152 tok/s de geração e 498 tok/s de prompt confirmam que o offload de GPU funcionou (a 1ª chamada é lenta por compilação de pipeline Vulkan — não confundir com CPU).
+**Trade-off/Notas:**
+- `runtime/store.rs` não estava no design: a linha singleton `embedded_runtime` é lida tanto pelo comando quanto pelo autostart do boot, então o SQL ficou num módulo só (SPEC_DEVIATION no commit).
+- `ConnectionManager` deixou de ser unit struct e passou a carregar um `EmbeddedContext` (porta + models_dir), porque a URL da conexão embutida só existe depois que o processo escolhe a porta. Todos os comandos que criam provider passaram a receber `AppHandle` e a construir o manager via `embedded_commands::manager`.
+- T2 pedia baixar o timeout do client de 5s para 2s; feito **por requisição de health check**, porque o mesmo client serve downloads de vários GB.
+- **Não verificado**: setup disparado pelo card na UI, fechar o app e confirmar que o `llama-server` sumiu, e reabrir com a conexão ativa para ver o autostart. O mecanismo (`RunEvent::ExitRequested` → `kill`) está no código e o `kill` também roda no `Drop`, mas nenhum dos três foi exercitado clicando.
+**Impact:** M7 ✅ no ROADMAP; C-01, C-02 e C-07 do CONCERNS.md resolvidos; C-05 parcialmente (este é o primeiro provider exercitado contra um servidor real).
 
 ### AD-023: M3.1 (single-active-connection) implementado — 10/10 tasks (2026-07-25)
 
@@ -246,7 +262,8 @@ _Nenhum._
 - [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
 - [x] ~~**1º — Executar `single-active-connection` tasks.md** (10 tasks)~~ — feito em 2026-07-25 (ver AD-023)
 - [ ] Verificar manualmente na UI o fluxo do par ativo: ativar Ollama → ativar LM Studio → só a última marcada; escolher modelo da outra conexão → conexão ativa acompanha (T9 do `single-active-connection`, único item não verificado)
-- [ ] **2º — Executar `embedded-runtime` tasks.md** (16 tasks) — depois da anterior. A T7 exige **verificar ao vivo** a URL do GGUF do Phi-3.5 (única incerteza declarada do design, não assumir). Phases 0 (T1/T2) pagam dívida do CONCERNS (C-07, C-02) que esta feature agravaria
+- [x] ~~**2º — Executar `embedded-runtime` tasks.md** (16 tasks)~~ — feito em 2026-07-25 (ver AD-024); URL do Phi-3.5 verificada ao vivo, C-07/C-02 pagos
+- [ ] Verificar na UI o fluxo do runtime embutido: clicar em instalar no card (baixa ~2,4 GB do Phi-3.5), ativar a conexão embutida, fechar o app e confirmar no `tasklist` que o `llama-server` sumiu, reabrir e confirmar o autostart (T16, EMBED-06/07)
 - [ ] **3º — Executar `documents-rag` tasks.md** (11 tasks) — sem bloqueios
 - [ ] **4º — Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação — ver AD-017). Lembrar que a AD-016 foi revogada: **não** implementar `chats.model_config_id`
 - [ ] Durante a execução de `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
