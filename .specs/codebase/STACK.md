@@ -2,6 +2,11 @@
 
 **Analyzed:** 2026-07-25 (após M3 / `connections-models`)
 
+## Pré-requisitos de build (além do Rust e do Node)
+
+- **protoc** (Protocol Buffers compiler) — exigido pelo `lance-encoding`, dependência do `lancedb`. Sem ele o `cargo build` falha com *"Could not find `protoc`"*. No Windows: `winget install Google.Protobuf` (verificado com 35.1). No Linux: `apt install protobuf-compiler`.
+- **ONNX Runtime** — **não** é pré-requisito de build: o `fastembed` roda em modo `ort-load-dynamic` e o app baixa o `onnxruntime.dll`/`.so` na primeira indexação, porque a lib estática do ORT exige a STL do MSVC 2022 (VS 2019 Build Tools não serve).
+
 ## Core
 
 - Framework: Tauri 2 (Rust backend + webview nativo do SO) — AD-001

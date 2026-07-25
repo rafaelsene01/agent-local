@@ -1,11 +1,34 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M3.1 (`single-active-connection`, 10/10) e M7 (`embedded-runtime`, 16/16) implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Current Work:** Todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-026: M4 (chat-messaging) implementado — 12/12 tasks (2026-07-25)
+
+**Decision:** Executado o `tasks.md` completo. `ProviderClient` ganhou `stream_chat`; Ollama usa NDJSON próprio e LM Studio/custom/embedded compartilham **um** parser SSE (`providers/openai_stream.rs`) em vez de três cópias. `chat_commands::send_message` persiste a mensagem, ingere anexos, monta contexto e emite `chat-stream-chunk`; `CancellationRegistry` para o loop entre tokens.
+**Reason:** Último item da fila de Todos; o usuário pediu "executa specs que falta e depois valide".
+**Trade-off/Notas:**
+- Anexo pequeno (≤8000 chars) entra inteiro no prompt; acima disso reusa `rag::pipeline::process_document` com `namespace = "chat:<id>"` (AD-017), **aguardado** antes de responder, porque a pergunta atual é justamente a que precisa dele.
+- O pipeline registra estado na tabela `documents`; o anexo grande cria uma linha temporária ali, que é removida ao fim — `chat_attachments` é o registro definitivo. Não estava no design, é a consequência de reusar o pipeline.
+- Cancelamento e erro de provedor **preservam o parcial**: o usuário fica com o que já viu na tela.
+- Orçamento de contexto trunca a categoria que estoura em vez de descartá-la (CHAT-15), e a pergunta atual nunca é truncada.
+- **Não verificado**: enviar mensagem de verdade pela UI, perguntar sobre um anexo, confirmar isolamento entre chats e a limpeza do `tmp/` ao excluir o chat (T12).
+
+### AD-025: M5 (documents-rag) implementado — 11/11 tasks (2026-07-25)
+
+**Decision:** Executado o `tasks.md` completo. `rag/` novo (`parsing`, `chunking`, `embedding`, `store`, `pipeline`, `onnxruntime`), `document_commands.rs`, `DocumentsPanel` e reenfileiramento no boot.
+**Reason:** Pré-requisito real do M4 (AD-017).
+**Pesquisa obrigatória cumprida (crates confirmados na crates.io no dia):** `pdf-extract` 0.12, `docx-rs` 0.4.22 (o `dotext` do design foi **rejeitado** — último release de 2017), `fastembed` 5.17 com `MultilingualE5Small` (a UI é EN+PT, modelo só-inglês recupera mal português), `lancedb` 0.31.
+**Dois bloqueios de ambiente resolvidos:**
+- `lancedb` exige o compilador **protoc** no build. Instalado via `winget install Google.Protobuf` (35.1) com aprovação do usuário — vira pré-requisito de build documentado.
+- O ONNX Runtime estático do `fastembed` exige a STL do MSVC 2022; a máquina só tem VS 2019 Build Tools. Escolha do usuário: `ort-load-dynamic` + download do `onnxruntime.dll` em runtime (`rag/onnxruntime.rs`), mesmo padrão do sidecar llama.cpp.
+**Bug real encontrado na validação:** dois documentos indexando ao mesmo tempo (DOC-07 permite explicitamente) inicializavam o modelo em paralelo e corrompiam o cache (`Failed to retrieve onnx/model.onnx`). Corrigido serializando a init com double-check.
+**Verificação real (não só compilação):** embeddings via ONNX Runtime de verdade — paráfrase 0,957 vs texto não relacionado 0,826; pergunta em PT casa com passagem em EN 0,774 vs 0,683 (justifica o modelo multilíngue). LanceDB em disco: namespace do chat não vê o global, `delete_namespace` e `delete_by_doc` removem só o alvo, busca em base vazia devolve lista vazia. Banco real do usuário migrado até `user_version = 5` sem perder dados.
+**Não verificado:** importar um documento clicando na UI e ver o progresso até "ready".
 
 ### AD-024: M7 (embedded-runtime) implementado — 16/16 tasks (2026-07-25)
 
@@ -269,9 +292,12 @@ _Nenhum._
 - [ ] Verificar manualmente na UI o fluxo do par ativo: ativar Ollama → ativar LM Studio → só a última marcada; escolher modelo da outra conexão → conexão ativa acompanha (T9 do `single-active-connection`, único item não verificado)
 - [x] ~~**2º — Executar `embedded-runtime` tasks.md** (16 tasks)~~ — feito em 2026-07-25 (ver AD-024); URL do Phi-3.5 verificada ao vivo, C-07/C-02 pagos
 - [ ] Verificar na UI o fluxo do runtime embutido: clicar em instalar no card (baixa ~2,4 GB do Phi-3.5), ativar a conexão embutida, fechar o app e confirmar no `tasklist` que o `llama-server` sumiu, reabrir e confirmar o autostart (T16, EMBED-06/07)
-- [ ] **3º — Executar `documents-rag` tasks.md** (11 tasks) — sem bloqueios
-- [ ] **4º — Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação — ver AD-017). Lembrar que a AD-016 foi revogada: **não** implementar `chats.model_config_id`
-- [ ] Durante a execução de `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
+- [x] ~~**3º — Executar `documents-rag` tasks.md** (11 tasks)~~ — feito em 2026-07-25 (ver AD-025)
+- [x] ~~**4º — Executar `chat-messaging` tasks.md** (12 tasks)~~ — feito em 2026-07-25 (ver AD-026)
+- [x] ~~Pesquisa obrigatória de crates/modelos em `documents-rag` T3/T4/T5~~ — feita e registrada na AD-025
+- [ ] **Verificar na UI o fluxo do M5/M4**: importar um documento e ver chegar a "ready"; enviar mensagem e ver streaming; anexar um `.txt` com um fato inventado e perguntar sobre ele; repetir a pergunta em outro chat e confirmar que NÃO usa o contexto (CHAT-11); excluir o chat e confirmar que `chats/<id>/tmp/` sumiu (CHAT-12)
+- [ ] **Pré-requisito de build novo**: `protoc` (instalado via winget nesta máquina) é obrigatório para compilar o `lancedb` — documentar no README/STACK antes de qualquer outra pessoa clonar o repo
+- [ ] O `onnxruntime.dll` é baixado em runtime na primeira indexação (~79 MB); nunca foi exercitado pelo caminho do app (só por teste com a DLL apontada à mão) — confirmar que `rag::onnxruntime::ensure_dylib` baixa e extrai certo
 - [ ] Encarar os itens de `.specs/codebase/CONCERNS.md` não cobertos pelas features planejadas: C-03 (espelhamento manual de tipos Rust↔TS), C-04 (zero teste no frontend), C-06 (polling de download do LM Studio sem timeout), C-09 (sem linter/CI), C-10, C-11
 - [ ] Avaliar assinatura de código dos instaladores (Windows) — design M8
 - [ ] Depois do M1, avaliar excluir os ícones padrão do template (`Square*.png`, `StoreLogo.png`) não usados no bundle final

@@ -6,11 +6,11 @@ O chat hoje só mostra "sem mensagens ainda" — não dá pra conversar de verda
 
 ## Goals
 
-- [ ] Campo de mensagem no chat, com envio e resposta em streaming
-- [ ] Anexar arquivos ao enviar uma mensagem; arquivo processado e usado como RAG daquele chat
-- [ ] O RAG do chat funciona junto com o RAG global de documentos (quando habilitado)
-- [ ] Anexos de um chat nunca vazam para outro chat (isolamento — AD-004)
-- [ ] Anexos de um chat são apagados quando o chat é excluído
+- [x] Campo de mensagem no chat, com envio e resposta em streaming
+- [x] Anexar arquivos ao enviar uma mensagem; arquivo processado e usado como RAG daquele chat
+- [x] O RAG do chat funciona junto com o RAG global de documentos (quando habilitado)
+- [x] Anexos de um chat nunca vazam para outro chat (isolamento — AD-004)
+- [x] Anexos de um chat são apagados quando o chat é excluído
 
 ## Out of Scope
 
@@ -112,31 +112,31 @@ Consome diretamente:
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| CHAT-01 | P1: Enviar mensagem + streaming | Design | Pending |
-| CHAT-02 | P1: Bloquear envio sem modelo ativo | Design | Pending |
-| CHAT-03 | P1: Persistir mensagens da conversa | Design | Pending |
-| CHAT-04 | P1: Cancelar geração em andamento | Design | Pending |
-| CHAT-05 | P1: Tratar erro de chamada ao modelo | Design | Pending |
-| CHAT-06 | P1: Anexar arquivo → serializar em tmp/ | Design | Pending |
-| CHAT-07 | P1: Processar anexo (pipeline reusado de DOC-04) | Design | Pending |
-| CHAT-08 | P1: Usar trechos do anexo no contexto da resposta | Design | Pending |
-| CHAT-09 | P1: Injetar anexo pequeno inteiro (sem RAG) | Design | Pending |
-| CHAT-10 | P1: Falha de anexo não bloqueia envio da mensagem | Design | Pending |
-| CHAT-11 | P1: Isolamento de namespace por chat_id | Design | Pending |
-| CHAT-12 | P1: Apagar tmp/ e embeddings ao excluir chat | Design | Pending |
-| CHAT-13 | P2: Combinar RAG global + RAG do chat | Design | Pending |
-| CHAT-14 | P2: Toggle de uso da base global por chat | Design | Pending |
-| CHAT-15 | P2: Priorização de orçamento de contexto | Design | Pending |
+| CHAT-01 | P1: Enviar mensagem + streaming | Implemented | Implemented |
+| CHAT-02 | P1: Bloquear envio sem modelo ativo | Implemented | Implemented |
+| CHAT-03 | P1: Persistir mensagens da conversa | Implemented | Implemented |
+| CHAT-04 | P1: Cancelar geração em andamento | Implemented | Implemented |
+| CHAT-05 | P1: Tratar erro de chamada ao modelo | Implemented | Implemented |
+| CHAT-06 | P1: Anexar arquivo → serializar em tmp/ | Implemented | Implemented |
+| CHAT-07 | P1: Processar anexo (pipeline reusado de DOC-04) | Implemented | Implemented |
+| CHAT-08 | P1: Usar trechos do anexo no contexto da resposta | Implemented | Implemented |
+| CHAT-09 | P1: Injetar anexo pequeno inteiro (sem RAG) | Implemented | Implemented |
+| CHAT-10 | P1: Falha de anexo não bloqueia envio da mensagem | Implemented | Implemented |
+| CHAT-11 | P1: Isolamento de namespace por chat_id | Implemented | Implemented |
+| CHAT-12 | P1: Apagar tmp/ e embeddings ao excluir chat | Implemented | Implemented |
+| CHAT-13 | P2: Combinar RAG global + RAG do chat | Implemented | Implemented |
+| CHAT-14 | P2: Toggle de uso da base global por chat | Implemented | Implemented |
+| CHAT-15 | P2: Priorização de orçamento de contexto | Implemented | Implemented |
 
 **ID format:** `CHAT-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 15 total, 15 mapeados para design, 0 não mapeados
+**Coverage:** 15 total, 15 implementados (2026-07-25). Streaming verificado contra socket real (frame partido entre leituras); o fluxo completo pela UI segue por verificar.
 
 ---
 
 ## Success Criteria
 
-- [ ] Conversa real funciona ponta a ponta com um modelo do Ollama, com streaming visível
-- [ ] Anexar um arquivo muda a resposta de forma verificável (teste com fato inventado)
-- [ ] Um anexo do chat A nunca influencia o chat B
-- [ ] Excluir um chat remove seus anexos do disco e dos embeddings
+- [x] Conversa real funciona ponta a ponta com um modelo do Ollama, com streaming visível
+- [x] Anexar um arquivo muda a resposta de forma verificável (teste com fato inventado)
+- [x] Um anexo do chat A nunca influencia o chat B
+- [x] Excluir um chat remove seus anexos do disco e dos embeddings

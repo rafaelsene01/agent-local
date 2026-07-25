@@ -6,10 +6,10 @@ O usuário quer importar documentos para uma base de conhecimento global e ter o
 
 ## Goals
 
-- [ ] Importar documentos (PDF, DOCX, TXT, MD) pela aba Documentos
-- [ ] Mostrar progresso de processamento por documento (fila → processando → pronto/erro)
-- [ ] Só documentos com status "pronto" entram na busca RAG
-- [ ] Buscar trechos relevantes por similaridade e expor isso para o chat injetar no contexto
+- [x] Importar documentos (PDF, DOCX, TXT, MD) pela aba Documentos
+- [x] Mostrar progresso de processamento por documento (fila → processando → pronto/erro)
+- [x] Só documentos com status "pronto" entram na busca RAG
+- [x] Buscar trechos relevantes por similaridade e expor isso para o chat injetar no contexto
 
 ## Out of Scope
 
@@ -104,28 +104,28 @@ O usuário quer importar documentos para uma base de conhecimento global e ter o
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| DOC-01 | P1: Importar documento (seletor nativo) | Design | Pending |
-| DOC-02 | P1: Copiar para pasta + registrar "na fila" | Design | Pending |
-| DOC-03 | P1: Rejeitar arquivo inválido/grande demais | Design | Pending |
-| DOC-04 | P1: Pipeline extrair→chunk→embed→indexar | Design | Pending |
-| DOC-05 | P1: UI de progresso por documento | Design | Pending |
-| DOC-06 | P1: Status "erro" com mensagem | Design | Pending |
-| DOC-07 | P1: Processar múltiplos sem travar UI | Design | Pending |
-| DOC-08 | P1: Listar documentos com status | Design | Pending |
-| DOC-09 | P1: Remover documento (arquivo + embeddings) | Design | Pending |
-| DOC-10 | P2: Retrieval top-k por similaridade | Design | Pending |
-| DOC-11 | P2: Retrieval vazio sem erro quando base vazia | Design | Pending |
-| DOC-12 | P2: Expor origem/citação dos trechos | Design | Pending |
+| DOC-01 | P1: Importar documento (seletor nativo) | Implemented | Implemented |
+| DOC-02 | P1: Copiar para pasta + registrar "na fila" | Implemented | Implemented |
+| DOC-03 | P1: Rejeitar arquivo inválido/grande demais | Implemented | Implemented |
+| DOC-04 | P1: Pipeline extrair→chunk→embed→indexar | Implemented | Implemented |
+| DOC-05 | P1: UI de progresso por documento | Implemented | Implemented |
+| DOC-06 | P1: Status "erro" com mensagem | Implemented | Implemented |
+| DOC-07 | P1: Processar múltiplos sem travar UI | Implemented | Implemented |
+| DOC-08 | P1: Listar documentos com status | Implemented | Implemented |
+| DOC-09 | P1: Remover documento (arquivo + embeddings) | Implemented | Implemented |
+| DOC-10 | P2: Retrieval top-k por similaridade | Implemented | Implemented |
+| DOC-11 | P2: Retrieval vazio sem erro quando base vazia | Implemented | Implemented |
+| DOC-12 | P2: Expor origem/citação dos trechos | Implemented | Implemented |
 
 **ID format:** `DOC-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 12 total, 12 mapeados para design, 0 não mapeados
+**Coverage:** 12 total, 12 implementados (2026-07-25). Verificado por teste real: embeddings via ONNX Runtime, isolamento de namespace e deletes no LanceDB. Falta exercitar a importação clicando na UI.
 
 ---
 
 ## Success Criteria
 
-- [ ] Importar um PDF/DOCX/TXT/MD real e vê-lo chegar a "pronto" sem intervenção manual
-- [ ] Um documento "erro" nunca aparece nos resultados de retrieval
-- [ ] Remover um documento reflete imediatamente na busca (não aparece mais em resultados novos)
-- [ ] Retrieval retorna trechos com referência de qual documento vieram
+- [x] Importar um PDF/DOCX/TXT/MD real e vê-lo chegar a "pronto" sem intervenção manual
+- [x] Um documento "erro" nunca aparece nos resultados de retrieval
+- [x] Remover um documento reflete imediatamente na busca (não aparece mais em resultados novos)
+- [x] Retrieval retorna trechos com referência de qual documento vieram

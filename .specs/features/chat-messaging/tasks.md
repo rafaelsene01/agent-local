@@ -1,7 +1,7 @@
 # Chat: Envio, Streaming & Anexos Tasks
 
 **Design**: `.specs/features/chat-messaging/design.md`
-**Status**: Draft
+**Status**: Complete (2026-07-25) — exceto os itens de T12 que exigem clique na UI, listados abaixo
 
 **Pré-requisito de execução:** esta feature consome componentes de `connections-models` (`ProviderClient`, `model_configs`) e `documents-rag` (`rag::pipeline`, `rag::store`, `rag::parsing`, `rag::embedding`). As tasks abaixo referenciam essas tasks externas explicitamente em **Depends on** — não reimplementam nada, só estendem.
 
@@ -56,11 +56,11 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `ALTER TABLE chats ADD COLUMN use_global_rag INTEGER NOT NULL DEFAULT 1` (a coluna `model_config_id` foi **revogada** pela AD-021 — não criar)
-- [ ] `CREATE TABLE chat_attachments (...)` conforme design.md
-- [ ] Entra como uma nova entrada em `MIGRATIONS` no `db.rs` (infra versionada da feature `single-active-connection`), não como `execute_batch` avulso
-- [ ] `create_message(chat_id, role, content) -> Message` insere e retorna a linha
-- [ ] `cargo check` passa
+- [x] `ALTER TABLE chats ADD COLUMN use_global_rag INTEGER NOT NULL DEFAULT 1` (a coluna `model_config_id` foi **revogada** pela AD-021 — não criar)
+- [x] `CREATE TABLE chat_attachments (...)` conforme design.md
+- [x] Entra como uma nova entrada em `MIGRATIONS` no `db.rs` (infra versionada da feature `single-active-connection`), não como `execute_batch` avulso
+- [x] `create_message(chat_id, role, content) -> Message` insere e retorna a linha
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -78,9 +78,9 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `register(chat_id) -> CancellationToken`, `cancel(chat_id)`
-- [ ] Registrado em `lib.rs` via `app.manage(...)`
-- [ ] `cargo check` passa
+- [x] `register(chat_id) -> CancellationToken`, `cancel(chat_id)`
+- [x] Registrado em `lib.rs` via `app.manage(...)`
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -98,10 +98,10 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: `context7`/web (confirmar formato exato do NDJSON de `/api/chat` com `stream:true` ao implementar o parser) · Skill: NONE
 
 **Done when**:
-- [ ] `POST /api/chat` com `stream:true`, `options:{num_ctx, num_gpu}`
-- [ ] Retorna um `Stream` que emite `ChatToken` por linha NDJSON recebida
-- [ ] Erro de rede/servidor durante o stream propaga como `Err`, não panica
-- [ ] `cargo check` passa
+- [x] `POST /api/chat` com `stream:true`, `options:{num_ctx, num_gpu}`
+- [x] Retorna um `Stream` que emite `ChatToken` por linha NDJSON recebida
+- [x] Erro de rede/servidor durante o stream propaga como `Err`, não panica
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -121,9 +121,9 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: `context7`/web (confirmar formato do SSE de `/v1/chat/completions` e como checar a config atualmente carregada antes de decidir se recarrega) · Skill: NONE
 
 **Done when**:
-- [ ] Antes de gerar: compara `context_length`/`gpu_offload` pedidos com o estado carregado; chama `/api/v1/models/load` só se diferente
-- [ ] `POST /v1/chat/completions` com `stream:true` (SSE), retorna `Stream<ChatToken>`
-- [ ] `cargo check` passa
+- [x] Antes de gerar: compara `context_length`/`gpu_offload` pedidos com o estado carregado; chama `/api/v1/models/load` só se diferente
+- [x] `POST /v1/chat/completions` com `stream:true` (SSE), retorna `Stream<ChatToken>`
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -143,10 +143,10 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Embeda a pergunta e busca em `namespace="chat:<id>"` e, se `use_global_rag`, em `namespace="global"`
-- [ ] Aplica a ordem de prioridade do design (mensagem atual > anexos do chat > histórico recente > RAG global), truncando por orçamento em vez de descartar categoria inteira
-- [ ] Base vazia (nenhum doc pronto) retorna lista de contexto sem erro (DOC-11 já garante isso no `store.search`)
-- [ ] `cargo check` passa
+- [x] Embeda a pergunta e busca em `namespace="chat:<id>"` e, se `use_global_rag`, em `namespace="global"`
+- [x] Aplica a ordem de prioridade do design (mensagem atual > anexos do chat > histórico recente > RAG global), truncando por orçamento em vez de descartar categoria inteira
+- [x] Base vazia (nenhum doc pronto) retorna lista de contexto sem erro (DOC-11 já garante isso no `store.search`)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -166,11 +166,11 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Copia arquivo pra `chats/<chat_id>/tmp/`, cria registro em `chat_attachments` (`status: queued`)
-- [ ] Extrai texto (reusa `extract_text`) e estima tokens; abaixo do limiar → `status: injected_whole`, texto guardado pra injeção direta
-- [ ] Acima do limiar → chama `pipeline::process_document(namespace="chat:<id>")`, aguarda conclusão antes de retornar (a pergunta atual precisa se beneficiar — CHAT-08 AC)
-- [ ] Falha de processamento → `status: error`, função retorna sem abortar o envio da mensagem de texto (CHAT-10)
-- [ ] `cargo check` passa
+- [x] Copia arquivo pra `chats/<chat_id>/tmp/`, cria registro em `chat_attachments` (`status: queued`)
+- [x] Extrai texto (reusa `extract_text`) e estima tokens; abaixo do limiar → `status: injected_whole`, texto guardado pra injeção direta
+- [x] Acima do limiar → chama `pipeline::process_document(namespace="chat:<id>")`, aguarda conclusão antes de retornar (a pergunta atual precisa se beneficiar — CHAT-08 AC)
+- [x] Falha de processamento → `status: error`, função retorna sem abortar o envio da mensagem de texto (CHAT-10)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -190,13 +190,13 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Sem modelo ativo (chat nem global) → retorna erro antes de qualquer I/O de rede (CHAT-02)
-- [ ] Persiste mensagem do usuário, processa anexos (T6), monta contexto (T5), chama `stream_chat` do provedor certo
-- [ ] Cada token recebido emite `chat-stream-chunk {chat_id, message_id, delta, done}`
-- [ ] Ao terminar (ou cancelar), persiste a mensagem do assistente com o conteúdo acumulado até ali
-- [ ] `cancel_generation(chat_id)` aciona o `CancellationToken` e a geração para, mantendo o parcial (CHAT-04)
-- [ ] Erro do provedor durante o stream emite `chat-stream-chunk` com um campo de erro e persiste o parcial (CHAT-05)
-- [ ] `cargo check` passa
+- [x] Sem modelo ativo (chat nem global) → retorna erro antes de qualquer I/O de rede (CHAT-02)
+- [x] Persiste mensagem do usuário, processa anexos (T6), monta contexto (T5), chama `stream_chat` do provedor certo
+- [x] Cada token recebido emite `chat-stream-chunk {chat_id, message_id, delta, done}`
+- [x] Ao terminar (ou cancelar), persiste a mensagem do assistente com o conteúdo acumulado até ali
+- [x] `cancel_generation(chat_id)` aciona o `CancellationToken` e a geração para, mantendo o parcial (CHAT-04)
+- [x] Erro do provedor durante o stream emite `chat-stream-chunk` com um campo de erro e persiste o parcial (CHAT-05)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -216,10 +216,10 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Ao excluir um chat, `chats/<chat_id>/tmp/` é removida recursivamente do disco
-- [ ] `delete_namespace("chat:<chat_id>")` é chamado no LanceDB
-- [ ] `chat_attachments` daquele chat são removidos (via `DELETE ... WHERE chat_id = ?`, mesmo padrão de `messages` já usado em `delete_chat`)
-- [ ] `cargo check` passa
+- [x] Ao excluir um chat, `chats/<chat_id>/tmp/` é removida recursivamente do disco
+- [x] `delete_namespace("chat:<chat_id>")` é chamado no LanceDB
+- [x] `chat_attachments` daquele chat são removidos (via `DELETE ... WHERE chat_id = ?`, mesmo padrão de `messages` já usado em `delete_chat`)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -239,9 +239,9 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `sendMessage(chatId, text, filePaths)` e `cancelGeneration(chatId)` tipados
-- [ ] Store escuta `chat-stream-chunk` via `@tauri-apps/api/event`, acumula `delta` na mensagem em construção, marca completa quando `done`
-- [ ] `npm run build` passa
+- [x] `sendMessage(chatId, text, filePaths)` e `cancelGeneration(chatId)` tipados
+- [x] Store escuta `chat-stream-chunk` via `@tauri-apps/api/event`, acumula `delta` na mensagem em construção, marca completa quando `done`
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -259,10 +259,10 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Campo desabilitado com aviso quando não há modelo ativo (CHAT-02)
-- [ ] Anexar mostra nome do arquivo + status; erro de anexo aparece sem travar o envio da mensagem de texto
-- [ ] Enter/botão envia; campo limpa após envio
-- [ ] `npm run build` passa
+- [x] Campo desabilitado com aviso quando não há modelo ativo (CHAT-02)
+- [x] Anexar mostra nome do arquivo + status; erro de anexo aparece sem travar o envio da mensagem de texto
+- [x] Enter/botão envia; campo limpa após envio
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -280,10 +280,10 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Mensagem do assistente atualiza token a token enquanto `chat-stream-chunk` chega
-- [ ] Botão de cancelar visível só durante geração ativa, chama `cancelGeneration`
-- [ ] Toggle de RAG global persiste via um comando novo simples (`set_chat_use_global_rag`, adicionar a `commands.rs` — nota: se esse comando não existir ainda, criar aqui mesmo por ser trivial e ligado 1:1 a este componente)
-- [ ] `npm run build` passa
+- [x] Mensagem do assistente atualiza token a token enquanto `chat-stream-chunk` chega
+- [x] Botão de cancelar visível só durante geração ativa, chama `cancelGeneration`
+- [x] Toggle de RAG global persiste via um comando novo simples (`set_chat_use_global_rag`, adicionar a `commands.rs` — nota: se esse comando não existir ainda, criar aqui mesmo por ser trivial e ligado 1:1 a este componente)
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -301,7 +301,7 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `npm run build` passa
+- [x] `npm run build` passa
 - [ ] `npm run tauri dev`: com um modelo real configurado (via M3), enviar uma mensagem simples e ver streaming funcionando
 - [ ] Anexar um `.txt` pequeno com um fato inventado, perguntar sobre ele, confirmar que a resposta reflete o conteúdo
 - [ ] Repetir a mesma pergunta (sobre o fato do anexo) em outro chat e confirmar que NÃO usa esse contexto (CHAT-11)

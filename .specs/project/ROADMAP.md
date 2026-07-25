@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current Milestone:** M5 — Base de Conhecimento & RAG global (próximo). M3.1 e M7 concluídos em 2026-07-25. Ordem restante: **M5 → M4 → M6 → M8**.
+**Current Milestone:** M6 — Memória de conversa (RAG híbrido). M3.1, M7, M5 e M4 concluídos em 2026-07-25. Restam **M6 → M8**.
 **Status:** In Progress
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
@@ -152,19 +152,19 @@ flowchart TB
 
 ---
 
-## M4 — Chat: envio, streaming & anexos — PLANNED
+## M4 — Chat: envio, streaming & anexos — ✅ COMPLETE (2026-07-25)
 
 **Goal:** Conversar de verdade: enviar mensagem, receber streaming e anexar arquivos como RAG do chat.
 **Target:** Envio de texto + anexo → resposta em streaming usando o modelo marcado, com os anexos como contexto.
 
 ### Features
 
-**Envio & streaming** — PLANNED
+**Envio & streaming** — DONE
 
 - Campo de mensagem no chat; enviar → resposta em streaming (OpenAI-compatible); cancelar
 - Seleção de modelo por chat + system prompt opcional
 
-**Anexos no chat** — PLANNED
+**Anexos no chat** — DONE
 
 - Enviar arquivos junto com o texto; serializar para `chats/<id>/tmp/`
 - Processar → RAG do chat (namespace `chat_id`); usados junto da pergunta
@@ -172,20 +172,20 @@ flowchart TB
 
 ---
 
-## M5 — Base de Conhecimento & RAG global — PLANNED
+## M5 — Base de Conhecimento & RAG global — ✅ COMPLETE (2026-07-25)
 
 **Goal:** Importar documentos para a base global com feedback de processamento e usá-los como RAG.
 **Target:** Importar documento → ver progresso → quando pronto, fica buscável; respostas citam trechos.
 
 ### Features
 
-**Ingestão com progresso** — PLANNED
+**Ingestão com progresso** — DONE
 
 - Aba Documentos: botão importar (PDF, DOCX, TXT, MD)
 - Barra/indicador de processamento; só arquivos **processados** entram no RAG
 - Listar, ver status, remover
 
-**Embedding & Retrieval** — PLANNED
+**Embedding & Retrieval** — DONE
 
 - Embeddings (fastembed ONNX, modelo multilíngue) → LanceDB (tabela global)
 - Recuperação top-k + injeção no contexto + citações; toggle por chat

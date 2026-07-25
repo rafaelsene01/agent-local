@@ -1,7 +1,7 @@
 # Base de Conhecimento & RAG Global Tasks
 
 **Design**: `.specs/features/documents-rag/design.md`
-**Status**: Draft
+**Status**: Complete (2026-07-25) — exceto a verificação pela UI (importar clicando), listada abaixo
 
 ---
 
@@ -52,8 +52,8 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `CREATE TABLE IF NOT EXISTS documents (...)` conforme design.md, com `status` cobrindo os 6 valores da máquina de estados
-- [ ] `cargo check` passa
+- [x] `CREATE TABLE IF NOT EXISTS documents (...)` conforme design.md, com `status` cobrindo os 6 valores da máquina de estados
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -71,9 +71,9 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Função pura, sem I/O, com overlap configurável
-- [ ] Testes cobrem: texto menor que `max_tokens` vira 1 chunk só; texto maior gera múltiplos chunks com overlap correto; texto vazio retorna lista vazia sem panicar
-- [ ] `cargo test chunking` passa
+- [x] Função pura, sem I/O, com overlap configurável
+- [x] Testes cobrem: texto menor que `max_tokens` vira 1 chunk só; texto maior gera múltiplos chunks com overlap correto; texto vazio retorna lista vazia sem panicar
+- [x] `cargo test chunking` passa
 
 **Tests**: unit
 **Gate**: `cargo test chunking`
@@ -93,10 +93,10 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: `context7`/web search (**obrigatório pesquisar antes de escrever**: confirmar crates Rust atuais e mantidos para extrair texto de PDF e DOCX — não fabricar nome de crate; se nenhum crate confiável for encontrado para algum formato, documentar como limitação conhecida em vez de inventar suporte) · Skill: NONE
 
 **Done when**:
-- [ ] TXT/MD lidos via `std::fs::read_to_string`
-- [ ] PDF e DOCX extraem texto usando crates confirmados pela pesquisa (nomes documentados no commit/PR)
-- [ ] Arquivo sem texto extraível (ex.: PDF só-imagem) retorna `ParseError::NoTextFound`, não panic
-- [ ] `cargo check` passa
+- [x] TXT/MD lidos via `std::fs::read_to_string`
+- [x] PDF e DOCX extraem texto usando crates confirmados pela pesquisa (nomes documentados no commit/PR)
+- [x] Arquivo sem texto extraível (ex.: PDF só-imagem) retorna `ParseError::NoTextFound`, não panic
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -116,10 +116,10 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: `context7`/web search (**obrigatório**: confirmar qual(is) modelo(s) multilíngue(s) o fastembed-rs suporta atualmente antes de fixar um nome de modelo no código — a UI é EN+PT, o modelo de embedding precisa cobrir os dois) · Skill: NONE
 
 **Done when**:
-- [ ] Modelo de embedding carregado de forma lazy (primeira chamada), mantido em memória
-- [ ] `embed_batch` retorna vetores de dimensão consistente
-- [ ] Decisão do modelo escolhido documentada como comentário/AD (nome do modelo confirmado via pesquisa, não fabricado)
-- [ ] `cargo check` passa
+- [x] Modelo de embedding carregado de forma lazy (primeira chamada), mantido em memória
+- [x] `embed_batch` retorna vetores de dimensão consistente
+- [x] Decisão do modelo escolhido documentada como comentário/AD (nome do modelo confirmado via pesquisa, não fabricado)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -139,10 +139,10 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: `context7`/web search (**obrigatório**: confirmar API atual do crate `lancedb` para Rust — criação de tabela, add de linhas com vetor, query com filtro de coluna + top-k por similaridade, delete por filtro) · Skill: NONE
 
 **Done when**:
-- [ ] Tabela LanceDB criada em `<base_path>/vectors/` na primeira escrita
-- [ ] `search(namespace, query_vec, top_k)` filtra por `namespace` e ordena por similaridade
-- [ ] `delete_by_doc`/`delete_namespace` removem linhas corretamente (verificado por count antes/depois)
-- [ ] `cargo check` passa
+- [x] Tabela LanceDB criada em `<base_path>/vectors/` na primeira escrita
+- [x] `search(namespace, query_vec, top_k)` filtra por `namespace` e ordena por similaridade
+- [x] `delete_by_doc`/`delete_namespace` removem linhas corretamente (verificado por count antes/depois)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -162,11 +162,11 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Avança `queued → parsing → chunking → embedding → ready` em SQLite a cada etapa, emitindo evento a cada mudança
-- [ ] Erro em qualquer etapa vira status `error` com `error_message` preenchido, sem panicar o processo
-- [ ] Múltiplos documentos processam via `tokio::spawn` sem travar a thread principal/UI
-- [ ] Documento removido durante processamento é detectado (checagem antes de cada etapa) e aborta limpando chunks parciais
-- [ ] `cargo check` passa
+- [x] Avança `queued → parsing → chunking → embedding → ready` em SQLite a cada etapa, emitindo evento a cada mudança
+- [x] Erro em qualquer etapa vira status `error` com `error_message` preenchido, sem panicar o processo
+- [x] Múltiplos documentos processam via `tokio::spawn` sem travar a thread principal/UI
+- [x] Documento removido durante processamento é detectado (checagem antes de cada etapa) e aborta limpando chunks parciais
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -186,10 +186,10 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `import_documents(paths)` copia pra `documents/`, valida extensão/tamanho (rejeita com erro claro se inválido), cria registro `queued`, dispara `pipeline::process_document`
-- [ ] `list_documents()` / `delete_document(id)` (apaga arquivo + registro + `delete_by_doc` do vetor)
-- [ ] No `setup()`, após abrir a DB (config já completa), documentos com status `queued`/`parsing`/`chunking`/`embedding` são reenfileirados do zero
-- [ ] `cargo check` passa
+- [x] `import_documents(paths)` copia pra `documents/`, valida extensão/tamanho (rejeita com erro claro se inválido), cria registro `queued`, dispara `pipeline::process_document`
+- [x] `list_documents()` / `delete_document(id)` (apaga arquivo + registro + `delete_by_doc` do vetor)
+- [x] No `setup()`, após abrir a DB (config já completa), documentos com status `queued`/`parsing`/`chunking`/`embedding` são reenfileirados do zero
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -209,9 +209,9 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Wrappers para os 3 comandos de T7
-- [ ] Store escuta `document-status` via `@tauri-apps/api/event` e atualiza o item certo pelo `id`
-- [ ] `npm run build` passa
+- [x] Wrappers para os 3 comandos de T7
+- [x] Store escuta `document-status` via `@tauri-apps/api/event` e atualiza o item certo pelo `id`
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -229,9 +229,9 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `ActiveView` inclui `"documents"`
-- [ ] i18n: chaves novas em `en.json`/`pt.json`
-- [ ] `npm run build` passa
+- [x] `ActiveView` inclui `"documents"`
+- [x] i18n: chaves novas em `en.json`/`pt.json`
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -249,10 +249,10 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Botão importar abre seletor nativo filtrado por extensão
-- [ ] Lista mostra nome, tamanho, status (com indicador visual por etapa)
-- [ ] Documento "erro" mostra a mensagem; documento "ready" tem opção de remover
-- [ ] `npm run build` passa
+- [x] Botão importar abre seletor nativo filtrado por extensão
+- [x] Lista mostra nome, tamanho, status (com indicador visual por etapa)
+- [x] Documento "erro" mostra a mensagem; documento "ready" tem opção de remover
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -270,7 +270,7 @@ T10 ──→ T11 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `npm run build` passa
+- [x] `npm run build` passa
 - [ ] `npm run tauri dev`: importar um PDF/TXT real, ver progresso até "ready", remover e confirmar que some da lista
 
 **Tests**: none
