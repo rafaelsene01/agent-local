@@ -6,6 +6,8 @@ import type {
   ConfigApplied,
   Connection,
   DownloadableModel,
+  EmbeddedRuntimeStatus,
+  EmbeddedSetupProgressEvent,
   InstalledModel,
   ModelDownloadProgressEvent,
   PullProgress,
@@ -37,6 +39,15 @@ interface ConnectionsState {
   loadInstalledModels: (connectionId: string) => Promise<void>;
   loadAvailableInstalledModels: () => Promise<void>;
   pullModel: (connectionId: string, identifier: string) => Promise<void>;
+  embeddedStatus: EmbeddedRuntimeStatus | null;
+  embeddedProgress: EmbeddedSetupProgressEvent | null;
+  isSettingUpEmbedded: boolean;
+  loadEmbeddedStatus: () => Promise<void>;
+  setupEmbeddedRuntime: () => Promise<void>;
+  startEmbeddedRuntime: () => Promise<void>;
+  stopEmbeddedRuntime: () => Promise<void>;
+  downloadEmbeddedModel: (url: string) => Promise<void>;
+
   loadActivePair: () => Promise<void>;
   setActiveModel: (connectionId: string, modelName: string) => Promise<void>;
   configureModel: (
@@ -147,6 +158,61 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
+  embeddedStatus: null,
+  embeddedProgress: null,
+  isSettingUpEmbedded: false,
+
+  loadEmbeddedStatus: async () => {
+    try {
+      const embeddedStatus = await connectionsApi.embeddedRuntimeStatus();
+      set({ embeddedStatus });
+    } catch (err) {
+      set({ error: String(err) });
+    }
+  },
+
+  // The whole setup (binary + ~2.4GB model) is one long call; progress
+  // arrives through the `embedded-setup-progress` listener below, not here.
+  setupEmbeddedRuntime: async () => {
+    set({ isSettingUpEmbedded: true, error: null });
+    try {
+      const embeddedStatus = await connectionsApi.setupEmbeddedRuntime();
+      set({ embeddedStatus });
+    } catch (err) {
+      set({ error: String(err) });
+    } finally {
+      set({ isSettingUpEmbedded: false });
+    }
+  },
+
+  startEmbeddedRuntime: async () => {
+    try {
+      const embeddedStatus = await connectionsApi.startEmbeddedRuntime();
+      set({ embeddedStatus });
+      await get().loadConnections();
+    } catch (err) {
+      set({ error: String(err) });
+    }
+  },
+
+  stopEmbeddedRuntime: async () => {
+    try {
+      await connectionsApi.stopEmbeddedRuntime();
+      await Promise.all([get().loadEmbeddedStatus(), get().loadConnections()]);
+    } catch (err) {
+      set({ error: String(err) });
+    }
+  },
+
+  downloadEmbeddedModel: async (url) => {
+    try {
+      await connectionsApi.downloadEmbeddedModel(url);
+      await get().loadAvailableInstalledModels();
+    } catch (err) {
+      set({ error: String(err) });
+    }
+  },
+
   loadActivePair: async () => {
     try {
       const activePair = await connectionsApi.getActivePair();
@@ -177,6 +243,10 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     return applied;
   },
 }));
+
+listen<EmbeddedSetupProgressEvent>("embedded-setup-progress", (event) => {
+  useConnectionsStore.setState({ embeddedProgress: event.payload });
+});
 
 listen<ModelDownloadProgressEvent>("model-download-progress", (event) => {
   const { connection_id, identifier, progress } = event.payload;

@@ -20,7 +20,7 @@ export interface AppConfig {
   onboarding_completed: boolean;
 }
 
-export type ConnectionProvider = "ollama" | "lmstudio" | "custom";
+export type ConnectionProvider = "ollama" | "lmstudio" | "custom" | "embedded";
 export type ConnectionStatus = "available" | "unavailable" | "unknown";
 
 export interface Connection {
@@ -79,6 +79,32 @@ export interface ActiveModel {
   model_name: string;
   context_length: number | null;
   gpu_offload: string | null;
+}
+
+/** Mirrors `EmbeddedSetupStage` in embedded_commands.rs — the mapping is
+ *  manual on purpose (no codegen in this project, see C-03). */
+export type EmbeddedSetupStage =
+  | "unsupported"
+  | "not_installed"
+  | "downloading_binary"
+  | "downloading_model"
+  | "ready"
+  | "running"
+  | "error";
+
+export interface EmbeddedRuntimeStatus {
+  stage: EmbeddedSetupStage;
+  release_tag: string | null;
+  backend: "vulkan" | "cpu" | null;
+  port: number | null;
+  model_name: string | null;
+  message: string | null;
+}
+
+export interface EmbeddedSetupProgressEvent {
+  stage: EmbeddedSetupStage;
+  progress: PullProgress | null;
+  message: string | null;
 }
 
 /** Who answers right now. `model` can be null while `connection` is set:

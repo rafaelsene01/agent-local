@@ -5,6 +5,7 @@ import type {
   Connection,
   ConnectionStatus,
   DownloadableModelsResponse,
+  EmbeddedRuntimeStatus,
   InstalledModel,
 } from "../types";
 
@@ -25,6 +26,12 @@ export const connectionsApi = {
   setActiveModel: (connectionId: string, modelName: string) =>
     invoke<void>("set_active_model", { connectionId, modelName }),
   getActivePair: () => invoke<ActivePair>("get_active_pair"),
+  setupEmbeddedRuntime: () => invoke<EmbeddedRuntimeStatus>("setup_embedded_runtime"),
+  startEmbeddedRuntime: () => invoke<EmbeddedRuntimeStatus>("start_embedded_runtime"),
+  stopEmbeddedRuntime: () => invoke<void>("stop_embedded_runtime"),
+  embeddedRuntimeStatus: () => invoke<EmbeddedRuntimeStatus>("embedded_runtime_status"),
+  downloadEmbeddedModel: (url: string) => invoke<void>("download_embedded_model", { url }),
+
   configureModel: (
     connectionId: string,
     modelName: string,

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Plus } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
+import { EmbeddedRuntimeCard } from "./EmbeddedRuntimeCard";
 import type { ConnectionProvider } from "../../types";
 
 const STATUS_DOT: Record<string, string> = {
@@ -20,6 +21,7 @@ export function ConnectionsList() {
     clearActiveConnection,
     refreshConnectionStatus,
     addConnection,
+    embeddedStatus,
   } = useConnectionsStore();
   const [provider, setProvider] = useState<ConnectionProvider>("custom");
   const [baseUrl, setBaseUrl] = useState("");
@@ -78,8 +80,26 @@ export function ConnectionsList() {
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${STATUS_DOT[conn.status]}`} />
               <div>
-                <p className="text-sm font-medium capitalize">{conn.provider}</p>
-                <p className="text-xs text-[var(--text-secondary)]">{conn.base_url}</p>
+                <p className="text-sm font-medium capitalize">
+                  {conn.provider === "embedded"
+                    ? t("connections.providerEmbedded")
+                    : conn.provider}
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {conn.provider === "embedded"
+                    ? [
+                        embeddedStatus?.release_tag &&
+                          t("connections.embedded.release", { tag: embeddedStatus.release_tag }),
+                        embeddedStatus?.backend === "vulkan"
+                          ? t("connections.embedded.backendVulkan")
+                          : embeddedStatus?.backend === "cpu"
+                            ? t("connections.embedded.backendCpu")
+                            : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || t("connections.embedded.description")
+                    : conn.base_url}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -112,6 +132,8 @@ export function ConnectionsList() {
           </button>
         )}
       </div>
+
+      <EmbeddedRuntimeCard />
 
       <form onSubmit={handleAdd} className="space-y-2 border-t border-[var(--border-color)] pt-4">
         <h3 className="text-sm font-medium">{t("connections.addManual")}</h3>
