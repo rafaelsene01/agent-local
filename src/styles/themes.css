@@ -1,0 +1,56 @@
+/*
+  Semantic color tokens as CSS custom properties, switched at runtime via
+  `data-theme` on <html>. Components reference these via Tailwind arbitrary
+  values, e.g. `bg-[var(--bg-app)]`, so switching theme needs no re-render
+  of Tailwind classes — only the CSS variables change.
+*/
+
+:root,
+:root[data-theme="dark"] {
+  --bg-sidebar: #0f172a;
+  --bg-app: #1e293b;
+  --bg-elevated: #334155;
+  --border-color: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-fg: #ffffff;
+}
+
+:root[data-theme="light"] {
+  --bg-sidebar: #f1f5f9;
+  --bg-app: #ffffff;
+  --bg-elevated: #e2e8f0;
+  --border-color: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-fg: #ffffff;
+}
+
+:root[data-theme="ocean"] {
+  --bg-sidebar: #052e2b;
+  --bg-app: #0a3d38;
+  --bg-elevated: #0f544c;
+  --border-color: #14665c;
+  --text-primary: #e6fffa;
+  --text-secondary: #8fd9c4;
+  --accent: #14b8a6;
+  --accent-hover: #2dd4bf;
+  --accent-fg: #052e2b;
+}
+
+/* Warm cream palette in Claude's terracotta (#da7756). */
+:root[data-theme="claude"] {
+  --bg-sidebar: #ede9de;
+  --bg-app: #faf9f5;
+  --bg-elevated: #e3ddd0;
+  --border-color: #e3ddd0;
+  --text-primary: #3d3929;
+  --text-secondary: #83786a;
+  --accent: #da7756;
+  --accent-hover: #c25f3d;
+  --accent-fg: #ffffff;
+}

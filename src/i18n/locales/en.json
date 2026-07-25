@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "LocalMind"
+  },
+  "sidebar": {
+    "chats": "Chats",
+    "documents": "Documents",
+    "connections": "Connections",
+    "settings": "Settings"
+  },
+  "chats": {
+    "newChat": "New chat",
+    "empty": "No chats yet.",
+    "createFirst": "Create your first chat",
+    "rename": "Rename",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "defaultTitle": "New chat"
+  },
+  "chatPanel": {
+    "selectOrCreate": "Select a chat or create a new one to get started",
+    "newChat": "New chat",
+    "noMessages": "No messages yet. Sending messages arrives in the next milestone (connecting to LM Studio/Ollama)."
+  },
+  "documents": {
+    "title": "Documents",
+    "placeholder": "Knowledge base (RAG) arrives in a future milestone."
+  },
+  "connections": {
+    "title": "Connections",
+    "placeholder": "No connection configured yet"
+  },
+  "settings": {
+    "title": "Settings",
+    "back": "Back to chat",
+    "theme": "Theme",
+    "language": "Language",
+    "storageFolder": "Storage folder",
+    "changeFolder": "Change folder",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeOcean": "Ocean",
+    "themeClaude": "Claude",
+    "languageEnglish": "English",
+    "languagePortuguese": "Português"
+  },
+  "onboarding": {
+    "welcomeTitle": "Welcome to LocalMind",
+    "welcomeSubtitle": "A private, 100% local AI chat. Let's set a few things up.",
+    "folderLabel": "Where should LocalMind store your models, documents and chats?",
+    "folderChoose": "Choose folder",
+    "folderUseDefault": "Use suggested folder",
+    "themeLabel": "Pick a theme",
+    "languageLabel": "Pick a language",
+    "finish": "Get started",
+    "settingUp": "Setting up..."
+  }
+}

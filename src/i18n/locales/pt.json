@@ -1,0 +1,59 @@
+{
+  "app": {
+    "name": "LocalMind"
+  },
+  "sidebar": {
+    "chats": "Chats",
+    "documents": "Documentos",
+    "connections": "Conexões",
+    "settings": "Configurações"
+  },
+  "chats": {
+    "newChat": "Novo chat",
+    "empty": "Nenhum chat ainda.",
+    "createFirst": "Criar o primeiro chat",
+    "rename": "Renomear",
+    "delete": "Excluir",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "defaultTitle": "Novo chat"
+  },
+  "chatPanel": {
+    "selectOrCreate": "Selecione um chat ou crie um novo para começar",
+    "newChat": "Novo chat",
+    "noMessages": "Sem mensagens ainda. O envio de mensagens chega no próximo milestone (conexão com LM Studio/Ollama)."
+  },
+  "documents": {
+    "title": "Documentos",
+    "placeholder": "Base de conhecimento (RAG) chega em um próximo milestone."
+  },
+  "connections": {
+    "title": "Conexões",
+    "placeholder": "Nenhuma conexão configurada ainda"
+  },
+  "settings": {
+    "title": "Configurações",
+    "back": "Voltar ao chat",
+    "theme": "Tema",
+    "language": "Idioma",
+    "storageFolder": "Pasta de armazenamento",
+    "changeFolder": "Trocar pasta",
+    "themeDark": "Escuro",
+    "themeLight": "Claro",
+    "themeOcean": "Oceano",
+    "themeClaude": "Claude",
+    "languageEnglish": "English",
+    "languagePortuguese": "Português"
+  },
+  "onboarding": {
+    "welcomeTitle": "Bem-vindo ao LocalMind",
+    "welcomeSubtitle": "Um chat de IA privado e 100% local. Vamos configurar algumas coisas.",
+    "folderLabel": "Onde o LocalMind deve guardar seus modelos, documentos e chats?",
+    "folderChoose": "Escolher pasta",
+    "folderUseDefault": "Usar pasta sugerida",
+    "themeLabel": "Escolha um tema",
+    "languageLabel": "Escolha um idioma",
+    "finish": "Começar",
+    "settingUp": "Configurando..."
+  }
+}

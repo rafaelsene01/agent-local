@@ -1,0 +1,140 @@
+use crate::db::DbState;
+use crate::models::{Chat, Message};
+use chrono::Utc;
+use rusqlite::{params, Connection};
+use tauri::State;
+use uuid::Uuid;
+
+fn require_conn<'a>(guard: &'a std::sync::MutexGuard<'a, Option<Connection>>) -> Result<&'a Connection, String> {
+    guard
+        .as_ref()
+        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
+}
+
+#[tauri::command]
+pub fn create_chat(db: State<DbState>, title: Option<String>) -> Result<Chat, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = require_conn(&guard)?;
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let title = title
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| "New chat".to_string());
+
+    conn.execute(
+        "INSERT INTO chats (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+        params![id, title, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Chat {
+        id,
+        title,
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn list_chats(db: State<DbState>) -> Result<Vec<Chat>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = require_conn(&guard)?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, created_at, updated_at FROM chats ORDER BY updated_at DESC")
+        .map_err(|e| e.to_string())?;
+
+    let chats = stmt
+        .query_map([], |row| {
+            Ok(Chat {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<Chat>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(chats)
+}
+
+#[tauri::command]
+pub fn rename_chat(db: State<DbState>, id: String, title: String) -> Result<Chat, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = require_conn(&guard)?;
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("O título não pode ficar vazio".to_string());
+    }
+    let now = Utc::now().to_rfc3339();
+
+    let updated = conn
+        .execute(
+            "UPDATE chats SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, now, id],
+        )
+        .map_err(|e| e.to_string())?;
+
+    if updated == 0 {
+        return Err("Chat não encontrado".to_string());
+    }
+
+    let created_at: String = conn
+        .query_row("SELECT created_at FROM chats WHERE id = ?1", params![id], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    Ok(Chat {
+        id,
+        title: title.to_string(),
+        created_at,
+        updated_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn delete_chat(db: State<DbState>, id: String) -> Result<(), String> {
+    let mut guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = guard
+        .as_mut()
+        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM messages WHERE chat_id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    let deleted = tx
+        .execute("DELETE FROM chats WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+
+    if deleted == 0 {
+        return Err("Chat não encontrado".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_messages(db: State<DbState>, chat_id: String) -> Result<Vec<Message>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let conn = require_conn(&guard)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, chat_id, role, content, created_at FROM messages WHERE chat_id = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let messages = stmt
+        .query_map(params![chat_id], |row| {
+            Ok(Message {
+                id: row.get(0)?,
+                chat_id: row.get(1)?,
+                role: row.get(2)?,
+                content: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<Message>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(messages)
+}
