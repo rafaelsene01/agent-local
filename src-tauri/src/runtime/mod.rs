@@ -1,6 +1,7 @@
 pub mod detect;
 pub mod download;
 pub mod model;
+pub mod process;
 pub mod release;
 
 /// Only these two are shipped as prebuilt llama.cpp binaries by the project
