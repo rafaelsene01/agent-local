@@ -61,7 +61,21 @@
     "noConnectionForProvider": "No enabled connection supports this provider",
     "manualPull": "Download by name or link",
     "manualPullPlaceholder": "Model name (Ollama) or Hugging Face link (LM Studio)",
-    "pull": "Download"
+    "pull": "Download",
+    "configureModel": "Configure {{model}}",
+    "close": "Close",
+    "contextLength": "Context length",
+    "contextLengthPlaceholder": "Provider default",
+    "gpuOffload": "GPU offload",
+    "gpuMode": {
+      "default": "Default",
+      "off": "Off",
+      "max": "Max",
+      "fraction": "Custom"
+    },
+    "save": "Save",
+    "notApplied": "not applied",
+    "requiresReload": "This provider only applies these settings on the next model (re)load."
   },
   "settings": {
     "title": "Settings",

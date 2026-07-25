@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Download } from "lucide-react";
+import { Download, Settings2 } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
+import { ModelConfigForm } from "./ModelConfigForm";
 import { ModelDownloadCard } from "./ModelDownloadCard";
 
 export function ModelsList() {
@@ -23,6 +24,7 @@ export function ModelsList() {
   const [showAll, setShowAll] = useState(false);
   const [manualConnectionId, setManualConnectionId] = useState("");
   const [manualIdentifier, setManualIdentifier] = useState("");
+  const [configuringKey, setConfiguringKey] = useState<string | null>(null);
 
   const enabledConnections = useMemo(() => connections.filter((c) => c.enabled), [connections]);
 
@@ -73,22 +75,41 @@ export function ModelsList() {
                     {models.map((m) => {
                       const isActive =
                         activeModel?.connection_id === conn.id && activeModel?.model_name === m.name;
+                      const key = `${conn.id}:${m.name}`;
+                      const isConfiguring = configuringKey === key;
                       return (
-                        <div
-                          key={m.name}
-                          className="flex items-center justify-between rounded-md border border-[var(--border-color)] px-3 py-1.5"
-                        >
-                          <span className="text-sm">{m.name}</span>
-                          <button
-                            onClick={() => setActiveModel(conn.id, m.name)}
-                            className={`rounded-md px-2 py-1 text-xs font-medium ${
-                              isActive
-                                ? "bg-[var(--accent)] text-[var(--accent-fg)]"
-                                : "border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                            }`}
-                          >
-                            {isActive ? t("connections.active") : t("connections.useModel")}
-                          </button>
+                        <div key={m.name}>
+                          <div className="flex items-center justify-between rounded-md border border-[var(--border-color)] px-3 py-1.5">
+                            <span className="text-sm">{m.name}</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setConfiguringKey(isConfiguring ? null : key)}
+                                className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                                title={t("connections.configureModel", { model: m.name })}
+                              >
+                                <Settings2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => setActiveModel(conn.id, m.name)}
+                                className={`rounded-md px-2 py-1 text-xs font-medium ${
+                                  isActive
+                                    ? "bg-[var(--accent)] text-[var(--accent-fg)]"
+                                    : "border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                }`}
+                              >
+                                {isActive ? t("connections.active") : t("connections.useModel")}
+                              </button>
+                            </div>
+                          </div>
+                          {isConfiguring && (
+                            <div className="mt-1">
+                              <ModelConfigForm
+                                connectionId={conn.id}
+                                modelName={m.name}
+                                onClose={() => setConfiguringKey(null)}
+                              />
+                            </div>
+                          )}
                         </div>
                       );
                     })}

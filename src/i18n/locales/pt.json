@@ -61,7 +61,21 @@
     "noConnectionForProvider": "Nenhuma conexão habilitada suporta este provedor",
     "manualPull": "Baixar por nome ou link",
     "manualPullPlaceholder": "Nome do modelo (Ollama) ou link do Hugging Face (LM Studio)",
-    "pull": "Baixar"
+    "pull": "Baixar",
+    "configureModel": "Configurar {{model}}",
+    "close": "Fechar",
+    "contextLength": "Tamanho de contexto",
+    "contextLengthPlaceholder": "Padrão do provedor",
+    "gpuOffload": "GPU offload",
+    "gpuMode": {
+      "default": "Padrão",
+      "off": "Desligado",
+      "max": "Máximo",
+      "fraction": "Customizado"
+    },
+    "save": "Salvar",
+    "notApplied": "não aplicado",
+    "requiresReload": "Este provedor só aplica essas configurações no próximo carregamento (reload) do modelo."
   },
   "settings": {
     "title": "Configurações",
