@@ -1,3 +1,4 @@
+pub mod lmstudio;
 pub mod ollama;
 
 use async_trait::async_trait;
