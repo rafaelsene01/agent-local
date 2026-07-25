@@ -1,6 +1,7 @@
 mod commands;
 mod config;
 mod config_commands;
+mod connections;
 mod db;
 mod models;
 mod providers;
