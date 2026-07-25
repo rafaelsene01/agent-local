@@ -27,4 +27,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.39"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio = { version = "1", features = ["sync"] }
+async-trait = "0.1"
 

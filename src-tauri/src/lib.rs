@@ -3,6 +3,7 @@ mod config;
 mod config_commands;
 mod db;
 mod models;
+mod providers;
 mod system_info;
 
 use db::DbState;
