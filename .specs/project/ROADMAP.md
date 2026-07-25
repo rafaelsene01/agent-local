@@ -1,7 +1,9 @@
 # Roadmap
 
-**Current Milestone:** M4 — Chat: envio, streaming & anexos (M3 completo; M5 planejado, aguardando Execute)
+**Current Milestone:** M3.1 — Conexão & modelo ativos únicos, depois M7 — Runtime embutido (ambos planejados, aguardando Execute). M4/M5 vêm em seguida.
 **Status:** In Progress
+
+> **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
 
 ---
 
@@ -60,23 +62,23 @@ flowchart TB
 
 ---
 
-## M2 — Configurações, Storage & i18n — IN PROGRESS
+## M2 — Configurações, Storage & i18n — ✅ COMPLETE (2026-07-24)
 
 **Goal:** Base de configuração de todo o app: pasta de armazenamento, temas e idioma, mais o wizard de 1º uso.
 **Target:** 1ª abertura mostra o wizard; Configurações permite trocar tema/idioma/pasta; tudo persiste.
 
 ### Features
 
-**Config & Storage Manager** — PLANNED
+**Config & Storage Manager** — DONE
 
 - Pasta-base configurável contendo `models/`, `documents/`, `vectors/`, `chats/<id>/tmp/`, `localmind.db`
 - Persistência de settings; validação/criação da pasta; realocar `localmind.db` para a pasta escolhida
 
-**Wizard de 1º uso** — PLANNED
+**Wizard de 1º uso** — DONE
 
 - Na 1ª execução: escolher pasta de dados, tema e idioma antes de entrar no app
 
-**Seção Configurações na sidebar** — PLANNED
+**Seção Configurações na sidebar** — DONE
 
 - Tema: claro, escuro + temas de cor extras (CSS variables)
 - Idioma: inglês (padrão) + português (i18n)
@@ -106,6 +108,47 @@ flowchart TB
 
 - Tamanho de contexto (context window) configurável
 - Escolha CPU vs GPU
+
+---
+
+## M3.1 — Conexão & modelo ativos únicos — PLANNED (spec + tasks prontos)
+
+**Goal:** Eliminar a ambiguidade "várias conexões habilitadas, qual responde?" deixada pelo M3.
+**Target:** Uma conexão ativa, um modelo ativo (sempre dela), escolhidos numa única ação.
+
+### Features
+
+**Par ativo único** — PLANNED (`.specs/features/single-active-connection/`, 10 tasks)
+
+- `connections.enabled` (múltiplas) vira `is_active` (exclusiva); `toggle_connection` sai
+- Escolher modelo ativa a conexão dona na mesma transação — invariante garantida no backend
+- Conexões inativas seguem listadas com status e modelos inspecionáveis
+- Revoga a AD-016 (modelo por chat) — ver AD-021
+
+**Migração de schema versionada** — PLANNED
+
+- `PRAGMA user_version` + lista ordenada de migrações (resolve C-01 do CONCERNS.md)
+- Pré-requisito real do M7, que precisa adicionar tabela em banco já existente
+
+---
+
+## M7 — Runtime embutido (llama.cpp) — PLANNED (spec + design + tasks prontos)
+
+> **Puxado para antes de M4/M5** a pedido do usuário (era o último antes do empacotamento).
+
+**Goal:** Funcionar do zero sem Ollama/LM Studio instalados.
+**Target:** Em máquina limpa, o app baixa o runtime + um modelo e conversa sozinho.
+
+### Features
+
+**Sidecar llama.cpp gerenciado pelo app** — PLANNED (`.specs/features/embedded-runtime/`, 16 tasks)
+
+- Baixa o binário `llama-server` do release mais recente (Windows + Linux), com progresso
+- Backend **Vulkan** (cobre NVIDIA/AMD/Intel sem toolkit); CPU como fallback — AD-022
+- Detecção de GPU pelo próprio binário (`--list-devices`), sem lib pesada
+- Modelo padrão: Phi-3.5 Mini Instruct Q4_K_M (MIT, ~2.4GB), escolhido pelo usuário
+- Processo filho com porta livre automática, health check e kill no `RunEvent::ExitRequested`
+- Aparece como mais uma conexão (`provider = "embedded"`), ativável pela mesma regra do M3.1
 
 ---
 
@@ -164,17 +207,7 @@ flowchart TB
 
 ---
 
-## M7 — Runtime embutido (fallback) — PLANNED
-
-**Goal:** Funcionar do zero sem Ollama/LM Studio instalados.
-**Target:** Em máquina limpa, o app conversa usando o llama.cpp embutido.
-
-### Features
-
-**Sidecar llama.cpp** — PLANNED
-
-- Empacotar llama.cpp como sidecar por plataforma; fallback automático
-- Baixar/gerenciar um modelo padrão pequeno (com consentimento), respeitando a pasta `models/`
+## M7 — Runtime embutido — ⬆️ movido para antes do M4 (ver acima)
 
 ---
 

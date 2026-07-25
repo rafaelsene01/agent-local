@@ -1,7 +1,32 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M3 (`connections-models`) implementado e verificado. Usuário pediu pra puxar M7 (`embedded-runtime`, llama.cpp embutido) pra agora, antes de `documents-rag`/`chat-messaging` — spec.md + context.md escritos (Specify completo), aguardando ir pra Design. `documents-rag` (M5) e `chat-messaging` (M4) ficam pra depois de `embedded-runtime`.
+**Current Work:** M3 implementado e verificado. Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+
+---
+
+## Recent Decisions (Last 60 days)
+
+### AD-022: Runtime embutido usa Vulkan (não CUDA), e o próprio binário detecta a GPU (2026-07-25)
+
+**Decision:** O M7 baixa o build **Vulkan** do llama.cpp (mais o build CPU só como fallback se o Vulkan nem executar). CUDA fica fora. A detecção de GPU é feita rodando `llama-server --list-devices` e lendo a saída — sem `wgpu`, `ash` ou `nvml`.
+**Reason:** Um binário Vulkan cobre NVIDIA/AMD/Intel sem exigir toolkit instalado. CUDA obrigaria escolher entre `cuda-12.4` e `cuda-13.3`, casar com versão de driver e dobrar a matriz de download. Sobre a detecção: o binário já sabe responder a pergunta, e uma lib de GPU responderia "existe Vulkan", não "o llama.cpp consegue usar".
+**Trade-off:** Usuário com NVIDIA de ponta perde ~35% em prompt processing (benchmarks 2026: RTX 5090 ~14.073 vs ~10.382 pp512); geração de token fica praticamente empatada (290 vs 264 tg128). Registrado como Deferred Idea.
+**Impact:** `embedded-runtime/design.md` (Tech Decisions) e tasks T4/T6.
+
+### AD-021: Uma conexão ativa e um modelo ativo, globais — revoga a AD-016 (2026-07-25)
+
+**Decision:** Existe no máximo **uma** conexão ativa e **um** modelo ativo no app inteiro, e o modelo ativo sempre pertence à conexão ativa. Escolher um modelo ativa a conexão dona dele na mesma ação. Conexões inativas continuam listadas com status e com modelos inspecionáveis.
+**Reason:** Pedido literal do usuário — *"conexão e modelo deve ter somente um único ativo, que é ele que deve ser usado na hora do chat"*. O M3 tinha deixado uma assimetria: modelo já era único, mas `connections.enabled` permitia várias habilitadas, sem resposta para "qual delas responde?".
+**Trade-off:** **Revoga a AD-016** (modelo por chat com fallback global) — perguntado explicitamente, o usuário escolheu matar o override por chat. Perde-se flexibilidade de usar modelos diferentes em chats diferentes; ganha-se um modelo mental sem ambiguidade.
+**Impact:** `connections.enabled` vira `is_active`; `toggle_connection` sai e entram `set_active_connection`/`clear_active_connection`; `get_active_model` vira `get_active_pair`. `chat-messaging/design.md` precisa perder `chats.model_config_id` (task T10 de `single-active-connection`).
+
+### AD-020: Migração de schema versionada com `PRAGMA user_version` (2026-07-25)
+
+**Decision:** `db.rs` passa de um `execute_batch(SCHEMA)` único para uma lista ordenada de migrações aplicadas conforme o `PRAGMA user_version`, cada uma em transação.
+**Reason:** O schema atual é só `CREATE TABLE IF NOT EXISTS` — funciona para adicionar tabela, mas vira **no-op silencioso** para mudança de coluna em banco já existente (C-01 no CONCERNS.md). A AD-021 precisa justamente renomear `connections.enabled`, e o M7 adiciona `embedded_runtime` — as duas próximas features batem nesse limite.
+**Trade-off:** ~40 linhas de infra a mais; nenhuma dependência nova (é recurso nativo do SQLite).
+**Impact:** `single-active-connection` T1/T2; `embedded-runtime` T3 entra como migração 3.
 
 ---
 
@@ -35,7 +60,11 @@
 **Trade-off:** `chat-messaging` tem dependência de implementação direta em `documents-rag` (não só de arquitetura) — a ordem de execução importa de verdade, não é só preferência de roadmap.
 **Impact:** `tasks.md` de `chat-messaging` referencia tasks de `documents-rag` explicitamente como "Externo" nas dependências (T5, T6 dependem de documents-rag T3/T4/T5/T6).
 
-### AD-016: Modelo ativo é por chat, com fallback pro modelo global (2026-07-25)
+### AD-016: ~~Modelo ativo é por chat, com fallback pro modelo global~~ — **REVOGADA em 2026-07-25 pela AD-021**
+
+> Revogada no mesmo dia em que foi escrita, antes de qualquer código depender dela. O usuário decidiu que existe um único par ativo global (conexão + modelo) e que não há override por chat. `chats.model_config_id` **não deve ser implementado**. Texto original preservado abaixo apenas como histórico da decisão.
+
+
 
 **Decision:** `chats.model_config_id` (nullable) — quando `NULL`, usa o "modelo ativo" marcado globalmente em Conexões (`model_configs.is_active`).
 **Reason:** O spec de `connections-models` fala em "modelo ativo" (singular), mas o ROADMAP original (antes desta sessão) já previa "seleção de modelo por chat". O fallback satisfaz os dois sem contradição.
@@ -194,6 +223,8 @@ _Nenhum._
 - [ ] OCR de documentos escaneados — Captured during: planejamento inicial
 - [ ] Página customizada no instalador NSIS Windows (pasta de dados durante a instalação) — Captured during: replanejamento (ver AD-010); wizard de 1º uso cobre isso no v1
 - [ ] Detecção de VRAM por GPU para filtragem de modelos mais precisa — Captured during: replanejamento (M3 começa só com RAM)
+- [ ] Build CUDA do llama.cpp embutido, para quem tem NVIDIA de ponta (~35% mais rápido em prompt processing que Vulkan) — Captured during: design do M7 (ver AD-022)
+- [ ] Atualizar o binário do llama.cpp embutido para releases mais novos (v1 fixa o tag resolvido no primeiro download) — Captured during: spec do M7
 
 ---
 
@@ -201,10 +232,12 @@ _Nenhum._
 
 - [ ] Verificar manualmente na UI os fluxos de CRUD de chat do M1 (criar/renomear/excluir/persistir após reiniciar) — SHELL-01..07
 - [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
-- [ ] **`embedded-runtime` (M7): fazer Design** — spec.md pronto (14 requirements, EMBED-01..14); Open Questions carregadas pro Design: CUDA vs Vulkan (ou os dois), detecção de GPU em Rust, alocação de porta do sidecar, mapeamento exato de flags do `llama-server` pra `context_length`/`gpu_offload`, forma exata de resolver "latest release" via API do GitHub
-- [ ] **Executar `documents-rag` tasks.md** (11 tasks) — depois de embedded-runtime, sem bloqueios (RAM detection do M3 não é pré-requisito real, mas a ordem do roadmap segue assim)
-- [ ] **Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação, não só de roadmap — ver AD-017)
+- [ ] **1º — Executar `single-active-connection` tasks.md** (10 tasks) — sem bloqueios. É pré-requisito real do `embedded-runtime` (T1 de lá entrega a infra de migração usada pela T3 daqui) e a T10 fecha a revogação da AD-016 na doc do `chat-messaging`
+- [ ] **2º — Executar `embedded-runtime` tasks.md** (16 tasks) — depois da anterior. A T7 exige **verificar ao vivo** a URL do GGUF do Phi-3.5 (única incerteza declarada do design, não assumir). Phases 0 (T1/T2) pagam dívida do CONCERNS (C-07, C-02) que esta feature agravaria
+- [ ] **3º — Executar `documents-rag` tasks.md** (11 tasks) — sem bloqueios
+- [ ] **4º — Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação — ver AD-017). Lembrar que a AD-016 foi revogada: **não** implementar `chats.model_config_id`
 - [ ] Durante a execução de `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
+- [ ] Encarar os itens de `.specs/codebase/CONCERNS.md` não cobertos pelas features planejadas: C-03 (espelhamento manual de tipos Rust↔TS), C-04 (zero teste no frontend), C-06 (polling de download do LM Studio sem timeout), C-09 (sem linter/CI), C-10, C-11
 - [ ] Avaliar assinatura de código dos instaladores (Windows) — design M8
 - [ ] Depois do M1, avaliar excluir os ícones padrão do template (`Square*.png`, `StoreLogo.png`) não usados no bundle final
 
