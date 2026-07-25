@@ -1,6 +1,7 @@
 mod commands;
 mod config;
 mod config_commands;
+mod connection_commands;
 mod connections;
 mod db;
 mod models;
@@ -47,6 +48,10 @@ pub fn run() {
             config_commands::update_theme,
             config_commands::update_language,
             config_commands::update_base_path,
+            connection_commands::list_connections,
+            connection_commands::add_connection,
+            connection_commands::toggle_connection,
+            connection_commands::refresh_connection_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

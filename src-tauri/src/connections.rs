@@ -79,13 +79,14 @@ pub fn create_connection(
     sql: &SqlConnection,
     provider: String,
     base_url: String,
+    enabled: bool,
 ) -> Result<Connection, String> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
     sql.execute(
-        "INSERT INTO connections (id, provider, base_url, enabled, created_at) VALUES (?1, ?2, ?3, 1, ?4)",
-        params![id, provider, base_url, now],
+        "INSERT INTO connections (id, provider, base_url, enabled, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, provider, base_url, enabled as i64, now],
     )
     .map_err(|e| e.to_string())?;
 
@@ -93,7 +94,7 @@ pub fn create_connection(
         id,
         provider,
         base_url,
-        enabled: true,
+        enabled,
         status: ConnectionStatus::Unknown,
     })
 }
@@ -157,7 +158,8 @@ mod tests {
     #[test]
     fn create_list_and_toggle_connection() {
         let sql = setup();
-        let created = create_connection(&sql, "ollama".to_string(), "http://localhost:11434".to_string()).unwrap();
+        let created =
+            create_connection(&sql, "ollama".to_string(), "http://localhost:11434".to_string(), true).unwrap();
         assert!(created.enabled);
 
         let listed = list_connections(&sql).unwrap();
