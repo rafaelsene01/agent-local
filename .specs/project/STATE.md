@@ -21,6 +21,10 @@
 - `ConnectionManager` deixou de ser unit struct e passou a carregar um `EmbeddedContext` (porta + models_dir), porque a URL da conexão embutida só existe depois que o processo escolhe a porta. Todos os comandos que criam provider passaram a receber `AppHandle` e a construir o manager via `embedded_commands::manager`.
 - T2 pedia baixar o timeout do client de 5s para 2s; feito **por requisição de health check**, porque o mesmo client serve downloads de vários GB.
 - **Não verificado**: setup disparado pelo card na UI, fechar o app e confirmar que o `llama-server` sumiu, e reabrir com a conexão ativa para ver o autostart. O mecanismo (`RunEvent::ExitRequested` → `kill`) está no código e o `kill` também roda no `Drop`, mas nenhum dos três foi exercitado clicando.
+**Correção pós-auditoria (mesmo dia):** uma revisão requisito-a-requisito encontrou dois itens marcados como prontos que não estavam:
+- **EMBED-12 estava quebrado**: `configure_model` gravava contexto/GPU em `model_configs`, mas o sidecar inicia a partir da linha `embedded_runtime` — a configuração era persistida e ignorada. Corrigido: o provider embutido grava também na própria linha e reinicia o servidor se estiver rodando. Offload de GPU é tudo-ou-nada (`-ngl` quer contagem de camadas, que não dá pra saber sem ler o GGUF; fração vira "off", nunca "max" silencioso).
+- **EMBED-04 AC4 incompleto**: o setup terminava em "pronto para iniciar" e exigia um segundo clique. Agora sobe o sidecar ao fim da instalação.
+- **Desvio consciente mantido (EMBED-02)**: o AC diz que *ativar* a conexão dispara o download; a UI exige clique explícito em "Baixar e instalar", porque ativar por rádio não deveria começar um download de 2,4 GB. Se o comportamento literal for desejado, é uma mudança pequena no card.
 **Impact:** M7 ✅ no ROADMAP; C-01, C-02 e C-07 do CONCERNS.md resolvidos; C-05 parcialmente (este é o primeiro provider exercitado contra um servidor real).
 
 ### AD-023: M3.1 (single-active-connection) implementado — 10/10 tasks (2026-07-25)
@@ -258,6 +262,7 @@ _Nenhum._
 
 ## Todos
 
+- [ ] **Lacuna do M2 encontrada na auditoria de 2026-07-25**: se a pasta-base persistida sumiu/foi movida entre sessões, `lib.rs` só faz `eprintln!` e deixa o `DbState` como `None`; o `configStore` vê `onboarding_completed: true` e entra em `ready`, então o app abre e **todo** comando falha com "Nenhuma pasta de armazenamento configurada ainda". O spec do `settings-storage-i18n` manda avisar e reabrir o wizard — não implementado
 - [ ] Verificar manualmente na UI os fluxos de CRUD de chat do M1 (criar/renomear/excluir/persistir após reiniciar) — SHELL-01..07
 - [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
 - [x] ~~**1º — Executar `single-active-connection` tasks.md** (10 tasks)~~ — feito em 2026-07-25 (ver AD-023)
