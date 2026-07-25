@@ -29,7 +29,12 @@
   },
   "connections": {
     "title": "Conexões",
-    "placeholder": "Nenhuma conexão configurada ainda"
+    "placeholder": "Nenhuma conexão configurada ainda",
+    "status": {
+      "available": "Pelo menos uma conexão habilitada está disponível",
+      "unavailable": "Conexões habilitadas estão indisponíveis",
+      "none": "Nenhuma conexão habilitada"
+    }
   },
   "settings": {
     "title": "Configurações",

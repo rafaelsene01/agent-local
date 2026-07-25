@@ -29,7 +29,12 @@
   },
   "connections": {
     "title": "Connections",
-    "placeholder": "No connection configured yet"
+    "placeholder": "No connection configured yet",
+    "status": {
+      "available": "At least one enabled connection is available",
+      "unavailable": "Enabled connections are unavailable",
+      "none": "No connection enabled"
+    }
   },
   "settings": {
     "title": "Settings",

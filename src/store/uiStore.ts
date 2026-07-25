@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type ActiveView = "chat" | "settings";
+export type ActiveView = "chat" | "settings" | "connections";
 
 interface UiState {
   activeView: ActiveView;
