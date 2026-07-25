@@ -2,7 +2,7 @@ use crate::connections::{self, Connection};
 use crate::embedded_commands;
 use crate::db::{require_conn, DbState};
 use crate::models::catalog::{curated_models, CuratedModelInfo};
-use crate::providers::{ConfigApplied, GpuOffload, InstalledModel, PullProgress};
+use crate::providers::{embedded, ConfigApplied, GpuOffload, InstalledModel, PullProgress};
 use crate::system_info;
 use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
 use serde::Serialize;
@@ -226,9 +226,17 @@ pub async fn configure_model(
 
     let client = manager.provider_for(&conn);
     let applied = client
-        .configure_model(&model_name, context_length, parsed_offload)
+        .configure_model(&model_name, context_length, parsed_offload.clone())
         .await
         .map_err(|e| e.to_string())?;
+
+    // The embedded runtime takes these as process startup flags, so they have
+    // to land in its own row and restart the server — storing them only in
+    // `model_configs` would leave the setting never reaching llama-server.
+    if conn.provider == "embedded" {
+        let gpu_layers = parsed_offload.as_ref().map(embedded::gpu_layers_for);
+        embedded_commands::apply_runtime_config(&app, &db, context_length, gpu_layers).await?;
+    }
 
     {
         let guard = db.0.lock().map_err(|e| e.to_string())?;

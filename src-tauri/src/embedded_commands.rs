@@ -230,7 +230,17 @@ pub async fn setup_embedded_runtime(
         },
     );
 
-    Ok(status_from(&row, None, EmbeddedSetupStage::Ready))
+    // EMBED-04 AC4: with binary and model in place the sidecar comes up on its
+    // own, so the connection reports "available" without another click. A
+    // failure here still leaves a usable installed state to start manually.
+    match start_sidecar_from_row(&app, &row).await {
+        Ok(port) => Ok(status_from(&row, Some(port), EmbeddedSetupStage::Running)),
+        Err(e) => {
+            let mut status = status_from(&row, None, EmbeddedSetupStage::Ready);
+            status.message = Some(e);
+            Ok(status)
+        }
+    }
 }
 
 /// Shared by the command and by boot autostart, which has no `State` handle.
@@ -284,6 +294,35 @@ pub fn stop_embedded_runtime(app: AppHandle) -> Result<(), String> {
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(mut sidecar) = guard.take() {
         sidecar.kill();
+    }
+    Ok(())
+}
+
+/// Context length and GPU offload are `llama-server` startup flags, so
+/// applying them means rewriting the persisted row and restarting the process
+/// when it is up — otherwise the setting would sit in the database and never
+/// reach the server (EMBED-12).
+pub async fn apply_runtime_config(
+    app: &AppHandle,
+    db: &DbState,
+    context_length: Option<u32>,
+    gpu_layers: Option<i32>,
+) -> Result<(), String> {
+    let row = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        let mut row = store::load(sql)?;
+        row.context_length = context_length;
+        if let Some(layers) = gpu_layers {
+            row.gpu_layers = Some(layers);
+        }
+        store::save(sql, &row)?;
+        row
+    };
+
+    if running_port(app).is_some() {
+        stop_embedded_runtime(app.clone())?;
+        start_sidecar_from_row(app, &row).await?;
     }
     Ok(())
 }

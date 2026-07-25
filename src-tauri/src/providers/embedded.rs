@@ -52,9 +52,9 @@ impl ProviderClient for EmbeddedClient {
             .map_err(|e| ProviderError::RequestFailed(e.to_string()))
     }
 
-    /// `--ctx-size` and `-ngl` are startup flags: there is no way to change
-    /// them on a running server, so this reports the truth instead of
-    /// pretending the change took effect — same honesty as LM Studio (M3).
+    /// `--ctx-size` and `-ngl` are startup flags, so the caller persists them
+    /// and restarts the process; `requires_reload` stays true because that is
+    /// what actually happened — same honesty as LM Studio (M3).
     async fn configure_model(
         &self,
         _model: &str,
@@ -66,9 +66,35 @@ impl ProviderClient for EmbeddedClient {
             gpu_offload_applied: gpu_offload.map(|g| g.to_value_string()),
             requires_reload: true,
             note: Some(
-                "o runtime embutido aplica contexto e GPU ao iniciar — a mudança vale no próximo start do servidor"
+                "o runtime embutido aplica contexto e GPU ao iniciar — o servidor foi reiniciado com as novas configurações"
                     .to_string(),
             ),
         })
+    }
+}
+
+/// `-ngl` takes a layer count, and the number of layers in a GGUF isn't known
+/// without reading the model, so the embedded runtime supports all-or-nothing
+/// offload only: a fraction can't be honored honestly and is treated as "off"
+/// rather than silently becoming "max".
+pub fn gpu_layers_for(offload: &GpuOffload) -> i32 {
+    match offload {
+        GpuOffload::Max => -1,
+        GpuOffload::Off => 0,
+        GpuOffload::Fraction(f) if *f >= 1.0 => -1,
+        GpuOffload::Fraction(_) => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gpu_offload_maps_to_all_or_nothing_layers() {
+        assert_eq!(gpu_layers_for(&GpuOffload::Max), -1);
+        assert_eq!(gpu_layers_for(&GpuOffload::Off), 0);
+        assert_eq!(gpu_layers_for(&GpuOffload::Fraction(1.0)), -1);
+        assert_eq!(gpu_layers_for(&GpuOffload::Fraction(0.5)), 0);
     }
 }
