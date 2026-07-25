@@ -7,6 +7,7 @@ mod db;
 mod model_commands;
 mod models;
 mod providers;
+mod runtime;
 mod system_info;
 
 use db::DbState;
