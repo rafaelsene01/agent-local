@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M3 (`connections-models`) implementado e verificado (15/15 tasks, cargo test + npm run build + `npm run tauri dev` full gate verde). Próximo: `documents-rag` (M5), depois `chat-messaging` (M4) — dependência real de implementação (AD-017), não só ordem de roadmap.
+**Current Work:** M3 (`connections-models`) implementado e verificado. Usuário pediu pra puxar M7 (`embedded-runtime`, llama.cpp embutido) pra agora, antes de `documents-rag`/`chat-messaging` — spec.md + context.md escritos (Specify completo), aguardando ir pra Design. `documents-rag` (M5) e `chat-messaging` (M4) ficam pra depois de `embedded-runtime`.
 
 ---
 
@@ -201,7 +201,8 @@ _Nenhum._
 
 - [ ] Verificar manualmente na UI os fluxos de CRUD de chat do M1 (criar/renomear/excluir/persistir após reiniciar) — SHELL-01..07
 - [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
-- [ ] **Executar `documents-rag` tasks.md** (11 tasks) — próximo passo recomendado, sem bloqueios (RAM detection do M3 não é pré-requisito real, mas a ordem do roadmap segue assim)
+- [ ] **`embedded-runtime` (M7): fazer Design** — spec.md pronto (14 requirements, EMBED-01..14); Open Questions carregadas pro Design: CUDA vs Vulkan (ou os dois), detecção de GPU em Rust, alocação de porta do sidecar, mapeamento exato de flags do `llama-server` pra `context_length`/`gpu_offload`, forma exata de resolver "latest release" via API do GitHub
+- [ ] **Executar `documents-rag` tasks.md** (11 tasks) — depois de embedded-runtime, sem bloqueios (RAM detection do M3 não é pré-requisito real, mas a ordem do roadmap segue assim)
 - [ ] **Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação, não só de roadmap — ver AD-017)
 - [ ] Durante a execução de `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
 - [ ] Avaliar assinatura de código dos instaladores (Windows) — design M8
