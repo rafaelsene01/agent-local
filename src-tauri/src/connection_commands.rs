@@ -26,7 +26,7 @@ pub async fn list_connections(db: State<'_, DbState>) -> Result<Vec<Connection>,
         for candidate in manager.detect_known_connections() {
             let already_present = existing.iter().any(|c| c.provider == candidate.provider);
             if !already_present {
-                connections::create_connection(sql, candidate.provider, candidate.base_url, false)?;
+                connections::create_connection(sql, candidate.provider, candidate.base_url)?;
             }
         }
         connections::list_connections(sql)?
@@ -48,14 +48,24 @@ pub fn add_connection(
 ) -> Result<Connection, String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
-    connections::create_connection(sql, provider, base_url, true)
+    connections::create_connection(sql, provider, base_url)
+}
+
+/// Activating an unreachable connection is allowed on purpose (ACTIVE-04):
+/// the user's choice is respected and `status` reports the reality instead of
+/// the app silently picking a different runtime.
+#[tauri::command]
+pub fn set_active_connection(db: State<DbState>, id: String) -> Result<(), String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = require_conn(&guard)?;
+    connections::set_active_connection(sql, &id)
 }
 
 #[tauri::command]
-pub fn toggle_connection(db: State<DbState>, id: String, enabled: bool) -> Result<(), String> {
+pub fn clear_active_connection(db: State<DbState>) -> Result<(), String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
-    connections::toggle_connection(sql, &id, enabled)
+    connections::clear_active_connection(sql)
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 use crate::providers::{custom::CustomClient, lmstudio::LmStudioClient, ollama::OllamaClient, ProviderClient};
 use chrono::Utc;
-use rusqlite::{params, Connection as SqlConnection};
+use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ pub struct Connection {
     pub id: String,
     pub provider: String,
     pub base_url: String,
-    pub enabled: bool,
+    pub is_active: bool,
     pub status: ConnectionStatus,
 }
 
@@ -75,18 +75,20 @@ impl Default for ConnectionManager {
     }
 }
 
+/// Connections are always created inactive: activation is exclusive
+/// (AD-021) and belongs to `set_active_connection`, which is the only place
+/// that can enforce it in a single transaction.
 pub fn create_connection(
     sql: &SqlConnection,
     provider: String,
     base_url: String,
-    enabled: bool,
 ) -> Result<Connection, String> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
     sql.execute(
-        "INSERT INTO connections (id, provider, base_url, enabled, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![id, provider, base_url, enabled as i64, now],
+        "INSERT INTO connections (id, provider, base_url, is_active, created_at) VALUES (?1, ?2, ?3, 0, ?4)",
+        params![id, provider, base_url, now],
     )
     .map_err(|e| e.to_string())?;
 
@@ -94,27 +96,31 @@ pub fn create_connection(
         id,
         provider,
         base_url,
-        enabled,
+        is_active: false,
+        status: ConnectionStatus::Unknown,
+    })
+}
+
+fn row_to_connection(row: &rusqlite::Row) -> rusqlite::Result<Connection> {
+    let is_active: i64 = row.get(3)?;
+    Ok(Connection {
+        id: row.get(0)?,
+        provider: row.get(1)?,
+        base_url: row.get(2)?,
+        is_active: is_active != 0,
         status: ConnectionStatus::Unknown,
     })
 }
 
 pub fn list_connections(sql: &SqlConnection) -> Result<Vec<Connection>, String> {
     let mut stmt = sql
-        .prepare("SELECT id, provider, base_url, enabled FROM connections ORDER BY created_at ASC")
+        .prepare(
+            "SELECT id, provider, base_url, is_active FROM connections ORDER BY created_at ASC",
+        )
         .map_err(|e| e.to_string())?;
 
     let connections = stmt
-        .query_map([], |row| {
-            let enabled: i64 = row.get(3)?;
-            Ok(Connection {
-                id: row.get(0)?,
-                provider: row.get(1)?,
-                base_url: row.get(2)?,
-                enabled: enabled != 0,
-                status: ConnectionStatus::Unknown,
-            })
-        })
+        .query_map([], row_to_connection)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<Connection>, _>>()
         .map_err(|e| e.to_string())?;
@@ -122,18 +128,55 @@ pub fn list_connections(sql: &SqlConnection) -> Result<Vec<Connection>, String> 
     Ok(connections)
 }
 
-pub fn toggle_connection(sql: &SqlConnection, id: &str, enabled: bool) -> Result<(), String> {
-    let updated = sql
-        .execute(
-            "UPDATE connections SET enabled = ?1 WHERE id = ?2",
-            params![enabled as i64, id],
+pub fn active_connection(sql: &SqlConnection) -> Result<Option<Connection>, String> {
+    sql.query_row(
+        "SELECT id, provider, base_url, is_active FROM connections WHERE is_active = 1",
+        [],
+        row_to_connection,
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+/// Deactivating every other connection and dropping an active model that
+/// belongs to one of them happens in the same transaction, so there is no
+/// window where two connections are active or where the active model points
+/// somewhere the chat can't reach (ACTIVE-01, ACTIVE-06).
+pub fn set_active_connection(sql: &SqlConnection, id: &str) -> Result<(), String> {
+    let tx = sql.unchecked_transaction().map_err(|e| e.to_string())?;
+
+    let exists: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM connections WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
-
-    if updated == 0 {
+    if exists == 0 {
         return Err("Conexão não encontrada".to_string());
     }
-    Ok(())
+
+    tx.execute("UPDATE connections SET is_active = (id = ?1)", params![id])
+        .map_err(|e| e.to_string())?;
+
+    tx.execute(
+        "UPDATE model_configs SET is_active = 0 WHERE is_active = 1 AND connection_id <> ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())
+}
+
+/// A model can't stay active without a connection to reach it through, so
+/// clearing the connection clears the model too (spec edge case).
+pub fn clear_active_connection(sql: &SqlConnection) -> Result<(), String> {
+    let tx = sql.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE connections SET is_active = 0", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute("UPDATE model_configs SET is_active = 0", [])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -141,34 +184,88 @@ mod tests {
     use super::*;
 
     fn setup() -> SqlConnection {
-        let conn = SqlConnection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE connections (
-                id TEXT PRIMARY KEY,
-                provider TEXT NOT NULL,
-                base_url TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
-            );",
-        )
-        .unwrap();
+        let mut conn = SqlConnection::open_in_memory().unwrap();
+        crate::db::apply_migrations(&mut conn).unwrap();
         conn
     }
 
+    fn activate_model(sql: &SqlConnection, connection_id: &str) {
+        sql.execute(
+            "INSERT INTO model_configs (id, connection_id, model_name, is_active) VALUES (?1, ?2, 'm', 1)",
+            params![Uuid::new_v4().to_string(), connection_id],
+        )
+        .unwrap();
+    }
+
+    fn active_model_count(sql: &SqlConnection) -> i64 {
+        sql.query_row(
+            "SELECT COUNT(*) FROM model_configs WHERE is_active = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
     #[test]
-    fn create_list_and_toggle_connection() {
+    fn create_and_list_connection() {
         let sql = setup();
-        let created =
-            create_connection(&sql, "ollama".to_string(), "http://localhost:11434".to_string(), true).unwrap();
-        assert!(created.enabled);
+        let created = create_connection(
+            &sql,
+            "ollama".to_string(),
+            "http://localhost:11434".to_string(),
+        )
+        .unwrap();
+        assert!(!created.is_active);
 
         let listed = list_connections(&sql).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, created.id);
+        assert!(active_connection(&sql).unwrap().is_none());
+    }
 
-        toggle_connection(&sql, &created.id, false).unwrap();
+    #[test]
+    fn activating_a_connection_deactivates_the_previous_one() {
+        let sql = setup();
+        let a = create_connection(&sql, "ollama".to_string(), "http://a".to_string()).unwrap();
+        let b = create_connection(&sql, "lmstudio".to_string(), "http://b".to_string()).unwrap();
+
+        set_active_connection(&sql, &a.id).unwrap();
+        assert_eq!(active_connection(&sql).unwrap().unwrap().id, a.id);
+
+        set_active_connection(&sql, &b.id).unwrap();
         let listed = list_connections(&sql).unwrap();
-        assert!(!listed[0].enabled);
+        assert_eq!(
+            listed.iter().filter(|c| c.is_active).count(),
+            1,
+            "exactly one connection may be active"
+        );
+        assert_eq!(active_connection(&sql).unwrap().unwrap().id, b.id);
+    }
+
+    #[test]
+    fn switching_connection_drops_a_model_owned_by_another_one() {
+        let sql = setup();
+        let a = create_connection(&sql, "ollama".to_string(), "http://a".to_string()).unwrap();
+        let b = create_connection(&sql, "lmstudio".to_string(), "http://b".to_string()).unwrap();
+        set_active_connection(&sql, &a.id).unwrap();
+        activate_model(&sql, &a.id);
+
+        set_active_connection(&sql, &b.id).unwrap();
+
+        assert_eq!(active_model_count(&sql), 0);
+    }
+
+    #[test]
+    fn clearing_the_active_connection_clears_the_active_model() {
+        let sql = setup();
+        let a = create_connection(&sql, "ollama".to_string(), "http://a".to_string()).unwrap();
+        set_active_connection(&sql, &a.id).unwrap();
+        activate_model(&sql, &a.id);
+
+        clear_active_connection(&sql).unwrap();
+
+        assert!(active_connection(&sql).unwrap().is_none());
+        assert_eq!(active_model_count(&sql), 0);
     }
 
     #[test]
