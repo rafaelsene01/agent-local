@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/single-active-connection/spec.md`
 **Design**: inline (escopo Medium — sem `design.md`; as decisões de arquitetura estão abaixo e nas próprias tasks)
-**Status**: Draft
+**Status**: Complete (2026-07-25)
 
 ---
 
@@ -54,12 +54,12 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `const MIGRATIONS: &[(u32, &str)]` com a migração 1 = conteúdo atual de `SCHEMA`
-- [ ] `db::open()` lê `PRAGMA user_version`, aplica em ordem só as migrações com versão maior, cada uma dentro de uma transação, e atualiza `PRAGMA user_version` ao final
-- [ ] Banco novo (in-memory) chega a `user_version = 1` com todas as tabelas do M1-M3
-- [ ] Rodar `open()` duas vezes sobre a mesma conexão não reaplica nada (idempotente)
-- [ ] Gate check passa: `cd src-tauri && cargo test db::`
-- [ ] Test count: 3 testes passam (o teste existente `open_creates_connections_and_model_configs_tables` + 2 novos)
+- [x] `const MIGRATIONS: &[(u32, &str)]` com a migração 1 = conteúdo atual de `SCHEMA`
+- [x] `db::open()` lê `PRAGMA user_version`, aplica em ordem só as migrações com versão maior, cada uma dentro de uma transação, e atualiza `PRAGMA user_version` ao final
+- [x] Banco novo (in-memory) chega a `user_version = 1` com todas as tabelas do M1-M3
+- [x] Rodar `open()` duas vezes sobre a mesma conexão não reaplica nada (idempotente)
+- [x] Gate check passa: `cd src-tauri && cargo test db::`
+- [x] Test count: 3 testes passam (o teste existente `open_creates_connections_and_model_configs_tables` + 2 novos)
 
 **Tests**: unit
 **Gate**: quick
@@ -79,12 +79,12 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Migração 2 faz `ALTER TABLE connections RENAME COLUMN enabled TO is_active`
-- [ ] Migração 2 normaliza: se mais de uma linha tem `is_active = 1`, mantém só a de `created_at` mais antigo e zera as demais
-- [ ] Teste: banco no schema v1 com 2 conexões habilitadas → após `open()`, exatamente 1 ativa e `user_version = 2`
-- [ ] Teste: banco criado do zero chega em `user_version = 2` com a coluna já chamada `is_active`
-- [ ] Gate check passa: `cd src-tauri && cargo test db::`
-- [ ] Test count: 5 testes passam
+- [x] Migração 2 faz `ALTER TABLE connections RENAME COLUMN enabled TO is_active`
+- [x] Migração 2 normaliza: se mais de uma linha tem `is_active = 1`, mantém só a de `created_at` mais antigo e zera as demais
+- [x] Teste: banco no schema v1 com 2 conexões habilitadas → após `open()`, exatamente 1 ativa e `user_version = 2`
+- [x] Teste: banco criado do zero chega em `user_version = 2` com a coluna já chamada `is_active`
+- [x] Gate check passa: `cd src-tauri && cargo test db::`
+- [x] Test count: 5 testes passam
 
 **Tests**: unit
 **Gate**: quick
@@ -104,15 +104,15 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `set_active_connection(sql, id)` zera todas e ativa a informada, **numa transação**
-- [ ] `clear_active_connection(sql)` zera todas as conexões **e** todos os `model_configs.is_active` (edge case: modelo ativo sem conexão)
-- [ ] `active_connection(sql) -> Option<Connection>` devolve a ativa ou `None`
-- [ ] `toggle_connection` removida (nenhum caller restante compila com ela)
-- [ ] Campo `Connection.enabled` renomeado para `is_active`
-- [ ] Teste: ativar A, depois ativar B → só B ativa
-- [ ] Teste: `clear_active_connection` zera conexão e modelo juntos
-- [ ] Gate check passa: `cd src-tauri && cargo test connections::`
-- [ ] Test count: 4 testes passam (2 existentes adaptados + 2 novos)
+- [x] `set_active_connection(sql, id)` zera todas e ativa a informada, **numa transação**
+- [x] `clear_active_connection(sql)` zera todas as conexões **e** todos os `model_configs.is_active` (edge case: modelo ativo sem conexão)
+- [x] `active_connection(sql) -> Option<Connection>` devolve a ativa ou `None`
+- [x] `toggle_connection` removida (nenhum caller restante compila com ela)
+- [x] Campo `Connection.enabled` renomeado para `is_active`
+- [x] Teste: ativar A, depois ativar B → só B ativa
+- [x] Teste: `clear_active_connection` zera conexão e modelo juntos
+- [x] Gate check passa: `cd src-tauri && cargo test connections::`
+- [x] Test count: 4 testes passam (2 existentes adaptados + 2 novos)
 
 **Tests**: unit
 **Gate**: quick
@@ -130,10 +130,10 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `set_active_connection(id)` e `clear_active_connection()` registrados em `lib.rs`; `toggle_connection` removido do `invoke_handler!`
-- [ ] `list_connections` continua devolvendo **todas** as conexões com status calculado (ACTIVE-03) — semeadura de candidatos agora insere com `is_active = 0`
-- [ ] Ativar conexão indisponível não é bloqueado (ACTIVE-04) — o status apenas reflete a realidade
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] `set_active_connection(id)` e `clear_active_connection()` registrados em `lib.rs`; `toggle_connection` removido do `invoke_handler!`
+- [x] `list_connections` continua devolvendo **todas** as conexões com status calculado (ACTIVE-03) — semeadura de candidatos agora insere com `is_active = 0`
+- [x] Ativar conexão indisponível não é bloqueado (ACTIVE-04) — o status apenas reflete a realidade
+- [x] Gate check passa: `cd src-tauri && cargo check`
 
 **Tests**: none (comando Tauri de orquestração I/O — matriz do TESTING.md diz "none")
 **Gate**: build
@@ -151,11 +151,11 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `set_active_model(connection_id, model_name)` ativa modelo **e** conexão na mesma transação
-- [ ] `get_active_pair()` devolve `{ connection, model }` ou `None` num único retorno (substitui `get_active_model`)
-- [ ] Trocar de conexão ativa via `set_active_connection` (T3) zera o modelo ativo se ele não pertencer à nova conexão (invariante ACTIVE-06)
-- [ ] `list_installed_models` deixa de exigir conexão ativa — funciona para qualquer conexão informada (ACTIVE-08)
-- [ ] Gate check passa: `cd src-tauri && cargo check`
+- [x] `set_active_model(connection_id, model_name)` ativa modelo **e** conexão na mesma transação
+- [x] `get_active_pair()` devolve `{ connection, model }` ou `None` num único retorno (substitui `get_active_model`)
+- [x] Trocar de conexão ativa via `set_active_connection` (T3) zera o modelo ativo se ele não pertencer à nova conexão (invariante ACTIVE-06)
+- [x] `list_installed_models` deixa de exigir conexão ativa — funciona para qualquer conexão informada (ACTIVE-08)
+- [x] Gate check passa: `cd src-tauri && cargo check`
 
 **Tests**: none (comando Tauri de orquestração I/O)
 **Gate**: build
@@ -173,11 +173,11 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `Connection.enabled` vira `is_active`; `ActiveModel` substituído por `ActivePair { connection, model }`
-- [ ] `connectionsApi`: `toggleConnection` removido; `setActiveConnection`, `clearActiveConnection`, `getActivePair` adicionados
-- [ ] Store: `activeModel` vira `activePair`; ações correspondentes; após ativar conexão ou modelo, recarrega o par (evita estado divergente)
-- [ ] Store carrega modelos instalados de **todas** as conexões com status "available", não só da ativa (ACTIVE-08)
-- [ ] Gate check passa: `npm run build`
+- [x] `Connection.enabled` vira `is_active`; `ActiveModel` substituído por `ActivePair { connection, model }`
+- [x] `connectionsApi`: `toggleConnection` removido; `setActiveConnection`, `clearActiveConnection`, `getActivePair` adicionados
+- [x] Store: `activeModel` vira `activePair`; ações correspondentes; após ativar conexão ou modelo, recarrega o par (evita estado divergente)
+- [x] Store carrega modelos instalados de **todas** as conexões com status "available", não só da ativa (ACTIVE-08)
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none (matriz do TESTING.md: componentes/stores React = "none" por ora — ver C-04)
 **Gate**: build
@@ -195,12 +195,12 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `<input type="radio" name="active-connection">` por linha, marcado apenas na ativa
-- [ ] Todas as conexões continuam listadas com bolinha de status (ACTIVE-03)
-- [ ] Estado "nenhuma ativa" é visível (ex.: aviso no topo) e alcançável por um botão de limpar (ACTIVE-02)
-- [ ] Ativar uma indisponível funciona, exibindo aviso de que ela não está respondendo (ACTIVE-04)
-- [ ] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
-- [ ] Gate check passa: `npm run build`
+- [x] `<input type="radio" name="active-connection">` por linha, marcado apenas na ativa
+- [x] Todas as conexões continuam listadas com bolinha de status (ACTIVE-03)
+- [x] Estado "nenhuma ativa" é visível (ex.: aviso no topo) e alcançável por um botão de limpar (ACTIVE-02)
+- [x] Ativar uma indisponível funciona, exibindo aviso de que ela não está respondendo (ACTIVE-04)
+- [x] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: build
@@ -218,12 +218,12 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Agrupa por **todas** as conexões com status "available" (não filtra por ativa) — ACTIVE-08
-- [ ] Conexão indisponível mostra aviso no lugar da sua lista, sem quebrar as outras
-- [ ] Botão "usar este modelo" ativa modelo + conexão numa chamada; o modelo ativo aparece marcado e é o único marcado em toda a tela
-- [ ] Modelo ativo que não pertence mais à conexão ativa nunca aparece marcado
-- [ ] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
-- [ ] Gate check passa: `npm run build`
+- [x] Agrupa por **todas** as conexões com status "available" (não filtra por ativa) — ACTIVE-08
+- [x] Conexão indisponível mostra aviso no lugar da sua lista, sem quebrar as outras
+- [x] Botão "usar este modelo" ativa modelo + conexão numa chamada; o modelo ativo aparece marcado e é o único marcado em toda a tela
+- [x] Modelo ativo que não pertence mais à conexão ativa nunca aparece marcado
+- [x] Toda string nova tem chave i18n em `en.json` **e** `pt.json`
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: build
@@ -241,9 +241,9 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Bolinha: verde = ativa e disponível, vermelha = ativa e indisponível, cinza = nenhuma ativa
-- [ ] Tooltip nomeia a conexão ativa (ou "nenhuma")
-- [ ] Gate check passa: `npm run build` **e** `npm run tauri dev` sobe até `Finished` + `Running` sem erro
+- [x] Bolinha: verde = ativa e disponível, vermelha = ativa e indisponível, cinza = nenhuma ativa
+- [x] Tooltip nomeia a conexão ativa (ou "nenhuma")
+- [x] Gate check passa: `npm run build` **e** `npm run tauri dev` sobe até `Finished` + `Running` sem erro
 - [ ] Verificação manual na UI: ativar Ollama → ativar LM Studio → confirmar que só a última fica marcada; escolher um modelo da outra conexão → confirmar que a conexão ativa acompanhou
 
 **Tests**: none
@@ -264,9 +264,9 @@ Phase 4 (Docs — sem código)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Nenhuma menção a `chats.model_config_id` sobrevive no design/tasks de `chat-messaging` sem estar marcada como revogada
-- [ ] STATE.md: AD-016 marcada como **REVOGADA** com data e motivo, e nova AD registrando a regra de par ativo único
-- [ ] `grep -ri "model_config_id" .specs/features/chat-messaging` não retorna nada não-marcado
+- [x] Nenhuma menção a `chats.model_config_id` sobrevive no design/tasks de `chat-messaging` sem estar marcada como revogada
+- [x] STATE.md: AD-016 marcada como **REVOGADA** com data e motivo, e nova AD registrando a regra de par ativo único
+- [x] `grep -ri "model_config_id" .specs/features/chat-messaging` não retorna nada não-marcado
 
 **Tests**: none
 **Gate**: none (só documentação)

@@ -115,9 +115,14 @@ graph TD
 
 ### SQLite — alterações e tabela nova
 
+> **REVOGADO (2026-07-25, AD-021):** a coluna `chats.model_config_id` **não
+> deve ser criada**. Não existe mais modelo por chat — o par ativo global
+> (`get_active_pair`, feature `single-active-connection`) vale para todos os
+> chats. Linha preservada abaixo apenas comentada, como histórico.
+
 ```sql
 -- Alterações em `chats` (tabela existente desde M1)
-ALTER TABLE chats ADD COLUMN model_config_id TEXT;      -- NULL = usa o modelo ativo global (connections-models)
+-- REVOGADO por AD-021: ALTER TABLE chats ADD COLUMN model_config_id TEXT;
 ALTER TABLE chats ADD COLUMN use_global_rag INTEGER NOT NULL DEFAULT 1;  -- CHAT-14
 
 CREATE TABLE chat_attachments (
@@ -152,7 +157,7 @@ interface ChatStreamChunk {
 }
 ```
 
-**Relationships**: `chat_attachments.chat_id` → `chats.id`; `chat_attachments.message_id` → `messages.id` (M1). `chats.model_config_id` → `model_configs.id` (connections-models) — resolvido como "**por chat, com fallback pro modelo ativo global**" (ver Tech Decisions).
+**Relationships**: `chat_attachments.chat_id` → `chats.id`; `chat_attachments.message_id` → `messages.id` (M1). ~~`chats.model_config_id` → `model_configs.id`~~ — **REVOGADO (AD-021)**: o modelo vem do par ativo global, o chat não guarda referência a modelo nenhuma.
 
 ---
 
@@ -172,7 +177,7 @@ interface ChatStreamChunk {
 
 | Decision | Choice | Rationale |
 | --- | --- | --- |
-| Escopo do "modelo ativo" | Por chat (`chats.model_config_id`), com fallback pro modelo global ativo (connections-models CONN-06) quando `NULL` | Spec do M3 fala em "modelo ativo" (singular/global); ROADMAP original também mencionava seleção por chat. Fallback resolve os dois sem contradição |
+| Escopo do "modelo ativo" | **Global e único** — `get_active_pair()` (feature `single-active-connection`). ~~Por chat (`chats.model_config_id`) com fallback~~ **REVOGADO por AD-021** | Decisão do usuário: um único par (conexão, modelo) ativo no app inteiro, sem override por chat, para não haver ambiguidade sobre quem responde |
 | Transporte de streaming | Evento Tauri, não retorno de comando | Comandos Tauri são request/response; streaming token-a-token precisa de push — mesmo padrão já usado em download (M3) e indexação (M5) |
 | Cancelamento | `CancellationToken` por `chat_id` em state compartilhado | Simplicidade — só um streaming ativo por chat de cada vez é uma limitação aceitável no v1 |
 | Anexo pequeno = inteiro no contexto | Limiar configurável (default: ~2000 tokens / ~8000 caracteres) checado ANTES do pipeline de RAG | Evita overhead de chunking/embedding para um `.txt` de 3 linhas — CHAT-09 |

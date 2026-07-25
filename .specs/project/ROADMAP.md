@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current Milestone:** M3.1 — Conexão & modelo ativos únicos, depois M7 — Runtime embutido (ambos planejados, aguardando Execute). M4/M5 vêm em seguida.
+**Current Milestone:** M7 — Runtime embutido (em execução). M3.1 concluído em 2026-07-25. M5/M4 vêm em seguida.
 **Status:** In Progress
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
@@ -111,21 +111,21 @@ flowchart TB
 
 ---
 
-## M3.1 — Conexão & modelo ativos únicos — PLANNED (spec + tasks prontos)
+## M3.1 — Conexão & modelo ativos únicos — ✅ COMPLETE (2026-07-25)
 
 **Goal:** Eliminar a ambiguidade "várias conexões habilitadas, qual responde?" deixada pelo M3.
 **Target:** Uma conexão ativa, um modelo ativo (sempre dela), escolhidos numa única ação.
 
 ### Features
 
-**Par ativo único** — PLANNED (`.specs/features/single-active-connection/`, 10 tasks)
+**Par ativo único** — DONE (`.specs/features/single-active-connection/`, 10/10 tasks)
 
 - `connections.enabled` (múltiplas) vira `is_active` (exclusiva); `toggle_connection` sai
 - Escolher modelo ativa a conexão dona na mesma transação — invariante garantida no backend
 - Conexões inativas seguem listadas com status e modelos inspecionáveis
 - Revoga a AD-016 (modelo por chat) — ver AD-021
 
-**Migração de schema versionada** — PLANNED
+**Migração de schema versionada** — DONE
 
 - `PRAGMA user_version` + lista ordenada de migrações (resolve C-01 do CONCERNS.md)
 - Pré-requisito real do M7, que precisa adicionar tabela em banco já existente

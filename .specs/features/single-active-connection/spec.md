@@ -6,11 +6,11 @@ O M3 entregou conexões como um conjunto de checkboxes: várias podem estar "hab
 
 ## Goals
 
-- [ ] Exatamente uma conexão pode estar ativa por vez (ou nenhuma, se o usuário ainda não escolheu)
-- [ ] Exatamente um modelo pode estar ativo por vez, e ele sempre pertence à conexão ativa
-- [ ] O par (conexão ativa, modelo ativo) é a única fonte da verdade para o chat
-- [ ] Conexões inativas continuam visíveis com status e com seus modelos inspecionáveis, sem precisar ativá-las antes
-- [ ] O schema do banco ganha versionamento de migração, para que essa mudança de coluna seja aplicável em bancos já existentes (resolve C-01)
+- [x] Exatamente uma conexão pode estar ativa por vez (ou nenhuma, se o usuário ainda não escolheu)
+- [x] Exatamente um modelo pode estar ativo por vez, e ele sempre pertence à conexão ativa
+- [x] O par (conexão ativa, modelo ativo) é a única fonte da verdade para o chat
+- [x] Conexões inativas continuam visíveis com status e com seus modelos inspecionáveis, sem precisar ativá-las antes
+- [x] O schema do banco ganha versionamento de migração, para que essa mudança de coluna seja aplicável em bancos já existentes (resolve C-01)
 
 ## Out of Scope
 
@@ -112,25 +112,25 @@ O M3 entregou conexões como um conjunto de checkboxes: várias podem estar "hab
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| ACTIVE-01 | P1: Ativar conexão desativa a anterior | Tasks | Pending |
-| ACTIVE-02 | P1: Estado "nenhuma ativa" é válido e visível | Tasks | Pending |
-| ACTIVE-03 | P1: Todas as conexões listadas com status, ativa destacada | Tasks | Pending |
-| ACTIVE-04 | P1: Ativar conexão indisponível é permitido, mas sinalizado | Tasks | Pending |
-| ACTIVE-05 | P1: Escolher modelo ativa sua conexão na mesma ação | Tasks | Pending |
-| ACTIVE-06 | P1: Modelo ativo sempre pertence à conexão ativa (invariante) | Tasks | Pending |
-| ACTIVE-07 | P1: Consultar o par ativo (conexão + modelo) num único retorno | Tasks | Pending |
-| ACTIVE-08 | P1: Modelos de conexões disponíveis inativas são inspecionáveis | Tasks | Pending |
-| ACTIVE-09 | P1: Migração versionada aplicada em banco existente | Tasks | Pending |
-| ACTIVE-10 | P1: Migração normaliza múltiplos habilitados para um ativo | Tasks | Pending |
+| ACTIVE-01 | P1: Ativar conexão desativa a anterior | Tasks | Complete |
+| ACTIVE-02 | P1: Estado "nenhuma ativa" é válido e visível | Tasks | Complete |
+| ACTIVE-03 | P1: Todas as conexões listadas com status, ativa destacada | Tasks | Complete |
+| ACTIVE-04 | P1: Ativar conexão indisponível é permitido, mas sinalizado | Tasks | Complete |
+| ACTIVE-05 | P1: Escolher modelo ativa sua conexão na mesma ação | Tasks | Complete |
+| ACTIVE-06 | P1: Modelo ativo sempre pertence à conexão ativa (invariante) | Tasks | Complete |
+| ACTIVE-07 | P1: Consultar o par ativo (conexão + modelo) num único retorno | Tasks | Complete |
+| ACTIVE-08 | P1: Modelos de conexões disponíveis inativas são inspecionáveis | Tasks | Complete |
+| ACTIVE-09 | P1: Migração versionada aplicada em banco existente | Tasks | Complete |
+| ACTIVE-10 | P1: Migração normaliza múltiplos habilitados para um ativo | Tasks | Complete |
 
 **ID format:** `ACTIVE-[NUMBER]`
-**Coverage:** 10 total, 10 mapeados para tasks, 0 não mapeados
+**Coverage:** 10 total, 10 mapeados para tasks, 0 não mapeados — **10 implementados (2026-07-25)**
 
 ---
 
 ## Success Criteria
 
-- [ ] É impossível chegar num estado com duas conexões ativas ou dois modelos ativos, por qualquer caminho da UI
-- [ ] É impossível ter modelo ativo de uma conexão diferente da ativa
-- [ ] O banco existente na máquina do dev migra sem perder as conexões cadastradas
-- [ ] Um único comando devolve "quem responde agora" — sem o frontend precisar cruzar duas listas
+- [x] É impossível chegar num estado com duas conexões ativas ou dois modelos ativos, por qualquer caminho da UI
+- [x] É impossível ter modelo ativo de uma conexão diferente da ativa
+- [x] O banco existente na máquina do dev migra sem perder as conexões cadastradas
+- [x] Um único comando devolve "quem responde agora" — sem o frontend precisar cruzar duas listas

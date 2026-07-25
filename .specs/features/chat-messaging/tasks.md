@@ -47,7 +47,7 @@ T8, T10, T11 ──→ T12 (integração final)
 
 ### T1: Migrações + `create_message` [P]
 
-**What**: `chats.model_config_id`, `chats.use_global_rag`, tabela `chat_attachments`; comando `create_message` (M1 só tinha `list_messages`)
+**What**: `chats.use_global_rag`, tabela `chat_attachments`; comando `create_message` (M1 só tinha `list_messages`). ~~`chats.model_config_id`~~ **REVOGADO por AD-021** — o modelo vem do par ativo global
 **Where**: `src-tauri/src/db.rs` (schema), `src-tauri/src/commands.rs` (novo comando)
 **Depends on**: None
 **Reuses**: `messages` table e padrão de comandos já existentes (M1)
@@ -56,8 +56,9 @@ T8, T10, T11 ──→ T12 (integração final)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `ALTER TABLE chats ADD COLUMN model_config_id TEXT` e `use_global_rag INTEGER NOT NULL DEFAULT 1`
+- [ ] `ALTER TABLE chats ADD COLUMN use_global_rag INTEGER NOT NULL DEFAULT 1` (a coluna `model_config_id` foi **revogada** pela AD-021 — não criar)
 - [ ] `CREATE TABLE chat_attachments (...)` conforme design.md
+- [ ] Entra como uma nova entrada em `MIGRATIONS` no `db.rs` (infra versionada da feature `single-active-connection`), não como `execute_batch` avulso
 - [ ] `create_message(chat_id, role, content) -> Message` insere e retorna a linha
 - [ ] `cargo check` passa
 

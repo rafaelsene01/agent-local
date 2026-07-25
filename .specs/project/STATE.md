@@ -1,11 +1,23 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M3 implementado e verificado. Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Current Work:** M3.1 (`single-active-connection`) implementado — 10/10 tasks, 15 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos (verificação manual clicando na UI ainda pendente). Executando agora o M7 (`embedded-runtime`, 16 tasks). Contexto anterior: M3 implementado e verificado. Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-023: M3.1 (single-active-connection) implementado — 10/10 tasks (2026-07-25)
+
+**Decision:** Executado o `tasks.md` completo de `single-active-connection` (T1-T10). `db.rs` passou a aplicar migrações versionadas por `PRAGMA user_version` (migração 1 = schema antigo, migração 2 = `enabled` → `is_active` + normalização); `toggle_connection` saiu do backend, do `lib.rs`, da API e da store; `get_active_model` virou `get_active_pair`; a UI trocou checkbox por radio exclusivo e passou a listar modelos de toda conexão disponível.
+**Reason:** Primeiro item da fila de Todos, confirmado pelo usuário como escopo "M3.1 + M7".
+**Trade-off/Notas:**
+- **T3 e T4 num só commit**: o gate de T3 é `cargo test connections::`, que não passa enquanto `connection_commands.rs` ainda chama a função removida — os callers tiveram que ir junto (SPEC_DEVIATION registrada no commit).
+- `create_connection` perdeu o parâmetro `enabled`: mantê-lo permitiria criar uma segunda conexão ativa e furar justamente a invariante da feature. Ativação agora só existe via `set_active_connection`/`set_active_model`.
+- `set_active_connection` foi partida em `apply_active_connection` (sem transação própria) + wrapper: o SQLite rejeita `BEGIN` aninhado e `set_active_model` já abre a sua para ativar o par atomicamente.
+- `list_installed_models` já aceitava qualquer `connection_id` e não exigia conexão ativa — ACTIVE-08 não precisou de mudança no backend, só na store/UI.
+- **Não verificado**: a UI não foi exercitada clicando (ativar Ollama → ativar LM Studio → trocar modelo). O app sobe (`Finished` + `Running`) e o build é limpo, mas o fluxo visual continua na lista de Todos.
+**Impact:** M3.1 ✅ no ROADMAP; `single-active-connection/{spec,tasks}.md` marcados; AD-016 revogada também no `chat-messaging/{design,tasks}.md` (T10). C-01 do CONCERNS.md resolvido.
 
 ### AD-022: Runtime embutido usa Vulkan (não CUDA), e o próprio binário detecta a GPU (2026-07-25)
 
@@ -232,7 +244,8 @@ _Nenhum._
 
 - [ ] Verificar manualmente na UI os fluxos de CRUD de chat do M1 (criar/renomear/excluir/persistir após reiniciar) — SHELL-01..07
 - [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
-- [ ] **1º — Executar `single-active-connection` tasks.md** (10 tasks) — sem bloqueios. É pré-requisito real do `embedded-runtime` (T1 de lá entrega a infra de migração usada pela T3 daqui) e a T10 fecha a revogação da AD-016 na doc do `chat-messaging`
+- [x] ~~**1º — Executar `single-active-connection` tasks.md** (10 tasks)~~ — feito em 2026-07-25 (ver AD-023)
+- [ ] Verificar manualmente na UI o fluxo do par ativo: ativar Ollama → ativar LM Studio → só a última marcada; escolher modelo da outra conexão → conexão ativa acompanha (T9 do `single-active-connection`, único item não verificado)
 - [ ] **2º — Executar `embedded-runtime` tasks.md** (16 tasks) — depois da anterior. A T7 exige **verificar ao vivo** a URL do GGUF do Phi-3.5 (única incerteza declarada do design, não assumir). Phases 0 (T1/T2) pagam dívida do CONCERNS (C-07, C-02) que esta feature agravaria
 - [ ] **3º — Executar `documents-rag` tasks.md** (11 tasks) — sem bloqueios
 - [ ] **4º — Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação — ver AD-017). Lembrar que a AD-016 foi revogada: **não** implementar `chats.model_config_id`
