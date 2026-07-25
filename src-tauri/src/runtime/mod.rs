@@ -1,3 +1,4 @@
+pub mod download;
 pub mod release;
 
 /// Only these two are shipped as prebuilt llama.cpp binaries by the project
