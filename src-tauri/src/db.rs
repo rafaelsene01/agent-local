@@ -61,6 +61,20 @@ UPDATE connections SET is_active = 0
 DROP TABLE _keep_active;
 ";
 
+/// What the embedded runtime needs lives in its own singleton row instead of
+/// columns on `connections`, which only one provider would ever use.
+const MIGRATION_3_EMBEDDED_RUNTIME: &str = "
+CREATE TABLE IF NOT EXISTS embedded_runtime (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    release_tag TEXT,
+    backend TEXT,
+    binary_path TEXT,
+    model_path TEXT,
+    context_length INTEGER,
+    gpu_layers INTEGER
+);
+";
+
 /// Ordered list of schema versions. A migration is applied only when
 /// `PRAGMA user_version` is below its number, which is what makes a column
 /// change reach databases that already exist on disk — `CREATE TABLE IF NOT
@@ -68,6 +82,7 @@ DROP TABLE _keep_active;
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, MIGRATION_1_INITIAL),
     (2, MIGRATION_2_SINGLE_ACTIVE_CONNECTION),
+    (3, MIGRATION_3_EMBEDDED_RUNTIME),
 ];
 
 fn user_version(conn: &Connection) -> Result<u32, String> {
@@ -179,7 +194,7 @@ mod tests {
 
         apply_migrations(&mut conn).unwrap();
 
-        assert_eq!(user_version(&conn).unwrap(), 2);
+        assert_eq!(user_version(&conn).unwrap(), MIGRATIONS.last().unwrap().0);
         let active: Vec<String> = conn
             .prepare("SELECT id FROM connections WHERE is_active = 1")
             .unwrap()
@@ -193,6 +208,43 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM connections", [], |row| row.get(0))
             .unwrap();
         assert_eq!(total, 2, "migration must not drop existing connections");
+    }
+
+    #[test]
+    fn migrating_a_v2_database_adds_embedded_runtime_without_losing_data() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATION_1_INITIAL).unwrap();
+        conn.execute_batch(MIGRATION_2_SINGLE_ACTIVE_CONNECTION).unwrap();
+        conn.pragma_update(None, "user_version", 2u32).unwrap();
+        conn.execute_batch(
+            "INSERT INTO connections (id, provider, base_url, is_active, created_at)
+                VALUES ('a', 'ollama', 'http://localhost:11434', 1, '2026-07-01T00:00:00Z');",
+        )
+        .unwrap();
+
+        apply_migrations(&mut conn).unwrap();
+
+        assert_eq!(user_version(&conn).unwrap(), MIGRATIONS.last().unwrap().0);
+        assert!(table_names(&conn).contains(&"embedded_runtime".to_string()));
+        let kept: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM connections WHERE id = 'a' AND is_active = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept, 1);
+    }
+
+    #[test]
+    fn embedded_runtime_row_is_a_singleton() {
+        let conn = migrated_in_memory();
+        conn.execute("INSERT INTO embedded_runtime (id, backend) VALUES (1, 'cpu')", [])
+            .unwrap();
+
+        let second = conn.execute("INSERT INTO embedded_runtime (id, backend) VALUES (2, 'cpu')", []);
+
+        assert!(second.is_err(), "CHECK (id = 1) must reject a second row");
     }
 
     #[test]

@@ -57,7 +57,9 @@ pub fn default_base_path(app: &AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
-const SUBDIRS: [&str; 4] = ["models", "documents", "vectors", "chats"];
+/// `runtime` holds the downloaded llama.cpp binary: it is user data under the
+/// chosen base path (AD-008), not a temp file, so it survives app updates.
+const SUBDIRS: [&str; 5] = ["models", "documents", "vectors", "chats", "runtime"];
 
 pub fn ensure_folder_structure(base_path: &Path) -> Result<(), String> {
     fs::create_dir_all(base_path)
