@@ -1,0 +1,202 @@
+use crate::connections::{self, ConnectionManager};
+use crate::db::DbState;
+use crate::models::catalog::{curated_models, CuratedModelInfo};
+use crate::providers::{ConfigApplied, GpuOffload, InstalledModel, PullProgress};
+use crate::system_info;
+use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, State};
+use uuid::Uuid;
+
+fn require_conn<'a>(
+    guard: &'a std::sync::MutexGuard<'a, Option<SqlConnection>>,
+) -> Result<&'a SqlConnection, String> {
+    guard
+        .as_ref()
+        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())
+}
+
+fn get_or_create_model_config(
+    sql: &SqlConnection,
+    connection_id: &str,
+    model_name: &str,
+) -> Result<String, String> {
+    let existing: Option<String> = sql
+        .query_row(
+            "SELECT id FROM model_configs WHERE connection_id = ?1 AND model_name = ?2",
+            params![connection_id, model_name],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let id = Uuid::new_v4().to_string();
+    sql.execute(
+        "INSERT INTO model_configs (id, connection_id, model_name, context_length, gpu_offload, is_active) VALUES (?1, ?2, ?3, NULL, NULL, 0)",
+        params![id, connection_id, model_name],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct DownloadableModel {
+    #[serde(flatten)]
+    pub info: CuratedModelInfo,
+    pub fits_ram: bool,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct DownloadableModelsResponse {
+    pub ram_detected_gb: Option<f32>,
+    pub models: Vec<DownloadableModel>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ModelDownloadProgressEvent {
+    connection_id: String,
+    identifier: String,
+    progress: PullProgress,
+}
+
+/// RAM detection failing (sysinfo returning 0 — rare/exotic environments)
+/// never hides everything silently: every model is marked as fitting and
+/// `ram_detected_gb` comes back `None` so the UI can show a warning instead.
+#[tauri::command]
+pub fn list_downloadable_models() -> DownloadableModelsResponse {
+    let ram = system_info::total_ram_gb();
+    let ram_known = ram > 0.0;
+    let models = curated_models()
+        .iter()
+        .map(|m| {
+            let info = CuratedModelInfo::from(m);
+            let fits_ram = !ram_known || info.estimated_ram_gb <= ram;
+            DownloadableModel { info, fits_ram }
+        })
+        .collect();
+    DownloadableModelsResponse {
+        ram_detected_gb: if ram_known { Some(ram) } else { None },
+        models,
+    }
+}
+
+#[tauri::command]
+pub async fn list_installed_models(
+    db: State<'_, DbState>,
+    connection_id: String,
+) -> Result<Vec<InstalledModel>, String> {
+    let manager = ConnectionManager::new();
+    let conn = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::list_connections(sql)?
+            .into_iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| "Conexão não encontrada".to_string())?
+    };
+    let client = manager.provider_for(&conn);
+    client.list_installed_models().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn pull_model(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    connection_id: String,
+    identifier: String,
+) -> Result<(), String> {
+    let manager = ConnectionManager::new();
+    let conn = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::list_connections(sql)?
+            .into_iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| "Conexão não encontrada".to_string())?
+    };
+    let client = manager.provider_for(&conn);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<PullProgress>(32);
+    let event_app = app.clone();
+    let event_connection_id = connection_id.clone();
+    let event_identifier = identifier.clone();
+    let listener = tauri::async_runtime::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = event_app.emit(
+                "model-download-progress",
+                ModelDownloadProgressEvent {
+                    connection_id: event_connection_id.clone(),
+                    identifier: event_identifier.clone(),
+                    progress,
+                },
+            );
+        }
+    });
+
+    let result = client.pull_model(&identifier, tx).await;
+    let _ = listener.await;
+    result.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_active_model(
+    db: State<DbState>,
+    connection_id: String,
+    model_name: String,
+) -> Result<(), String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = require_conn(&guard)?;
+    let id = get_or_create_model_config(sql, &connection_id, &model_name)?;
+    sql.execute("UPDATE model_configs SET is_active = 0 WHERE is_active = 1", [])
+        .map_err(|e| e.to_string())?;
+    sql.execute(
+        "UPDATE model_configs SET is_active = 1 WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn configure_model(
+    db: State<'_, DbState>,
+    connection_id: String,
+    model_name: String,
+    context_length: Option<u32>,
+    gpu_offload: Option<String>,
+) -> Result<ConfigApplied, String> {
+    let manager = ConnectionManager::new();
+    let conn = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::list_connections(sql)?
+            .into_iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| "Conexão não encontrada".to_string())?
+    };
+
+    let parsed_offload = gpu_offload.as_deref().map(GpuOffload::parse).transpose()?;
+
+    let client = manager.provider_for(&conn);
+    let applied = client
+        .configure_model(&model_name, context_length, parsed_offload)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        let id = get_or_create_model_config(sql, &connection_id, &model_name)?;
+        sql.execute(
+            "UPDATE model_configs SET context_length = ?1, gpu_offload = ?2 WHERE id = ?3",
+            params![applied.context_length_applied, applied.gpu_offload_applied, id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(applied)
+}
