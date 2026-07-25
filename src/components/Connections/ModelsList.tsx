@@ -12,11 +12,11 @@ export function ModelsList() {
     installedModelsByConnection,
     downloadableModels,
     ramDetectedGb,
-    activeModel,
+    activePair,
     downloadProgress,
-    loadInstalledModels,
+    loadAvailableInstalledModels,
     loadDownloadableModels,
-    loadActiveModel,
+    loadActivePair,
     setActiveModel,
     pullModel,
   } = useConnectionsStore();
@@ -26,23 +26,32 @@ export function ModelsList() {
   const [manualIdentifier, setManualIdentifier] = useState("");
   const [configuringKey, setConfiguringKey] = useState<string | null>(null);
 
-  const enabledConnections = useMemo(() => connections.filter((c) => c.enabled), [connections]);
+  // ACTIVE-08: any reachable connection is inspectable, active or not, so the
+  // user can look at another runtime's models before switching to it.
+  const availableConnections = useMemo(
+    () => connections.filter((c) => c.status === "available"),
+    [connections],
+  );
+  const unavailableConnections = useMemo(
+    () => connections.filter((c) => c.status !== "available"),
+    [connections],
+  );
 
   useEffect(() => {
     loadDownloadableModels();
-    loadActiveModel();
-  }, [loadDownloadableModels, loadActiveModel]);
+    loadActivePair();
+  }, [loadDownloadableModels, loadActivePair]);
 
   useEffect(() => {
-    enabledConnections.forEach((c) => loadInstalledModels(c.id));
+    loadAvailableInstalledModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabledConnections.map((c) => c.id).join(",")]);
+  }, [availableConnections.map((c) => c.id).join(",")]);
 
   useEffect(() => {
-    if (!manualConnectionId && enabledConnections.length > 0) {
-      setManualConnectionId(enabledConnections[0].id);
+    if (!manualConnectionId && availableConnections.length > 0) {
+      setManualConnectionId(availableConnections[0].id);
     }
-  }, [enabledConnections, manualConnectionId]);
+  }, [availableConnections, manualConnectionId]);
 
   const visibleDownloadable = downloadableModels.filter((m) => showAll || m.fits_ram);
 
@@ -57,11 +66,13 @@ export function ModelsList() {
     <div className="space-y-8">
       <section>
         <h3 className="text-sm font-medium">{t("connections.installedModels")}</h3>
-        {enabledConnections.length === 0 && (
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">{t("connections.noEnabledConnections")}</p>
+        {availableConnections.length === 0 && (
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {t("connections.noAvailableConnections")}
+          </p>
         )}
         <div className="mt-2 space-y-4">
-          {enabledConnections.map((conn) => {
+          {availableConnections.map((conn) => {
             const models = installedModelsByConnection[conn.id] ?? [];
             return (
               <div key={conn.id}>
@@ -74,7 +85,8 @@ export function ModelsList() {
                   <div className="mt-1 space-y-1">
                     {models.map((m) => {
                       const isActive =
-                        activeModel?.connection_id === conn.id && activeModel?.model_name === m.name;
+                        activePair.model?.connection_id === conn.id &&
+                        activePair.model?.model_name === m.name;
                       const key = `${conn.id}:${m.name}`;
                       const isConfiguring = configuringKey === key;
                       return (
@@ -118,6 +130,17 @@ export function ModelsList() {
               </div>
             );
           })}
+
+          {unavailableConnections.map((conn) => (
+            <div key={conn.id}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
+                {conn.provider} · {conn.base_url}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t("connections.connectionUnavailable")}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -132,7 +155,7 @@ export function ModelsList() {
         {ramDetectedGb == null && <p className="mt-1 text-xs text-amber-500">{t("connections.ramUnknown")}</p>}
         <div className="mt-2 space-y-2">
           {visibleDownloadable.map((model) => {
-            const targetConnection = enabledConnections.find((c) => c.provider === model.provider);
+            const targetConnection = availableConnections.find((c) => c.provider === model.provider);
             const key = targetConnection ? `${targetConnection.id}:${model.pull_identifier}` : undefined;
             return (
               <ModelDownloadCard
@@ -156,7 +179,7 @@ export function ModelsList() {
             onChange={(e) => setManualConnectionId(e.target.value)}
             className="rounded-md border border-[var(--border-color)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm"
           >
-            {enabledConnections.map((c) => (
+            {availableConnections.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.provider} · {c.base_url}
               </option>

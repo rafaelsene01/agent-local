@@ -27,7 +27,7 @@ export interface Connection {
   id: string;
   provider: ConnectionProvider;
   base_url: string;
-  enabled: boolean;
+  is_active: boolean;
   status: ConnectionStatus;
 }
 
@@ -79,4 +79,11 @@ export interface ActiveModel {
   model_name: string;
   context_length: number | null;
   gpu_offload: string | null;
+}
+
+/** Who answers right now. `model` can be null while `connection` is set:
+ *  a connection was activated but no model picked yet. */
+export interface ActivePair {
+  connection: Connection | null;
+  model: ActiveModel | null;
 }

@@ -14,14 +14,13 @@ export function ConnectionsSection() {
     loadConnections();
   }, [loadConnections]);
 
-  const hasAvailableEnabled = connections.some((c) => c.enabled && c.status === "available");
-  const hasEnabled = connections.some((c) => c.enabled);
-  const statusKey = hasAvailableEnabled ? "available" : hasEnabled ? "unavailable" : "none";
-  const dotColor = hasAvailableEnabled
-    ? "bg-green-500"
-    : hasEnabled
-      ? "bg-red-500"
-      : "bg-[var(--text-secondary)]";
+  const active = connections.find((c) => c.is_active);
+  const statusKey = !active ? "none" : active.status === "available" ? "available" : "unavailable";
+  const dotColor = !active
+    ? "bg-[var(--text-secondary)]"
+    : active.status === "available"
+      ? "bg-green-500"
+      : "bg-red-500";
 
   return (
     <div className="border-t border-[var(--border-color)] px-2 py-2">
@@ -37,7 +36,7 @@ export function ConnectionsSection() {
         <span className="flex-1 text-left">{t("sidebar.connections")}</span>
         <span
           className={`h-2 w-2 rounded-full ${dotColor}`}
-          title={t(`connections.status.${statusKey}`)}
+          title={t(`connections.status.${statusKey}`, { name: active?.provider })}
         />
       </button>
     </div>

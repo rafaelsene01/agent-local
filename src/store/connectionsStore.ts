@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { connectionsApi } from "../lib/connectionsApi";
 import type {
-  ActiveModel,
+  ActivePair,
   ConfigApplied,
   Connection,
   DownloadableModel,
@@ -10,6 +10,8 @@ import type {
   ModelDownloadProgressEvent,
   PullProgress,
 } from "../types";
+
+const NO_ACTIVE_PAIR: ActivePair = { connection: null, model: null };
 
 function progressKey(connectionId: string, identifier: string) {
   return `${connectionId}:${identifier}`;
@@ -20,20 +22,22 @@ interface ConnectionsState {
   downloadableModels: DownloadableModel[];
   ramDetectedGb: number | null;
   installedModelsByConnection: Record<string, InstalledModel[]>;
-  activeModel: ActiveModel | null;
+  activePair: ActivePair;
   downloadProgress: Record<string, PullProgress>;
   isLoading: boolean;
   error: string | null;
 
   loadConnections: () => Promise<void>;
   addConnection: (provider: string, baseUrl: string) => Promise<void>;
-  toggleConnection: (id: string, enabled: boolean) => Promise<void>;
+  setActiveConnection: (id: string) => Promise<void>;
+  clearActiveConnection: () => Promise<void>;
   refreshConnectionStatus: (id: string) => Promise<void>;
 
   loadDownloadableModels: () => Promise<void>;
   loadInstalledModels: (connectionId: string) => Promise<void>;
+  loadAvailableInstalledModels: () => Promise<void>;
   pullModel: (connectionId: string, identifier: string) => Promise<void>;
-  loadActiveModel: () => Promise<void>;
+  loadActivePair: () => Promise<void>;
   setActiveModel: (connectionId: string, modelName: string) => Promise<void>;
   configureModel: (
     connectionId: string,
@@ -48,7 +52,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   downloadableModels: [],
   ramDetectedGb: null,
   installedModelsByConnection: {},
-  activeModel: null,
+  activePair: NO_ACTIVE_PAIR,
   downloadProgress: {},
   isLoading: false,
   error: null,
@@ -72,10 +76,22 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
-  toggleConnection: async (id, enabled) => {
+  // Activating a connection can drop an active model that belonged to
+  // another one (ACTIVE-06), so the pair is always re-read from the backend
+  // instead of guessed here.
+  setActiveConnection: async (id) => {
     try {
-      await connectionsApi.toggleConnection(id, enabled);
-      await get().loadConnections();
+      await connectionsApi.setActiveConnection(id);
+      await Promise.all([get().loadConnections(), get().loadActivePair()]);
+    } catch (err) {
+      set({ error: String(err) });
+    }
+  },
+
+  clearActiveConnection: async () => {
+    try {
+      await connectionsApi.clearActiveConnection();
+      await Promise.all([get().loadConnections(), get().loadActivePair()]);
     } catch (err) {
       set({ error: String(err) });
     }
@@ -115,6 +131,13 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
+  // ACTIVE-08: models of every reachable connection are inspectable, not
+  // just the active one's, so the user can compare before switching.
+  loadAvailableInstalledModels: async () => {
+    const available = get().connections.filter((c) => c.status === "available");
+    await Promise.all(available.map((c) => get().loadInstalledModels(c.id)));
+  },
+
   pullModel: async (connectionId, identifier) => {
     try {
       await connectionsApi.pullModel(connectionId, identifier);
@@ -124,19 +147,21 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
-  loadActiveModel: async () => {
+  loadActivePair: async () => {
     try {
-      const activeModel = await connectionsApi.getActiveModel();
-      set({ activeModel });
+      const activePair = await connectionsApi.getActivePair();
+      set({ activePair });
     } catch (err) {
       set({ error: String(err) });
     }
   },
 
+  // Picking a model also activates its connection in the backend, so the
+  // connection list has to be re-read alongside the pair.
   setActiveModel: async (connectionId, modelName) => {
     try {
       await connectionsApi.setActiveModel(connectionId, modelName);
-      await get().loadActiveModel();
+      await Promise.all([get().loadConnections(), get().loadActivePair()]);
     } catch (err) {
       set({ error: String(err) });
     }
