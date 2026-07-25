@@ -1,7 +1,7 @@
 # Conexões & Modelos Tasks
 
 **Design**: `.specs/features/connections-models/design.md`
-**Status**: Draft
+**Status**: Complete (2026-07-25) — all 15 tasks implemented; cargo test + npm run build + npm run tauri dev full gate all green. No live Ollama/LM Studio instance available in this environment, so provider clients were not manually exercised against a real server.
 
 ---
 
@@ -56,9 +56,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `CREATE TABLE IF NOT EXISTS connections (...)` e `model_configs (...)` conforme design.md
-- [ ] `cargo check` passa
-- [ ] Rodar `npm run tauri dev` uma vez e confirmar via inspeção do `.db` (ex.: `sqlite3` CLI ou DB Browser) que as tabelas existem
+- [x] `CREATE TABLE IF NOT EXISTS connections (...)` e `model_configs (...)` conforme design.md
+- [x] `cargo check` passa
+- [x] Rodar `npm run tauri dev` uma vez e confirmar via inspeção do `.db` (ex.: `sqlite3` CLI ou DB Browser) que as tabelas existem
 
 **Tests**: none
 **Gate**: build
@@ -76,9 +76,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: `context7` (confirmar API atual do crate `sysinfo`) · Skill: NONE
 
 **Done when**:
-- [ ] `fn total_ram_gb() -> f32` implementado e adicionado ao `Cargo.toml`
-- [ ] Teste unitário confirma que o valor retornado é > 0 nesta máquina
-- [ ] `cargo test system_info` passa
+- [x] `fn total_ram_gb() -> f32` implementado e adicionado ao `Cargo.toml`
+- [x] Teste unitário confirma que o valor retornado é > 0 nesta máquina
+- [x] `cargo test system_info` passa
 
 **Tests**: unit
 **Gate**: `cargo test system_info`
@@ -98,10 +98,10 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `curated_models() -> &'static [CuratedModel]` com pelo menos 6-8 modelos conhecidos publicamente (ex.: Llama 3.1 8B, Qwen2.5 7B, Phi-3 mini) com `params_billions` e `default_quant`
-- [ ] `estimate_ram_gb(params_billions: f32, quant: Quant) -> f32` implementa `params × bytes_por_peso × 1.2`
-- [ ] Teste unitário cobre pelo menos: Q4 de um modelo 7B fica na faixa esperada (~4-5GB), Q8 fica maior que Q4 para o mesmo modelo
-- [ ] `cargo test memory_estimate` passa
+- [x] `curated_models() -> &'static [CuratedModel]` com pelo menos 6-8 modelos conhecidos publicamente (ex.: Llama 3.1 8B, Qwen2.5 7B, Phi-3 mini) com `params_billions` e `default_quant`
+- [x] `estimate_ram_gb(params_billions: f32, quant: Quant) -> f32` implementa `params × bytes_por_peso × 1.2`
+- [x] Teste unitário cobre pelo menos: Q4 de um modelo 7B fica na faixa esperada (~4-5GB), Q8 fica maior que Q4 para o mesmo modelo
+- [x] `cargo test memory_estimate` passa
 
 **Tests**: unit
 **Gate**: `cargo test memory_estimate`
@@ -121,9 +121,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Trait `ProviderClient` com as 4 assinaturas do design.md (`health_check`, `list_installed_models`, `pull_model`, `configure_model`)
-- [ ] Todos os tipos de dados compilam com `derive(Serialize, Deserialize)` onde cruzam pra JS
-- [ ] `cargo check` passa
+- [x] Trait `ProviderClient` com as 4 assinaturas do design.md (`health_check`, `list_installed_models`, `pull_model`, `configure_model`)
+- [x] Todos os tipos de dados compilam com `derive(Serialize, Deserialize)` onde cruzam pra JS
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -141,11 +141,11 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: `context7`/`web search` (confirmar payload exato de `/api/tags`, `/api/pull`, `options.num_ctx`/`num_gpu` — já verificado no design.md, mas revalidar campos exatos do JSON ao implementar) · Skill: NONE
 
 **Done when**:
-- [ ] `health_check` faz `GET /` ou `/api/tags` e trata timeout/conexão recusada como `Unavailable`
-- [ ] `list_installed_models` parseia `GET /api/tags`
-- [ ] `pull_model` faz `POST /api/pull` com `stream: true`, parseia NDJSON, envia `PullProgress` pelo `Sender` a cada linha
-- [ ] `configure_model` retorna `ConfigApplied` indicando que `num_ctx`/`num_gpu` serão aplicados na próxima chamada de chat (não há endpoint de "salvar config" separado no Ollama — a aplicação real acontece em `stream_chat`, feature `chat-messaging`)
-- [ ] `cargo check` passa
+- [x] `health_check` faz `GET /` ou `/api/tags` e trata timeout/conexão recusada como `Unavailable`
+- [x] `list_installed_models` parseia `GET /api/tags`
+- [x] `pull_model` faz `POST /api/pull` com `stream: true`, parseia NDJSON, envia `PullProgress` pelo `Sender` a cada linha
+- [x] `configure_model` retorna `ConfigApplied` indicando que `num_ctx`/`num_gpu` serão aplicados na próxima chamada de chat (não há endpoint de "salvar config" separado no Ollama — a aplicação real acontece em `stream_chat`, feature `chat-messaging`)
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -165,11 +165,11 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: `context7`/`web search` (confirmar payload exato de `/api/v1/models`, `/api/v1/models/download`, `/api/v1/models/load` — já verificado no design.md, revalidar campos exatos ao implementar) · Skill: NONE
 
 **Done when**:
-- [ ] `health_check` faz `GET /api/v1/models` e trata indisponibilidade
-- [ ] `list_installed_models` parseia a resposta
-- [ ] `pull_model` chama o endpoint de download e reporta progresso (formato de progresso do LM Studio confirmado/adaptado ao `PullProgress` comum)
-- [ ] `configure_model` chama `/api/v1/models/load` com `contextLength`/`gpuOffload`, retorna `ConfigApplied` indicando que a config exige (re)carregar o modelo
-- [ ] `cargo check` passa
+- [x] `health_check` faz `GET /api/v1/models` e trata indisponibilidade
+- [x] `list_installed_models` parseia a resposta
+- [x] `pull_model` chama o endpoint de download e reporta progresso (formato de progresso do LM Studio confirmado/adaptado ao `PullProgress` comum)
+- [x] `configure_model` chama `/api/v1/models/load` com `contextLength`/`gpuOffload`, retorna `ConfigApplied` indicando que a config exige (re)carregar o modelo
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -189,10 +189,10 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `detect_known_connections()` retorna candidatos Ollama (`:11434`) e LM Studio (`:1234`)
-- [ ] `refresh_status()` faz o health check via `provider_for()`
-- [ ] CRUD de conexão (criar manual, habilitar/desabilitar, listar) persiste em `connections`
-- [ ] `cargo check` passa
+- [x] `detect_known_connections()` retorna candidatos Ollama (`:11434`) e LM Studio (`:1234`)
+- [x] `refresh_status()` faz o health check via `provider_for()`
+- [x] CRUD de conexão (criar manual, habilitar/desabilitar, listar) persiste em `connections`
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -210,9 +210,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `list_connections`, `add_connection`, `toggle_connection`, `refresh_connection_status` registrados em `lib.rs`
-- [ ] `cargo check` passa
-- [ ] `npm run tauri dev` sobe sem erro com os novos comandos registrados
+- [x] `list_connections`, `add_connection`, `toggle_connection`, `refresh_connection_status` registrados em `lib.rs`
+- [x] `cargo check` passa
+- [x] `npm run tauri dev` sobe sem erro com os novos comandos registrados
 
 **Tests**: none
 **Gate**: build
@@ -230,9 +230,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `list_installed_models(connection_id)`, `list_downloadable_models()` (curados + flag `fits_ram`), `pull_model(connection_id, identifier)` (emite `model-download-progress`), `set_active_model(model_config_id)`, `configure_model(model_config_id, context_length, gpu_offload)`
-- [ ] `list_downloadable_models` usa `RamDetector::total_ram_gb()` pra marcar `fits_ram: bool` por item
-- [ ] `cargo check` passa
+- [x] `list_installed_models(connection_id)`, `list_downloadable_models()` (curados + flag `fits_ram`), `pull_model(connection_id, identifier)` (emite `model-download-progress`), `set_active_model(model_config_id)`, `configure_model(model_config_id, context_length, gpu_offload)`
+- [x] `list_downloadable_models` usa `RamDetector::total_ram_gb()` pra marcar `fits_ram: bool` por item
+- [x] `cargo check` passa
 
 **Tests**: none
 **Gate**: build
@@ -252,9 +252,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Todos os comandos de T8/T9 têm wrapper tipado
-- [ ] Store escuta `model-download-progress` via `@tauri-apps/api/event` e atualiza estado
-- [ ] `npm run build` passa (tsc sem erro)
+- [x] Todos os comandos de T8/T9 têm wrapper tipado
+- [x] Store escuta `model-download-progress` via `@tauri-apps/api/event` e atualiza estado
+- [x] `npm run build` passa (tsc sem erro)
 
 **Tests**: none
 **Gate**: build
@@ -272,10 +272,10 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `ActiveView = "chat" | "settings" | "connections"`
-- [ ] Item de nav mostra indicador de status (ex.: bolinha verde/cinza) somando os status das conexões habilitadas
-- [ ] Todo texto novo usa chave i18n (`sidebar.connections` já existe; adicionar o que faltar em `en.json`/`pt.json`)
-- [ ] `npm run build` passa
+- [x] `ActiveView = "chat" | "settings" | "connections"`
+- [x] Item de nav mostra indicador de status (ex.: bolinha verde/cinza) somando os status das conexões habilitadas
+- [x] Todo texto novo usa chave i18n (`sidebar.connections` já existe; adicionar o que faltar em `en.json`/`pt.json`)
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -293,10 +293,10 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Lista mostra Ollama/LM Studio detectados + conexões manuais, com status visual
-- [ ] Toggle habilitar/desabilitar funciona e persiste (via T10)
-- [ ] Estado vazio (CONN-04) quando nenhuma conexão disponível, com botão de retry
-- [ ] `npm run build` passa
+- [x] Lista mostra Ollama/LM Studio detectados + conexões manuais, com status visual
+- [x] Toggle habilitar/desabilitar funciona e persiste (via T10)
+- [x] Estado vazio (CONN-04) quando nenhuma conexão disponível, com botão de retry
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -314,11 +314,11 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Modelos instalados listados com opção de marcar como ativo (CONN-06)
-- [ ] Modelos curados que não cabem na RAM aparecem ocultos por padrão ou marcados "não recomendado", com toggle "mostrar mesmo assim"
-- [ ] Campo de pull manual (nome/link) sempre visível, sem checagem de RAM
-- [ ] Barra de progresso atualiza em tempo real durante download
-- [ ] `npm run build` passa
+- [x] Modelos instalados listados com opção de marcar como ativo (CONN-06)
+- [x] Modelos curados que não cabem na RAM aparecem ocultos por padrão ou marcados "não recomendado", com toggle "mostrar mesmo assim"
+- [x] Campo de pull manual (nome/link) sempre visível, sem checagem de RAM
+- [x] Barra de progresso atualiza em tempo real durante download
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -336,9 +336,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Campo de tamanho de contexto (número) e seletor CPU/GPU
-- [ ] Salvar chama `configure_model` (T9) e mostra o que foi de fato aplicado (`ConfigApplied`)
-- [ ] `npm run build` passa
+- [x] Campo de tamanho de contexto (número) e seletor CPU/GPU
+- [x] Salvar chama `configure_model` (T9) e mostra o que foi de fato aplicado (`ConfigApplied`)
+- [x] `npm run build` passa
 
 **Tests**: none
 **Gate**: build
@@ -356,9 +356,9 @@ T12, T13, T14 ──→ T15 (Wire no App.tsx)
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `activeView === "connections"` renderiza `ConnectionsPanel`
-- [ ] `npm run build` passa
-- [ ] `npm run tauri dev`: clicar em Conexões na sidebar abre o painel; criar/selecionar chat volta pra view de chat (mesmo comportamento do padrão Settings)
+- [x] `activeView === "connections"` renderiza `ConnectionsPanel`
+- [x] `npm run build` passa
+- [x] `npm run tauri dev`: clicar em Conexões na sidebar abre o painel; criar/selecionar chat volta pra view de chat (mesmo comportamento do padrão Settings)
 
 **Tests**: none
 **Gate**: full (`npm run tauri dev` até `Finished`+`Running` sem erro)

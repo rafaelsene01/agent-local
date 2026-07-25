@@ -1,6 +1,6 @@
 # Roadmap
 
-**Current Milestone:** M3 — Conexões & Modelos (M2 completo; M3/M4/M5 planejados — spec+design+tasks prontos em `.specs/features/`, aguardando Execute)
+**Current Milestone:** M4 — Chat: envio, streaming & anexos (M3 completo; M5 planejado, aguardando Execute)
 **Status:** In Progress
 
 ---
@@ -84,7 +84,7 @@ flowchart TB
 
 ---
 
-## M3 — Conexões & Modelos — PLANNED
+## M3 — Conexões & Modelos — ✅ COMPLETE (2026-07-25)
 
 **Goal:** Descobrir runtimes locais, escolher quais usar, e gerenciar modelos (usar/baixar) com config de execução.
 **Target:** Usuário vê conexões disponíveis, marca as ativas, vê/baixa modelos compatíveis com sua memória e ajusta contexto e CPU/GPU.

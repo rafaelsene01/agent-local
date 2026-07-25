@@ -135,19 +135,19 @@ Confirmado via busca (não fabricado):
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| CONN-01 | P1: Detectar conexões + status | Design | Pending |
-| CONN-02 | P1: Habilitar/desabilitar conexão | Design | Pending |
-| CONN-03 | P1: Conexão manual (URL customizada) | Design | Pending |
-| CONN-04 | P1: Estado vazio (nenhuma conexão) | Design | Pending |
-| CONN-05 | P1: Listar modelos instalados por conexão | Design | Pending |
-| CONN-06 | P1: Selecionar modelo ativo | Design | Pending |
-| CONN-07 | P2: Detectar RAM do sistema | Design | Pending |
-| CONN-08 | P2: Lista curada de modelos + estimativa de RAM | Design | Pending |
-| CONN-09 | P2: Ocultar/avisar modelos que não cabem | Design | Pending |
-| CONN-10 | P2: Pull manual por nome/link | Design | Pending |
-| CONN-11 | P2: Download com progresso | Design | Pending |
-| CONN-12 | P2: Configurar contexto por modelo | Design | Pending |
-| CONN-13 | P2: Configurar CPU/GPU por modelo | Design | Pending |
+| CONN-01 | P1: Detectar conexões + status | Execute | Implemented |
+| CONN-02 | P1: Habilitar/desabilitar conexão | Execute | Implemented |
+| CONN-03 | P1: Conexão manual (URL customizada) | Execute | Implemented |
+| CONN-04 | P1: Estado vazio (nenhuma conexão) | Execute | Implemented |
+| CONN-05 | P1: Listar modelos instalados por conexão | Execute | Implemented |
+| CONN-06 | P1: Selecionar modelo ativo | Execute | Implemented |
+| CONN-07 | P2: Detectar RAM do sistema | Execute | Implemented |
+| CONN-08 | P2: Lista curada de modelos + estimativa de RAM | Execute | Implemented |
+| CONN-09 | P2: Ocultar/avisar modelos que não cabem | Execute | Implemented |
+| CONN-10 | P2: Pull manual por nome/link | Execute | Implemented |
+| CONN-11 | P2: Download com progresso | Execute | Implemented |
+| CONN-12 | P2: Configurar contexto por modelo | Execute | Implemented |
+| CONN-13 | P2: Configurar CPU/GPU por modelo | Execute | Implemented |
 
 **ID format:** `CONN-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified

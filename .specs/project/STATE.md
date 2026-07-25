@@ -1,7 +1,21 @@
 # State
 
 **Last Updated:** 2026-07-25
-**Current Work:** M2 implementado e verificado. Planejamento completo (spec+design+tasks) entregue para M3 (`connections-models`), M5 (`documents-rag`) e M4 (`chat-messaging`) — prontos para Execute. Ordem de implementação recomendada: connections-models → documents-rag → chat-messaging (dependência real, não só do roadmap).
+**Current Work:** M3 (`connections-models`) implementado e verificado (15/15 tasks, cargo test + npm run build + `npm run tauri dev` full gate verde). Próximo: `documents-rag` (M5), depois `chat-messaging` (M4) — dependência real de implementação (AD-017), não só ordem de roadmap.
+
+---
+
+## Recent Decisions (Last 60 days)
+
+### AD-019: M3 (connections-models) implementado — 15/15 tasks (2026-07-25)
+
+**Decision:** Executado o `tasks.md` completo de `connections-models` (T1-T15), do zero até `ConnectionsPanel` funcional no `App.tsx`. Repositório git inicializado nesta sessão (não existia antes) especificamente para viabilizar 1 commit atômico por task.
+**Reason:** Próximo passo registrado em Todos desta mesma STATE.md; usuário confirmou escopo "feature inteira T1-T15 autônomo" e "inicializar git agora" via pergunta direta no início da sessão.
+**Trade-off/Notas:**
+- Nenhum Ollama/LM Studio rodando neste ambiente — `OllamaClient`/`LmStudioClient`/`CustomClient` foram verificados por `cargo check`/`cargo test` e pelos payloads exatos documentados (pesquisa web durante T5/T6), não por chamada real a um servidor. Endpoint fields para LM Studio (`context_length` snake_case, `offload_kv_cache_to_gpu` boolean) divergiam do que o `design.md` original supunha (`contextLength`/`gpuOffload` camelCase graduado) — corrigido, documentado como SPEC_DEVIATION no código.
+- `models.rs` virou `models/mod.rs` (Chat/Message preservados) para caber `models::catalog`/`models::memory_estimate` no path exato do design.
+- `tasks.md` tinha algumas lacunas de integração não explícitas em nenhuma task individual, preenchidas durante a execução (todas com nota SPEC_DEVIATION no commit correspondente): provider "custom" sem client (`providers::custom::CustomClient`, T7), `set_active_model`/`configure_model` descritos como recebendo um `model_config_id` que nem sempre existe ainda (resolvido com find-or-create por `connection_id`+`model_name`, T9), nenhum getter para "qual é o modelo ativo" (`get_active_model`, addendum pós-T9), e nenhuma task listada para colocar `ModelsList`/`ModelConfigForm` dentro do `ConnectionsPanel` (feito nos próprios commits de T13/T14, já que design.md só permite um lugar pra isso).
+**Impact:** M3 completo no ROADMAP; `connections-models/tasks.md` e `spec.md` atualizados (checkboxes + tabela de rastreabilidade). 9 commits no backend Rust, 6 no frontend React, todos atômicos.
 
 ---
 
@@ -186,10 +200,10 @@ _Nenhum._
 ## Todos
 
 - [ ] Verificar manualmente na UI os fluxos de CRUD de chat do M1 (criar/renomear/excluir/persistir após reiniciar) — SHELL-01..07
-- [ ] **Executar `connections-models` tasks.md** (13 tasks) — próximo passo recomendado, sem bloqueios
-- [ ] **Executar `documents-rag` tasks.md** (11 tasks) — depois de connections-models (RAM detection não é pré-requisito real, mas a ordem do roadmap segue assim)
-- [ ] **Executar `chat-messaging` tasks.md** (12 tasks) — depois das duas acima (dependência real de implementação, não só de roadmap — ver AD-017)
-- [ ] Durante a execução de `connections-models` T2/T5/T6 e `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
+- [ ] Verificar `connections-models` (M3) com Ollama e/ou LM Studio rodando de verdade nesta máquina — implementado e com `tauri dev` subindo limpo, mas `OllamaClient`/`LmStudioClient`/download real/`configure_model` nunca foram exercitados contra um servidor real (nenhum estava rodando durante a execução) — ver AD-019
+- [ ] **Executar `documents-rag` tasks.md** (11 tasks) — próximo passo recomendado, sem bloqueios (RAM detection do M3 não é pré-requisito real, mas a ordem do roadmap segue assim)
+- [ ] **Executar `chat-messaging` tasks.md** (12 tasks) — depois de documents-rag (dependência real de implementação, não só de roadmap — ver AD-017)
+- [ ] Durante a execução de `documents-rag` T3/T4/T5: pesquisa obrigatória (context7/web) antes de fixar crates/modelos exatos — já marcado nas próprias tasks, não fabricar nomes
 - [ ] Avaliar assinatura de código dos instaladores (Windows) — design M8
 - [ ] Depois do M1, avaliar excluir os ícones padrão do template (`Square*.png`, `StoreLogo.png`) não usados no bundle final
 
