@@ -21,7 +21,17 @@
   "chatPanel": {
     "selectOrCreate": "Select a chat or create a new one to get started",
     "newChat": "New chat",
-    "noMessages": "No messages yet. Sending messages arrives in the next milestone (connecting to LM Studio/Ollama)."
+    "noMessages": "No messages yet. Sending messages arrives in the next milestone (connecting to LM Studio/Ollama).",
+    "placeholder": "Ask something…",
+    "send": "Send",
+    "cancel": "Stop",
+    "attach": "Attach files",
+    "noActiveModel": "Pick an active connection and model in Connections before sending.",
+    "useGlobalDocs": "Use my documents",
+    "attachmentsSelected": "{{count}} file(s) attached",
+    "clearAttachments": "Clear",
+    "generating": "Generating…",
+    "fileDialogTitle": "Choose files to attach"
   },
   "documents": {
     "title": "Documents",

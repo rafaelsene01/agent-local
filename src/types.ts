@@ -13,6 +13,14 @@ export interface Message {
   created_at: string;
 }
 
+export interface ChatStreamChunk {
+  chat_id: string;
+  message_id: string;
+  delta: string;
+  done: boolean;
+  error: string | null;
+}
+
 export interface AppConfig {
   base_path: string;
   theme: string;

@@ -21,7 +21,17 @@
   "chatPanel": {
     "selectOrCreate": "Selecione um chat ou crie um novo para começar",
     "newChat": "Novo chat",
-    "noMessages": "Sem mensagens ainda. O envio de mensagens chega no próximo milestone (conexão com LM Studio/Ollama)."
+    "noMessages": "Sem mensagens ainda. O envio de mensagens chega no próximo milestone (conexão com LM Studio/Ollama).",
+    "placeholder": "Pergunte alguma coisa…",
+    "send": "Enviar",
+    "cancel": "Parar",
+    "attach": "Anexar arquivos",
+    "noActiveModel": "Escolha uma conexão e um modelo ativos em Conexões antes de enviar.",
+    "useGlobalDocs": "Usar meus documentos",
+    "attachmentsSelected": "{{count}} arquivo(s) anexado(s)",
+    "clearAttachments": "Limpar",
+    "generating": "Gerando…",
+    "fileDialogTitle": "Escolha os arquivos para anexar"
   },
   "documents": {
     "title": "Documentos",

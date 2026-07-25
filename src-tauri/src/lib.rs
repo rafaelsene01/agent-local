@@ -1,3 +1,5 @@
+mod chat;
+mod chat_commands;
 mod commands;
 mod config;
 mod config_commands;
@@ -72,6 +74,7 @@ pub fn run() {
             };
             app.manage(DbState(Mutex::new(existing_conn)));
             app.manage(SidecarState::empty());
+            app.manage(chat::cancellation::CancellationRegistry::new());
 
             if let Ok(Some(cfg)) = config::load_config(app.handle()) {
                 // Keeps the embedding model inside the user's chosen folder
@@ -89,6 +92,10 @@ pub fn run() {
             commands::rename_chat,
             commands::delete_chat,
             commands::list_messages,
+            chat_commands::create_message,
+            chat_commands::send_message,
+            chat_commands::cancel_generation,
+            chat_commands::set_chat_use_global_rag,
             config_commands::get_app_config,
             config_commands::get_default_base_path,
             config_commands::pick_folder,

@@ -2,7 +2,7 @@ use crate::db::{require_conn, DbState};
 use crate::models::{Chat, Message};
 use chrono::Utc;
 use rusqlite::params;
-use tauri::State;
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 #[tauri::command]
@@ -86,22 +86,46 @@ pub fn rename_chat(db: State<DbState>, id: String, title: String) -> Result<Chat
     })
 }
 
+/// Deleting a chat takes its attachments with it (AD-004/CHAT-12): the rows,
+/// the files under `chats/<id>/tmp/` and the chat's vector namespace. The
+/// filesystem and vector cleanup run outside the transaction because neither
+/// can participate in it — a leftover file is recoverable, a lost chat isn't.
 #[tauri::command]
-pub fn delete_chat(db: State<DbState>, id: String) -> Result<(), String> {
-    let mut guard = db.0.lock().map_err(|e| e.to_string())?;
-    let conn = guard
-        .as_mut()
-        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM messages WHERE chat_id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-    let deleted = tx
-        .execute("DELETE FROM chats WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-    tx.commit().map_err(|e| e.to_string())?;
+pub async fn delete_chat(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    id: String,
+) -> Result<(), String> {
+    {
+        let mut guard = db.0.lock().map_err(|e| e.to_string())?;
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())?;
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM messages WHERE chat_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM chat_attachments WHERE chat_id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        let deleted = tx
+            .execute("DELETE FROM chats WHERE id = ?1", params![id])
+            .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
 
-    if deleted == 0 {
-        return Err("Chat não encontrado".to_string());
+        if deleted == 0 {
+            return Err("Chat não encontrado".to_string());
+        }
+    }
+
+    if let Ok(Some(cfg)) = crate::config::load_config(&app) {
+        let _ = std::fs::remove_dir_all(cfg.base_path_buf().join("chats").join(&id));
+    }
+
+    if let Ok(dir) = crate::rag::pipeline::vectors_dir(&app) {
+        if let Ok(store) = crate::rag::store::VectorStore::open(&dir).await {
+            let _ = store
+                .delete_namespace(&crate::rag::store::chat_namespace(&id))
+                .await;
+        }
     }
     Ok(())
 }
