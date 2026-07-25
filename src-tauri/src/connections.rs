@@ -139,12 +139,14 @@ pub fn active_connection(sql: &SqlConnection) -> Result<Option<Connection>, Stri
 }
 
 /// Deactivating every other connection and dropping an active model that
-/// belongs to one of them happens in the same transaction, so there is no
-/// window where two connections are active or where the active model points
+/// belongs to one of them must happen together, so there is never a moment
+/// where two connections are active or where the active model points
 /// somewhere the chat can't reach (ACTIVE-01, ACTIVE-06).
-pub fn set_active_connection(sql: &SqlConnection, id: &str) -> Result<(), String> {
-    let tx = sql.unchecked_transaction().map_err(|e| e.to_string())?;
-
+///
+/// Takes no transaction of its own so callers that already opened one — like
+/// `set_active_model`, which activates the pair atomically — can reuse it;
+/// SQLite rejects a nested `BEGIN`.
+pub fn apply_active_connection(tx: &SqlConnection, id: &str) -> Result<(), String> {
     let exists: i64 = tx
         .query_row(
             "SELECT COUNT(*) FROM connections WHERE id = ?1",
@@ -165,6 +167,12 @@ pub fn set_active_connection(sql: &SqlConnection, id: &str) -> Result<(), String
     )
     .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+pub fn set_active_connection(sql: &SqlConnection, id: &str) -> Result<(), String> {
+    let tx = sql.unchecked_transaction().map_err(|e| e.to_string())?;
+    apply_active_connection(&tx, id)?;
     tx.commit().map_err(|e| e.to_string())
 }
 

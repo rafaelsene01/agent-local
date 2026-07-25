@@ -1,4 +1,4 @@
-use crate::connections::{self, ConnectionManager};
+use crate::connections::{self, Connection, ConnectionManager};
 use crate::db::DbState;
 use crate::models::catalog::{curated_models, CuratedModelInfo};
 use crate::providers::{ConfigApplied, GpuOffload, InstalledModel, PullProgress};
@@ -142,6 +142,9 @@ pub async fn pull_model(
     result.map_err(|e| e.to_string())
 }
 
+/// Picking a model is a single action that also activates the connection it
+/// belongs to (ACTIVE-05): two separate calls would leave a window where the
+/// active model belongs to an inactive connection.
 #[tauri::command]
 pub fn set_active_model(
     db: State<DbState>,
@@ -150,15 +153,18 @@ pub fn set_active_model(
 ) -> Result<(), String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
-    let id = get_or_create_model_config(sql, &connection_id, &model_name)?;
-    sql.execute("UPDATE model_configs SET is_active = 0 WHERE is_active = 1", [])
+
+    let tx = sql.unchecked_transaction().map_err(|e| e.to_string())?;
+    connections::apply_active_connection(&tx, &connection_id)?;
+    let id = get_or_create_model_config(&tx, &connection_id, &model_name)?;
+    tx.execute("UPDATE model_configs SET is_active = 0 WHERE is_active = 1", [])
         .map_err(|e| e.to_string())?;
-    sql.execute(
+    tx.execute(
         "UPDATE model_configs SET is_active = 1 WHERE id = ?1",
         params![id],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -169,28 +175,38 @@ pub struct ActiveModel {
     pub gpu_offload: Option<String>,
 }
 
-/// Not in tasks.md's original 5 commands: set_active_model persists the
-/// choice but nothing exposed it back, so the UI couldn't show which model
-/// is active after a reload (needed for CONN-06 AC2, "essa escolha SHALL
-/// ficar disponível"). Small addition, same file/module as the write side.
+#[derive(Debug, Serialize, Clone)]
+pub struct ActivePair {
+    pub connection: Option<Connection>,
+    pub model: Option<ActiveModel>,
+}
+
+/// The chat needs "who answers now" as one answer, not two lists to cross
+/// (ACTIVE-07). `model` can be `None` while `connection` is `Some` — the
+/// user activated a connection but hasn't picked a model yet.
 #[tauri::command]
-pub fn get_active_model(db: State<DbState>) -> Result<Option<ActiveModel>, String> {
+pub fn get_active_pair(db: State<DbState>) -> Result<ActivePair, String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
-    sql.query_row(
-        "SELECT connection_id, model_name, context_length, gpu_offload FROM model_configs WHERE is_active = 1",
-        [],
-        |row| {
-            Ok(ActiveModel {
-                connection_id: row.get(0)?,
-                model_name: row.get(1)?,
-                context_length: row.get(2)?,
-                gpu_offload: row.get(3)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+
+    let connection = connections::active_connection(sql)?;
+    let model = sql
+        .query_row(
+            "SELECT connection_id, model_name, context_length, gpu_offload FROM model_configs WHERE is_active = 1",
+            [],
+            |row| {
+                Ok(ActiveModel {
+                    connection_id: row.get(0)?,
+                    model_name: row.get(1)?,
+                    context_length: row.get(2)?,
+                    gpu_offload: row.get(3)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    Ok(ActivePair { connection, model })
 }
 
 #[tauri::command]
