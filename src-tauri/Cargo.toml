@@ -30,4 +30,5 @@ sysinfo = "0.39"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["sync"] }
 async-trait = "0.1"
+futures-util = "0.3"
 

@@ -1,3 +1,5 @@
+pub mod ollama;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
