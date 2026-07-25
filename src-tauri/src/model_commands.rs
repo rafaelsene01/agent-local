@@ -1,4 +1,5 @@
-use crate::connections::{self, Connection, ConnectionManager};
+use crate::connections::{self, Connection};
+use crate::embedded_commands;
 use crate::db::{require_conn, DbState};
 use crate::models::catalog::{curated_models, CuratedModelInfo};
 use crate::providers::{ConfigApplied, GpuOffload, InstalledModel, PullProgress};
@@ -78,10 +79,11 @@ pub fn list_downloadable_models() -> DownloadableModelsResponse {
 
 #[tauri::command]
 pub async fn list_installed_models(
+    app: AppHandle,
     db: State<'_, DbState>,
     connection_id: String,
 ) -> Result<Vec<InstalledModel>, String> {
-    let manager = ConnectionManager::new();
+    let manager = embedded_commands::manager(&app);
     let conn = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
@@ -101,7 +103,7 @@ pub async fn pull_model(
     connection_id: String,
     identifier: String,
 ) -> Result<(), String> {
-    let manager = ConnectionManager::new();
+    let manager = embedded_commands::manager(&app);
     let conn = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
@@ -203,13 +205,14 @@ pub fn get_active_pair(db: State<DbState>) -> Result<ActivePair, String> {
 
 #[tauri::command]
 pub async fn configure_model(
+    app: AppHandle,
     db: State<'_, DbState>,
     connection_id: String,
     model_name: String,
     context_length: Option<u32>,
     gpu_offload: Option<String>,
 ) -> Result<ConfigApplied, String> {
-    let manager = ConnectionManager::new();
+    let manager = embedded_commands::manager(&app);
     let conn = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;

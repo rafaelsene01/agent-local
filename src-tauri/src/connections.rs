@@ -1,5 +1,9 @@
-use crate::providers::{custom::CustomClient, lmstudio::LmStudioClient, ollama::OllamaClient, ProviderClient};
+use crate::providers::{
+    custom::CustomClient, embedded::EmbeddedClient, lmstudio::LmStudioClient, ollama::OllamaClient,
+    ProviderClient,
+};
 use chrono::Utc;
+use std::path::PathBuf;
 use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
 use serde::Serialize;
 use uuid::Uuid;
@@ -28,15 +32,38 @@ pub struct ConnectionCandidate {
     pub base_url: String,
 }
 
-pub struct ConnectionManager;
+/// Where the embedded sidecar currently is, when it is running at all. The
+/// manager needs it because the embedded connection's URL is only known after
+/// the process picks a free port.
+#[derive(Debug, Clone, Default)]
+pub struct EmbeddedContext {
+    pub port: Option<u16>,
+    pub models_dir: PathBuf,
+}
+
+#[derive(Default)]
+pub struct ConnectionManager {
+    embedded: EmbeddedContext,
+}
 
 impl ConnectionManager {
     pub fn new() -> Self {
-        ConnectionManager
+        ConnectionManager::default()
     }
 
+    pub fn with_embedded(embedded: EmbeddedContext) -> Self {
+        ConnectionManager { embedded }
+    }
+
+    /// The embedded runtime is always offered, regardless of whether Ollama or
+    /// LM Studio were found — it is the option that needs nothing installed
+    /// (EMBED-01). Its base_url is a placeholder until the sidecar runs.
     pub fn detect_known_connections(&self) -> Vec<ConnectionCandidate> {
         vec![
+            ConnectionCandidate {
+                provider: "embedded".to_string(),
+                base_url: "embedded://llama.cpp".to_string(),
+            },
             ConnectionCandidate {
                 provider: "ollama".to_string(),
                 base_url: "http://localhost:11434".to_string(),
@@ -56,6 +83,10 @@ impl ConnectionManager {
         match conn.provider.as_str() {
             "ollama" => Box::new(OllamaClient::new(conn.base_url.clone())),
             "lmstudio" => Box::new(LmStudioClient::new(conn.base_url.clone())),
+            "embedded" => Box::new(EmbeddedClient::new(
+                self.embedded.port,
+                self.embedded.models_dir.clone(),
+            )),
             _ => Box::new(CustomClient::new(conn.base_url.clone())),
         }
     }
@@ -66,12 +97,6 @@ impl ConnectionManager {
             Ok(()) => ConnectionStatus::Available,
             Err(_) => ConnectionStatus::Unavailable,
         }
-    }
-}
-
-impl Default for ConnectionManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -277,11 +302,12 @@ mod tests {
     }
 
     #[test]
-    fn detect_known_connections_returns_ollama_and_lmstudio() {
+    fn detect_known_connections_always_includes_the_embedded_runtime() {
         let mgr = ConnectionManager::new();
         let candidates = mgr.detect_known_connections();
-        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates.len(), 3);
         assert!(candidates.iter().any(|c| c.provider == "ollama"));
         assert!(candidates.iter().any(|c| c.provider == "lmstudio"));
+        assert!(candidates.iter().any(|c| c.provider == "embedded"));
     }
 }

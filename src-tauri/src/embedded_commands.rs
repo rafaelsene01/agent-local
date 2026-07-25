@@ -1,4 +1,5 @@
 use crate::config;
+use crate::connections::{ConnectionManager, EmbeddedContext};
 use crate::db::{require_conn, DbState};
 use crate::providers::{PullProgress, PullStatus};
 use crate::runtime::detect::{probe_devices, DeviceProbe};
@@ -285,6 +286,16 @@ pub fn stop_embedded_runtime(app: AppHandle) -> Result<(), String> {
         sidecar.kill();
     }
     Ok(())
+}
+
+/// Every command that talks to a provider builds its manager through here, so
+/// the embedded connection resolves to the port the sidecar actually picked
+/// instead of a placeholder URL.
+pub fn manager(app: &AppHandle) -> ConnectionManager {
+    ConnectionManager::with_embedded(EmbeddedContext {
+        port: running_port(app),
+        models_dir: models_dir(app).unwrap_or_default(),
+    })
 }
 
 pub fn running_port(app: &AppHandle) -> Option<u16> {

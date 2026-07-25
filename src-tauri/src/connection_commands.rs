@@ -1,14 +1,18 @@
-use crate::connections::{self, Connection, ConnectionManager, ConnectionStatus};
+use crate::connections::{self, Connection, ConnectionStatus};
 use crate::db::{require_conn, DbState};
-use tauri::State;
+use crate::embedded_commands;
+use tauri::{AppHandle, State};
 
-/// Seeds the known Ollama/LM Studio candidates (disabled by default) the
-/// first time they're missing, then live-checks every connection's status —
-/// CONN-01 AC1 tests both regardless of whether they're enabled yet, since
-/// the user needs to see status before deciding to enable one.
+/// Seeds the known candidates (inactive) the first time they're missing, then
+/// live-checks every connection's status — CONN-01 AC1 tests all of them
+/// regardless of which is active, since the user needs to see status before
+/// deciding which one to pick.
 #[tauri::command]
-pub async fn list_connections(db: State<'_, DbState>) -> Result<Vec<Connection>, String> {
-    let manager = ConnectionManager::new();
+pub async fn list_connections(
+    app: AppHandle,
+    db: State<'_, DbState>,
+) -> Result<Vec<Connection>, String> {
+    let manager = embedded_commands::manager(&app);
 
     let base_list = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
@@ -51,25 +55,44 @@ pub fn add_connection(
 /// the user's choice is respected and `status` reports the reality instead of
 /// the app silently picking a different runtime.
 #[tauri::command]
-pub fn set_active_connection(db: State<DbState>, id: String) -> Result<(), String> {
-    let guard = db.0.lock().map_err(|e| e.to_string())?;
-    let sql = require_conn(&guard)?;
-    connections::set_active_connection(sql, &id)
+pub fn set_active_connection(app: AppHandle, db: State<DbState>, id: String) -> Result<(), String> {
+    let activated_embedded = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::set_active_connection(sql, &id)?;
+        connections::active_connection(sql)?.is_some_and(|c| c.provider == "embedded")
+    };
+
+    // Switching away from the embedded runtime stops its process: keeping a
+    // local server alive for a connection nothing talks to is the resource
+    // leak EMBED-09 exists to prevent.
+    if !activated_embedded {
+        stop_sidecar(&app)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn clear_active_connection(db: State<DbState>) -> Result<(), String> {
-    let guard = db.0.lock().map_err(|e| e.to_string())?;
-    let sql = require_conn(&guard)?;
-    connections::clear_active_connection(sql)
+pub fn clear_active_connection(app: AppHandle, db: State<DbState>) -> Result<(), String> {
+    {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::clear_active_connection(sql)?;
+    }
+    stop_sidecar(&app)
+}
+
+fn stop_sidecar(app: &AppHandle) -> Result<(), String> {
+    embedded_commands::stop_embedded_runtime(app.clone())
 }
 
 #[tauri::command]
 pub async fn refresh_connection_status(
+    app: AppHandle,
     db: State<'_, DbState>,
     id: String,
 ) -> Result<ConnectionStatus, String> {
-    let manager = ConnectionManager::new();
+    let manager = embedded_commands::manager(&app);
     let conn = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
