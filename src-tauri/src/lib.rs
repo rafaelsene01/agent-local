@@ -57,6 +57,7 @@ pub fn run() {
             model_commands::list_installed_models,
             model_commands::pull_model,
             model_commands::set_active_model,
+            model_commands::get_active_model,
             model_commands::configure_model,
         ])
         .run(tauri::generate_context!())

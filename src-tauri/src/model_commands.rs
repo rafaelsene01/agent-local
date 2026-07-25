@@ -161,6 +161,38 @@ pub fn set_active_model(
     Ok(())
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct ActiveModel {
+    pub connection_id: String,
+    pub model_name: String,
+    pub context_length: Option<u32>,
+    pub gpu_offload: Option<String>,
+}
+
+/// Not in tasks.md's original 5 commands: set_active_model persists the
+/// choice but nothing exposed it back, so the UI couldn't show which model
+/// is active after a reload (needed for CONN-06 AC2, "essa escolha SHALL
+/// ficar disponível"). Small addition, same file/module as the write side.
+#[tauri::command]
+pub fn get_active_model(db: State<DbState>) -> Result<Option<ActiveModel>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = require_conn(&guard)?;
+    sql.query_row(
+        "SELECT connection_id, model_name, context_length, gpu_offload FROM model_configs WHERE is_active = 1",
+        [],
+        |row| {
+            Ok(ActiveModel {
+                connection_id: row.get(0)?,
+                model_name: row.get(1)?,
+                context_length: row.get(2)?,
+                gpu_offload: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn configure_model(
     db: State<'_, DbState>,
