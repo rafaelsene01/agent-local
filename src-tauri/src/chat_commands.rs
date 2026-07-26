@@ -22,6 +22,15 @@ pub struct ChatStreamChunk {
     pub error: Option<String>,
 }
 
+/// Emitted when the answer was produced without the knowledge base because
+/// retrieval failed. Separate from `ChatStreamChunk.error`, which means the
+/// message itself failed.
+#[derive(Debug, Serialize, Clone)]
+pub struct ChatRetrievalWarning {
+    pub chat_id: String,
+    pub reason: String,
+}
+
 fn insert_message(
     app: &AppHandle,
     chat_id: &str,
@@ -217,7 +226,7 @@ pub async fn send_message(
     let manager = embedded_commands::manager(&app);
     let client = manager.provider_for(&target.connection);
 
-    let messages = context_assembler::assemble(
+    let assembled = context_assembler::assemble(
         &app,
         &chat_id,
         &content,
@@ -227,6 +236,19 @@ pub async fn send_message(
     )
     .await?;
 
+    // The answer still goes out — it is just answered without the documents,
+    // and the user gets told so instead of having to guess whether the model
+    // ignored the knowledge base or the knowledge base failed.
+    if let Some(reason) = assembled.retrieval_error {
+        let _ = app.emit(
+            "chat-retrieval-warning",
+            ChatRetrievalWarning {
+                chat_id: chat_id.clone(),
+                reason,
+            },
+        );
+    }
+
     let token = app
         .state::<CancellationRegistry>()
         .register(&chat_id);
@@ -235,7 +257,7 @@ pub async fn send_message(
     let mut stream = match client
         .stream_chat(
             &target.model_name,
-            messages,
+            assembled.messages,
             target.context_length,
             target.gpu_offload,
         )

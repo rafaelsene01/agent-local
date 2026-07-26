@@ -140,7 +140,7 @@ Fase 7 — Verificação real
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `node scripts/bump-version.mjs <versão>` grava em `package.json`, `package-lock.json` (`version` e `packages[""].version`), `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml` (`[package] version`, sem tocar em versões de dependências)
+- [x] `node scripts/bump-version.mjs <versão>` grava em `package.json`, `package-lock.json` (`version` e `packages[""].version`) e `src-tauri/Cargo.toml` (`[package] version`, sem tocar em versões de dependências). **Revisão de 2026-07-26:** `src-tauri/tauri.conf.json` saiu da lista — o campo `version` dele virou `"../package.json"`, que o Tauri resolve no build. Uma cópia a menos para divergir, e há teste que falha se alguém colar uma versão literal de volta
 - [ ] Função pura de bump exportada e testada: `1.2.3`+patch→`1.2.4`, +minor→`1.3.0`, +major→`2.0.0`, e `0.1.0`+minor→`0.2.0`
 - [ ] Versão inválida ou bump desconhecido → erro com exit code ≠ 0
 - [ ] Gate check passa: `node --test scripts/`

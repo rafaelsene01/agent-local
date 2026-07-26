@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig } from "../types";
+import type { AppConfig, StorageStatus } from "../types";
 
 export const configApi = {
   getConfig: () => invoke<AppConfig | null>("get_app_config"),
+  getStorageStatus: () => invoke<StorageStatus>("get_storage_status"),
   getDefaultBasePath: () => invoke<string>("get_default_base_path"),
   pickFolder: () => invoke<string | null>("pick_folder"),
   completeOnboarding: (base_path: string, theme: string, language: string) =>

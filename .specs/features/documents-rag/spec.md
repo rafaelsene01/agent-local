@@ -113,7 +113,7 @@ O usuário quer importar documentos para uma base de conhecimento global e ter o
 | DOC-07 | P1: Processar múltiplos sem travar UI | Implemented | Implemented |
 | DOC-08 | P1: Listar documentos com status | Implemented | Implemented |
 | DOC-09 | P1: Remover documento (arquivo + embeddings) | Implemented | Implemented |
-| DOC-10 | P2: Retrieval top-k por similaridade | Implemented | Implemented |
+| DOC-10 | P2: Retrieval top-k por similaridade | Implemented | Implemented (revisto em 2026-07-26 — AD-036: ranqueamento entre namespaces, piso de relevância relativo e expansão para o chunk seguinte) |
 | DOC-11 | P2: Retrieval vazio sem erro quando base vazia | Implemented | Implemented |
 | DOC-12 | P2: Expor origem/citação dos trechos | Implemented | Implemented |
 

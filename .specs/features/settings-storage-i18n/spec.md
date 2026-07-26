@@ -121,18 +121,20 @@ Antes de baixar modelos ou indexar documentos, o app precisa saber **onde** guar
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| CFG-01 | P1: Pasta de armazenamento | Design | Pending |
-| CFG-02 | P1: Estrutura de pastas + realocar .db | Design | Pending |
-| CFG-03 | P1: Idioma EN padrão + PT (i18n) | Design | Pending |
-| CFG-04 | P1: Fallback de tradução p/ EN | Design | Pending |
-| CFG-05 | P1: Temas claro/escuro/extra (CSS vars) | Design | Pending |
-| CFG-06 | P1: Persistência de tema/idioma/pasta | Design | Pending |
-| CFG-07 | P1: Wizard de 1º uso | Design | Pending |
-| CFG-08 | P2: Seção Configurações na sidebar | Design | Pending |
+| CFG-01 | P1: Pasta de armazenamento | Implemented | Implemented |
+| CFG-02 | P1: Estrutura de pastas + realocar .db | Implemented | Implemented |
+| CFG-03 | P1: Idioma EN padrão + PT (i18n) | Implemented | Implemented |
+| CFG-04 | P1: Fallback de tradução p/ EN | Implemented | Implemented |
+| CFG-05 | P1: Temas claro/escuro/extra (CSS vars) | Implemented | Implemented |
+| CFG-06 | P1: Persistência de tema/idioma/pasta | Implemented | Implemented |
+| CFG-07 | P1: Wizard de 1º uso | Implemented | Implemented |
+| CFG-08 | P2: Seção Configurações na sidebar | Implemented | Implemented |
 
 **ID format:** `CFG-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 8 total, 8 mapeados para design, 0 não mapeados
+**Coverage:** 8 total, 8 implementados. A tabela ficou marcada como `Pending` do planejamento (2026-07-24) até a auditoria de 2026-07-26, apesar de o M2 estar `✅ COMPLETE` no ROADMAP desde 2026-07-24 — os requisitos estavam prontos, o documento é que não acompanhou.
+
+**Edge case da pasta que some — fechado em 2026-07-26.** *"WHEN a pasta-base persistida sumiu/foi movida entre sessões THEN o sistema SHALL avisar e reabrir o wizard"* era o único item desta spec implementado só pela metade: o boot registrava um `eprintln!`, deixava o banco fechado, e o app abria com aparência normal e **todos** os comandos falhando com "Nenhuma pasta de armazenamento configurada ainda". Agora `config::evaluate_storage` decide, o comando `get_storage_status` responde, e o wizard reabre nomeando a pasta perdida — mantendo tema, idioma e o caminho anterior preenchido, para o caso de ser só um drive removível que voltou. 4 testes unitários cobrem a decisão.
 
 ---
 

@@ -146,6 +146,51 @@ pub fn db_path(base_path: &Path) -> PathBuf {
     base_path.join("localmind.db")
 }
 
+/// What the app knows about the storage folder at boot.
+///
+/// `configured` without `ready` is the case this type exists for: the pointer
+/// says onboarding is done, but the folder it points at is gone (external drive
+/// unplugged, folder moved or deleted between sessions). Before this, boot only
+/// logged the failure and left the database unopened, so the app came up
+/// looking normal and every single command failed with "Nenhuma pasta de
+/// armazenamento configurada ainda". The spec asks for a warning and the wizard.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct StorageStatus {
+    pub configured: bool,
+    pub ready: bool,
+    pub base_path: String,
+}
+
+/// The decision itself, split from the I/O so it can be tested.
+///
+/// `db_open` matters on its own: a folder that exists but whose `localmind.db`
+/// could not be opened (corrupted file, permissions) is just as unusable, and
+/// the wizard recovers both — `complete_onboarding` recreates the structure and
+/// reopens the connection.
+pub fn evaluate_storage(config: Option<&AppConfig>, dir_exists: bool, db_open: bool) -> StorageStatus {
+    match config {
+        Some(cfg) if cfg.onboarding_completed => StorageStatus {
+            configured: true,
+            ready: dir_exists && db_open,
+            base_path: cfg.base_path.clone(),
+        },
+        _ => StorageStatus {
+            configured: false,
+            ready: false,
+            base_path: String::new(),
+        },
+    }
+}
+
+pub fn storage_status(app: &AppHandle, db_open: bool) -> Result<StorageStatus, String> {
+    let cfg = load_config(app)?;
+    let dir_exists = cfg
+        .as_ref()
+        .map(|c| c.base_path_buf().is_dir())
+        .unwrap_or(false);
+    Ok(evaluate_storage(cfg.as_ref(), dir_exists, db_open))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,6 +228,52 @@ mod tests {
         // the portable bundle makes.
         let os_dir = Path::new("/os/config");
         assert!(resolve_bootstrap_dir(InstallFlavor::Portable, None, os_dir).is_err());
+    }
+
+    fn completed_config(base_path: &str) -> AppConfig {
+        AppConfig {
+            base_path: base_path.to_string(),
+            onboarding_completed: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_configured_and_present_folder_is_ready() {
+        let cfg = completed_config("/data/localmind");
+        let status = evaluate_storage(Some(&cfg), true, true);
+        assert!(status.configured && status.ready);
+        assert_eq!(status.base_path, "/data/localmind");
+    }
+
+    #[test]
+    fn a_folder_that_vanished_is_configured_but_not_ready() {
+        // The whole point: the app must not come up "ready" pointing at a
+        // folder that is not there. The path rides along so the warning can
+        // name it.
+        let cfg = completed_config("E:/localmind");
+        let status = evaluate_storage(Some(&cfg), false, false);
+        assert!(status.configured);
+        assert!(!status.ready);
+        assert_eq!(status.base_path, "E:/localmind");
+    }
+
+    #[test]
+    fn a_folder_that_exists_but_whose_database_failed_to_open_is_not_ready() {
+        let cfg = completed_config("/data/localmind");
+        assert!(!evaluate_storage(Some(&cfg), true, false).ready);
+    }
+
+    #[test]
+    fn no_config_and_unfinished_onboarding_both_mean_not_configured() {
+        assert!(!evaluate_storage(None, true, true).configured);
+
+        let mut cfg = completed_config("/data/localmind");
+        cfg.onboarding_completed = false;
+        let status = evaluate_storage(Some(&cfg), true, true);
+        assert!(!status.configured);
+        // Nothing to warn about yet, so no path is exposed.
+        assert_eq!(status.base_path, "");
     }
 
     #[test]

@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  applyVersion,
   bumpVersion,
   parseVersion,
   setCargoVersion,
   setJsonVersion,
   stripTagPrefix,
 } from "./bump-version.mjs";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("parseVersion accepts a well-formed version", () => {
   assert.deepEqual(parseVersion("1.2.3"), { major: 1, minor: 2, patch: 3 });
@@ -81,4 +87,17 @@ test("setCargoVersion only touches the [package] version", () => {
 test("setCargoVersion fails loudly on an unexpected manifest", () => {
   assert.throws(() => setCargoVersion('[dependencies]\nserde = "1"\n', "1.0.0"), /\[package\] section not found/);
   assert.throws(() => setCargoVersion('[package]\nname = "x"\n', "1.0.0"), /version key not found/);
+});
+
+// The whole point of pointing Tauri at package.json is that nobody has to
+// remember to update a second copy. If someone pastes a literal version back
+// into the config, the two can drift and only a release would reveal it.
+test("tauri.conf.json derives its version from package.json", () => {
+  const config = JSON.parse(readFileSync(join(ROOT, "src-tauri/tauri.conf.json"), "utf8"));
+  assert.equal(config.version, "../package.json");
+});
+
+test("applyVersion writes the three files that really hold a version", () => {
+  const written = applyVersion("9.9.9", { dryRun: true });
+  assert.deepEqual(written, ["package.json", "package-lock.json", "src-tauri/Cargo.toml"]);
 });

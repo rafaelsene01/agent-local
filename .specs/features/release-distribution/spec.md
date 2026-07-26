@@ -66,14 +66,14 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 
 1. WHEN o mantenedor abre o workflow de release no GitHub THEN o sistema SHALL oferecer **apenas** disparo manual (`workflow_dispatch`) com um select `bump` de três valores: `major`, `minor`, `patch`
 2. WHEN qualquer push ou merge acontece em `master` THEN o sistema SHALL **não** publicar release alguma
-3. WHEN o workflow roda THEN o sistema SHALL calcular a nova versão a partir da última tag `v*` aplicando o bump escolhido, e SHALL gravar essa mesma versão em `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `Cargo.lock`
+3. WHEN o workflow roda THEN o sistema SHALL calcular a nova versão a partir da última tag `v*` aplicando o bump escolhido, e SHALL gravar essa mesma versão em `package.json`, `package-lock.json`, `src-tauri/Cargo.toml` e `Cargo.lock` — o `src-tauri/tauri.conf.json` **deriva** a sua de `"../package.json"` e não é reescrito (revisão de 2026-07-26)
 4. WHEN não existe nenhuma tag `v*` no repositório THEN o sistema SHALL tratar a versão atual do `package.json` como "última publicada" e aplicar o bump sobre ela
 5. WHEN a versão é calculada THEN o sistema SHALL gerar/atualizar `CHANGELOG.md` a partir dos Conventional Commits desde a última tag, agrupados por tipo
 6. WHEN os arquivos são atualizados THEN o sistema SHALL criar um commit `chore(release): vX.Y.Z` em `master` e a tag `vX.Y.Z`, e SHALL publicar uma GitHub Release cujo corpo é a seção nova do CHANGELOG
 7. WHEN o workflow é disparado de uma ref diferente de `master` THEN o sistema SHALL falhar imediatamente, antes de qualquer build
 8. WHEN a tag calculada já existe no repositório THEN o sistema SHALL falhar com mensagem clara, sem sobrescrever nada
 
-**Independent Test**: Disparar o workflow com `patch` num repositório sem tags e confirmar: tag `v0.1.1` criada, `CHANGELOG.md` commitado, release `v0.1.1` publicada, e os 5 arquivos de versão todos em `0.1.1`.
+**Independent Test**: Disparar o workflow com `patch` num repositório sem tags e confirmar: tag `v0.1.1` criada, `CHANGELOG.md` commitado, release `v0.1.1` publicada, e os 4 arquivos de versão todos em `0.1.1` (o `tauri.conf.json` continua com `"../package.json"`, e o instalador gerado sai como `0.1.1`).
 
 ---
 
@@ -206,7 +206,7 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 | --- | --- | --- | --- |
 | REL-01 | P1: Release só por `workflow_dispatch` com select de bump | Implemented | Escrito, **não executado** |
 | REL-02 | P1: Push em `master` nunca publica release | Implemented | Verificado por inspeção (o arquivo não tem outro gatilho) |
-| REL-03 | P1: Versão calculada da última tag + bump, gravada nos 5 arquivos | Implemented | Verificado (unit + dry-run real) |
+| REL-03 | P1: Versão calculada da última tag + bump, gravada nos arquivos que a duplicam | Implemented | Verificado (unit + dry-run real). Revisão de 2026-07-26: 4 arquivos, não 5 — `tauri.conf.json` passou a derivar de `"../package.json"`, comportamento confirmado por experimento (um caminho inválido falha o build com "`tauri.conf.json > version` must be a semver string") |
 | REL-04 | P1: Sem tag anterior, versão do `package.json` é a base | Implemented | Verificado (dry-run sem `--base` leu `0.1.0`) |
 | REL-05 | P1: CHANGELOG gerado dos Conventional Commits desde a última tag | Implemented | Verificado (git-cliff rodado no histórico real) |
 | REL-06 | P1: Commit `chore(release)`, tag `vX.Y.Z` e GitHub Release na mesma execução | Implemented | Escrito, **não executado** |

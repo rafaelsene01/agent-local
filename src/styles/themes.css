@@ -42,8 +42,8 @@
   --accent-fg: #052e2b;
 }
 
-/* Warm cream palette in Claude's terracotta (#da7756). */
-:root[data-theme="claude"] {
+/* Warm cream palette built around a terracotta accent (#da7756). */
+:root[data-theme="terracotta"] {
   --bg-sidebar: #ede9de;
   --bg-app: #faf9f5;
   --bg-elevated: #e3ddd0;

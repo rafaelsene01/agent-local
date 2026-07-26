@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current Milestone:** M6 — Memória de conversa (RAG híbrido). M3.1, M7, M5 e M4 concluídos em 2026-07-25. Restam **M6 → M8**.
-**Status:** In Progress — **M8 já está planejado** (`.specs/features/release-distribution/`, 2026-07-26) e pode ser executado antes do M6, já que não depende dele.
+**Current Milestone:** M6 — Memória de conversa (RAG híbrido). **É o único milestone sem nada feito e sem spec.**
+**Status:** In Progress — M3.1, M7, M5 e M4 concluídos em 2026-07-25; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos).
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
 
@@ -93,18 +93,18 @@ flowchart TB
 
 ### Features
 
-**Connection Manager** — PLANNED
+**Connection Manager** — DONE
 
 - Detectar Ollama (`:11434`) e LM Studio (`:1234`); listar disponíveis; marcar quais usar (habilitar/desabilitar)
 - Status/saúde por conexão; adicionar conexão manual (URL)
 
-**Model Manager** — PLANNED
+**Model Manager** — DONE
 
 - Listar modelos instalados (para usar) e disponíveis para baixar
 - Filtrar modelos para download pela memória disponível (RAM do sistema; ocultar os que não cabem)
 - Baixar modelo com progresso (via API pull do Ollama)
 
-**Config de execução** — PLANNED
+**Config de execução** — DONE
 
 - Tamanho de contexto (context window) configurável
 - Escolha CPU vs GPU
@@ -192,7 +192,9 @@ flowchart TB
 
 ---
 
-## M6 — Memória de conversa (RAG híbrido) — PLANNED
+## M6 — Memória de conversa (RAG híbrido) — 📭 SEM SPEC, SEM CÓDIGO
+
+> **O único milestone que ainda não existe em lugar nenhum.** Não há `.specs/features/` para ele — só a AD-009 (decisão de usar RAG híbrido) e os três bullets abaixo. Nada foi implementado.
 
 **Goal:** Serializar a conversa e usá-la como memória via RAG híbrido, junto das outras camadas.
 **Target:** Chat lembra de coisas ditas muito antes (além da janela de contexto) recuperando turnos relevantes.
@@ -211,29 +213,31 @@ flowchart TB
 
 ---
 
-## M8 — Empacotamento & Distribuição — 📋 PLANEJADO (spec + design + tasks prontos, 2026-07-26)
+## M8 — Empacotamento & Distribuição — ⚙️ IMPLEMENTADO, NÃO PUBLICADO (2026-07-26)
+
+> **Leia isto antes de confiar no "implementado".** Código, workflows, scripts e UI estão todos escritos, com 123 testes Rust e 27 de script verdes. O que **não** aconteceu: nenhuma release foi publicada, nenhum instalador foi gerado, nenhum update foi aplicado. O gate desta feature é a T24, e ela continua aberta.
 
 **Goal:** Gerar os instaladores finais multiplataforma, publicá-los por disparo manual com versão semântica, e fazer o app se atualizar sozinho — inclusive sem direitos de administrador.
 **Target:** Um "Run workflow" + escolher `major`/`minor`/`patch` produz versão, CHANGELOG, tag e uma release com `.msi`, `-setup.exe`, `.deb`, `.AppImage` e `.zip` portátil, todos assinados. O app instalado **e** o portátil detectam a versão nova, perguntam e se atualizam.
 
-**Planejamento:** `.specs/features/release-distribution/` — `context.md` + `spec.md` (27 requisitos REL-01…REL-27) + `design.md` + `tasks.md` (24 tasks). Ver AD-034.
+**Spec:** `.specs/features/release-distribution/` — `context.md` + `spec.md` (27 requisitos REL-01…REL-27) + `design.md` + `tasks.md` (24 tasks). Ver AD-034.
 
 ### Features
 
-**Pipeline de release manual com versão semântica** — PLANNED (REL-01…REL-07, REL-25, REL-26)
+**Pipeline de release manual com versão semântica** — CÓDIGO PRONTO, NUNCA EXECUTADO (REL-01…REL-07, REL-25, REL-26)
 
 - `ci.yml`: valida todo push/PR (`npm run build`, `cargo test`, Conventional Commits)
 - `release.yml`: **só** `workflow_dispatch`, com select `bump`. Push em `master` nunca publica
-- Uma execução faz tudo: calcula a versão da última tag, grava nos 5 arquivos, gera CHANGELOG (git-cliff), commita, tagueia e publica
+- Uma execução faz tudo: calcula a versão da última tag, grava nos arquivos que a duplicam, gera CHANGELOG (git-cliff), commita, tagueia e publica
 
-**Instaladores + bundle portátil** — PLANNED (REL-08…REL-12)
+**Instaladores + bundle portátil** — CÓDIGO PRONTO, NENHUM ARTEFATO GERADO (REL-08…REL-12)
 
 - Matriz `windows-latest` + `ubuntu-22.04` via `tauri-action`; release nasce draft e só é publicada com todos os artefatos no lugar
 - NSIS em `installMode: currentUser` — instala em `%LOCALAPPDATA%`, **sem UAC**
 - `.zip` portátil de Windows assinado com a mesma chave minisign dos instaladores
 - Linux não ganha zip: o `.AppImage` já roda sem instalar e já é atualizável sem root
 
-**Auto-update nos dois modos** — PLANNED (REL-13…REL-24)
+**Auto-update nos dois modos** — CÓDIGO PRONTO, NUNCA EXERCITADO (REL-13…REL-24)
 
 - Modo detectado por arquivo marcador `.portable` ao lado do executável
 - Portátil grava config e dados ao lado do executável (nunca `%APPDATA%`)

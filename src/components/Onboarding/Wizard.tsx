@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen, Sparkles } from "lucide-react";
+import { AlertTriangle, FolderOpen, Sparkles } from "lucide-react";
 import { configApi } from "../../lib/configApi";
 import { applyLanguage } from "../../i18n";
 import { applyTheme, SUPPORTED_THEMES, DEFAULT_THEME, type Theme } from "../../lib/theme";
@@ -11,7 +11,7 @@ const THEME_LABEL_KEYS: Record<Theme, string> = {
   dark: "settings.themeDark",
   light: "settings.themeLight",
   ocean: "settings.themeOcean",
-  claude: "settings.themeClaude",
+  terracotta: "settings.themeTerracotta",
 };
 
 const LANGUAGE_LABEL_KEYS: Record<SupportedLanguage, string> = {
@@ -22,6 +22,8 @@ const LANGUAGE_LABEL_KEYS: Record<SupportedLanguage, string> = {
 export function Wizard() {
   const { t } = useTranslation();
   const completeOnboarding = useConfigStore((s) => s.completeOnboarding);
+  const missingBasePath = useConfigStore((s) => s.missingBasePath);
+  const savedConfig = useConfigStore((s) => s.config);
 
   const [basePath, setBasePath] = useState("");
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -30,8 +32,25 @@ export function Wizard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Recovering from a lost folder: keep pointing at the same path (plugging
+    // the drive back in makes one click enough) and keep the choices the user
+    // already made, instead of resetting them to the defaults.
+    if (missingBasePath) {
+      setBasePath(missingBasePath);
+      return;
+    }
     configApi.getDefaultBasePath().then(setBasePath).catch(() => {});
-  }, []);
+  }, [missingBasePath]);
+
+  useEffect(() => {
+    if (!savedConfig) return;
+    if (SUPPORTED_THEMES.includes(savedConfig.theme as Theme)) {
+      setTheme(savedConfig.theme as Theme);
+    }
+    if (SUPPORTED_LANGUAGES.includes(savedConfig.language as SupportedLanguage)) {
+      setLanguage(savedConfig.language as SupportedLanguage);
+    }
+  }, [savedConfig]);
 
   async function handleChooseFolder() {
     const picked = await configApi.pickFolder();
@@ -64,11 +83,22 @@ export function Wizard() {
       <div className="w-full max-w-md rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] p-6 shadow-xl">
         <div className="flex items-center gap-2">
           <Sparkles size={22} className="text-[var(--accent)]" />
-          <h1 className="text-lg font-semibold">{t("onboarding.welcomeTitle")}</h1>
+          <h1 className="text-lg font-semibold">
+            {missingBasePath ? t("onboarding.storageLostTitle") : t("onboarding.welcomeTitle")}
+          </h1>
         </div>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          {t("onboarding.welcomeSubtitle")}
+          {missingBasePath ? t("onboarding.storageLostSubtitle") : t("onboarding.welcomeSubtitle")}
         </p>
+
+        {missingBasePath && (
+          <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+            <p className="min-w-0 break-all">
+              {t("onboarding.storageLostWarning", { path: missingBasePath })}
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 space-y-5">
           <div>

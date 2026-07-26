@@ -57,7 +57,7 @@ rotacionar, quem estiver numa versão antiga precisa baixar a nova à mão uma
 O resto é automático, numa única execução:
 
 - calcula a versão a partir da última tag `v*` (na primeira vez, a partir do `package.json`);
-- grava a versão em `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml` e `Cargo.lock`;
+- grava a versão em `package.json`, `package-lock.json`, `Cargo.toml` e `Cargo.lock` (o `tauri.conf.json` não entra na lista: o campo `version` dele é `"../package.json"`, então o Tauri lê a versão de lá na hora do build);
 - gera o `CHANGELOG.md` a partir dos Conventional Commits desde a última tag;
 - commita `chore(release): vX.Y.Z`, cria a tag e faz o push;
 - compila e empacota no Windows e no Linux, assinando tudo;

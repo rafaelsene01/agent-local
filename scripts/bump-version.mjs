@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Writes one semantic version into every file that duplicates it.
 //
-// The version lives in four places that can silently drift apart
-// (package.json, package-lock.json, tauri.conf.json, Cargo.toml). This is the
-// single writer for all of them; the release workflow never edits them by hand.
+// The version lives in three places that can silently drift apart
+// (package.json, package-lock.json, Cargo.toml). This is the single writer for
+// all of them; the release workflow never edits them by hand.
+//
+// `tauri.conf.json` is deliberately NOT in the list: its `version` field is set
+// to `"../package.json"`, which Tauri resolves at build time. One less copy to
+// keep in sync.
 //
 // Usage:
 //   node scripts/bump-version.mjs <patch|minor|major> [--base X.Y.Z] [--dry-run]
@@ -69,7 +73,6 @@ export function setCargoVersion(source, version) {
 const TARGETS = [
   { file: "package.json", apply: setJsonVersion },
   { file: "package-lock.json", apply: setJsonVersion },
-  { file: "src-tauri/tauri.conf.json", apply: setJsonVersion },
   { file: "src-tauri/Cargo.toml", apply: setCargoVersion },
 ];
 

@@ -13,20 +13,39 @@ const CHARS_PER_TOKEN: usize = 4;
 /// Used when no context length was configured for the active model.
 const DEFAULT_CONTEXT_TOKENS: u32 = 4096;
 
-/// Room left for the model's own answer.
-const RESPONSE_RESERVE_TOKENS: u32 = 512;
-
 const TOP_K: usize = 4;
 const RECENT_HISTORY_LIMIT: usize = 20;
+
+/// How many candidates each namespace contributes before ranking. The winners
+/// are picked across namespaces, so every namespace has to offer more than the
+/// final count for the ranking to have anything to choose from.
+const PER_NAMESPACE_K: usize = TOP_K;
+
+/// Relevance floor, expressed relative to the best hit of the same query.
+///
+/// An absolute floor does not separate anything with this embedding model:
+/// measured on the real corpus (AD-025), an unrelated passage still scores
+/// 0.826 cosine against a paraphrase's 0.957 — squared-L2 distances of ~0.35
+/// and ~0.09. The ratio to the best hit does separate them.
+const RELATIVE_DISTANCE_FLOOR: f32 = 3.0;
+
+/// Keeps an exact match (distance 0) from making every other passage look
+/// irrelevant, since anything times zero is zero.
+const MIN_DISTANCE_CUTOFF: f32 = 0.1;
 
 /// The "don't offer more help" clauses are aimed at Phi-3.5's habit of closing
 /// every answer with a courtesy paragraph ("sinta-se à vontade para
 /// perguntar"). It reduces the filler; it doesn't eliminate it, because the
 /// tendency is the model's own.
+///
+/// Length is tied to the request rather than fixed at "as few sentences as
+/// possible": that wording fought every "continue this text" and "transcribe
+/// this passage", which is exactly what a document base gets asked for.
 const SYSTEM_PROMPT: &str = "Você é um assistente local e privado. Responda apenas o que foi \
-perguntado, no menor número de frases possível. Não repita a pergunta, não ofereça ajuda \
-adicional, não comente a própria resposta e não escreva parágrafos de cortesia. Diga claramente \
-quando não souber.";
+perguntado. Não repita a pergunta, não ofereça ajuda adicional, não comente a própria resposta \
+e não escreva parágrafos de cortesia. Ajuste o tamanho da resposta ao pedido: seja breve numa \
+pergunta objetiva e completo quando pedirem para continuar, transcrever ou detalhar um texto. \
+Diga claramente quando não souber.";
 
 /// The citation instruction rides with the context, not with the base prompt:
 /// a small model told to cite sources when none were given invents them —
@@ -41,9 +60,14 @@ fn source_block(label: &str, text: &str) -> String {
     format!("[fonte: {label}]\n{text}")
 }
 
+/// The room reserved for the answer is the same number the provider is told to
+/// generate. A fixed 512 here while `answer_token_budget` asked for up to 2048
+/// meant the prompt could be built right up to a limit the answer would then
+/// blow past — harmless on a 21760-token window, an overflow on a hand-set
+/// 4096 one.
 fn budget_chars(context_length: Option<u32>) -> usize {
     let total = context_length.unwrap_or(DEFAULT_CONTEXT_TOKENS);
-    let usable = total.saturating_sub(RESPONSE_RESERVE_TOKENS);
+    let usable = total.saturating_sub(crate::providers::answer_token_budget(context_length));
     usable as usize * CHARS_PER_TOKEN
 }
 
@@ -167,6 +191,18 @@ fn question_with_context(new_message: &str, context_blocks: &[String]) -> String
     )
 }
 
+/// The prompt plus what went wrong building it.
+///
+/// `retrieval_error` exists because a broken vector store used to be a single
+/// `eprintln!`: the answer came back with no documents in it and the user had
+/// no way to tell "the knowledge base failed" from "the model ignored my
+/// document" — which is literally the question that opened the AD-033
+/// investigation.
+pub struct Assembled {
+    pub messages: Vec<ChatMessage>,
+    pub retrieval_error: Option<String>,
+}
+
 /// Builds the final message list: system prompt, recent history, then the
 /// question with the retrieved passages attached to it. The question is never
 /// truncated — everything else is.
@@ -177,7 +213,7 @@ pub async fn assemble(
     new_message_id: &str,
     use_global_rag: bool,
     context_length: Option<u32>,
-) -> Result<Vec<ChatMessage>, String> {
+) -> Result<Assembled, String> {
     let mut budget = Budget {
         remaining: budget_chars(context_length).saturating_sub(new_message.len()),
     };
@@ -199,6 +235,7 @@ pub async fn assemble(
         vec![chat_ns.as_str()]
     };
 
+    let mut retrieval_error = None;
     if budget.remaining > 0 {
         match retrieve(app, &namespaces, new_message).await {
             Ok(chunks) => {
@@ -209,8 +246,12 @@ pub async fn assemble(
                 }
             }
             // Retrieval is an enhancement: a broken vector store or a missing
-            // embedding model must not block the conversation.
-            Err(e) => eprintln!("retrieval skipped: {e}"),
+            // embedding model must not block the conversation — but it is
+            // reported, not swallowed.
+            Err(e) => {
+                eprintln!("retrieval skipped: {e}");
+                retrieval_error = Some(e);
+            }
         }
     }
 
@@ -221,7 +262,10 @@ pub async fn assemble(
         new_message,
         &context_blocks,
     )));
-    Ok(merge_consecutive_turns(messages))
+    Ok(Assembled {
+        messages: merge_consecutive_turns(messages),
+        retrieval_error,
+    })
 }
 
 /// Chat templates assume the roles alternate. A generation that was cancelled
@@ -246,6 +290,44 @@ fn merge_consecutive_turns(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
     merged
 }
 
+/// A hit plus the namespace it came from, which the store does not carry back.
+#[derive(Debug, Clone)]
+struct Candidate {
+    namespace: String,
+    doc_id: String,
+    chunk_index: i32,
+    text: String,
+    distance: f32,
+}
+
+impl Candidate {
+    fn key(&self) -> (String, String, i32) {
+        (self.namespace.clone(), self.doc_id.clone(), self.chunk_index)
+    }
+}
+
+/// Ranks every candidate together and keeps the best `top_k`.
+///
+/// Taking `top_k` per namespace instead had two effects, both invisible until
+/// measured: the chat's own attachment always came before the document base no
+/// matter how weak the match, because namespace order decided it; and when the
+/// budget ran short the later namespace was the one truncated away.
+///
+/// Chunks with no score (NaN — see `rows_from_batch`) sort last and are never
+/// used to compute the cutoff, so a missing `_distance` degrades to the old
+/// behavior instead of dropping everything.
+fn rank_candidates(mut candidates: Vec<Candidate>, top_k: usize) -> Vec<Candidate> {
+    candidates.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+
+    if let Some(best) = candidates.iter().map(|c| c.distance).find(|d| !d.is_nan()) {
+        let cutoff = (best * RELATIVE_DISTANCE_FLOOR).max(MIN_DISTANCE_CUTOFF);
+        candidates.retain(|c| c.distance.is_nan() || c.distance <= cutoff);
+    }
+
+    candidates.truncate(top_k);
+    candidates
+}
+
 async fn retrieve(
     app: &AppHandle,
     namespaces: &[&str],
@@ -262,18 +344,50 @@ async fn retrieve(
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
 
-    let mut chunks = Vec::new();
+    let mut candidates = Vec::new();
     for namespace in namespaces {
         let found = store
-            .search(namespace, &query_vec, TOP_K)
+            .search(namespace, &query_vec, PER_NAMESPACE_K)
             .await
             .map_err(|e| e.to_string())?;
         for chunk in found {
-            let label = source_name(app, namespace, &chunk.doc_id);
-            chunks.push(source_block(&label, &chunk.text));
+            candidates.push(Candidate {
+                namespace: namespace.to_string(),
+                doc_id: chunk.doc_id,
+                chunk_index: chunk.chunk_index,
+                text: chunk.text,
+                distance: chunk.distance,
+            });
         }
     }
-    Ok(chunks)
+
+    let ranked = rank_candidates(candidates, TOP_K);
+    let selected: std::collections::HashSet<_> = ranked.iter().map(|c| c.key()).collect();
+
+    let mut blocks = Vec::new();
+    for candidate in &ranked {
+        let mut text = candidate.text.clone();
+        // The passage that continues a hit is the next chunk, not the next
+        // closest one. Skipped when that chunk was already selected on its own
+        // merit, which would otherwise duplicate it in the prompt.
+        let neighbor_key = (
+            candidate.namespace.clone(),
+            candidate.doc_id.clone(),
+            candidate.chunk_index + 1,
+        );
+        if !selected.contains(&neighbor_key) {
+            if let Ok(Some(next)) = store
+                .chunk_at(&candidate.namespace, &candidate.doc_id, candidate.chunk_index + 1)
+                .await
+            {
+                text.push('\n');
+                text.push_str(&next.text);
+            }
+        }
+        let label = source_name(app, &candidate.namespace, &candidate.doc_id);
+        blocks.push(source_block(&label, &text));
+    }
+    Ok(blocks)
 }
 
 /// Resolves a `doc_id` back to the file the user recognizes. Global chunks
@@ -301,6 +415,93 @@ fn source_name(app: &AppHandle, namespace: &str, doc_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn candidate(namespace: &str, chunk_index: i32, distance: f32) -> Candidate {
+        Candidate {
+            namespace: namespace.to_string(),
+            doc_id: "doc".to_string(),
+            chunk_index,
+            text: format!("{namespace}#{chunk_index}"),
+            distance,
+        }
+    }
+
+    #[test]
+    fn the_best_match_wins_regardless_of_which_namespace_it_came_from() {
+        // The chat attachment used to come first simply because its namespace
+        // was queried first, pushing a much closer document chunk out.
+        let ranked = rank_candidates(
+            vec![
+                candidate("chat:1", 0, 0.30),
+                candidate("global", 7, 0.09),
+                candidate("chat:1", 1, 0.25),
+            ],
+            3,
+        );
+
+        assert_eq!(ranked[0].namespace, "global");
+        assert!(ranked.windows(2).all(|w| w[0].distance <= w[1].distance));
+    }
+
+    #[test]
+    fn a_passage_far_worse_than_the_best_one_is_dropped() {
+        // Real numbers from AD-025: a paraphrase lands around 0.09 and an
+        // unrelated passage around 0.35 in squared-L2.
+        let ranked = rank_candidates(
+            vec![
+                candidate("global", 0, 0.09),
+                candidate("global", 1, 0.20),
+                candidate("global", 2, 0.35),
+            ],
+            4,
+        );
+
+        let kept: Vec<i32> = ranked.iter().map(|c| c.chunk_index).collect();
+        assert_eq!(kept, vec![0, 1]);
+    }
+
+    #[test]
+    fn an_exact_match_does_not_disqualify_everything_else() {
+        // distance * 3 is still zero, so without a minimum cutoff a verbatim
+        // hit would throw away every passage around it.
+        let ranked = rank_candidates(
+            vec![candidate("global", 0, 0.0), candidate("global", 1, 0.08)],
+            4,
+        );
+        assert_eq!(ranked.len(), 2);
+    }
+
+    #[test]
+    fn unscored_chunks_are_kept_and_sorted_last() {
+        let ranked = rank_candidates(
+            vec![candidate("global", 1, f32::NAN), candidate("global", 0, 0.09)],
+            4,
+        );
+        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked[0].chunk_index, 0);
+        assert!(ranked[1].distance.is_nan());
+    }
+
+    #[test]
+    fn ranking_keeps_at_most_top_k() {
+        let candidates = (0..10).map(|i| candidate("global", i, 0.09)).collect();
+        assert_eq!(rank_candidates(candidates, TOP_K).len(), TOP_K);
+    }
+
+    #[test]
+    fn the_prompt_budget_reserves_exactly_what_the_answer_is_allowed_to_use() {
+        // A 4096 window asks for at most 2048 answer tokens, so the prompt gets
+        // the other half — not 4096 - 512.
+        assert_eq!(
+            budget_chars(Some(4096)),
+            2048 * CHARS_PER_TOKEN,
+            "prompt budget must not overlap the answer budget"
+        );
+        assert_eq!(
+            budget_chars(Some(21760)),
+            (21760 - 2048) as usize * CHARS_PER_TOKEN
+        );
+    }
 
     #[test]
     fn budget_truncates_instead_of_dropping() {

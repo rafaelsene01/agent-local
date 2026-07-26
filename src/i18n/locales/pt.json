@@ -33,6 +33,8 @@
     "generating": "Gerando…",
     "fileDialogTitle": "Escolha os arquivos para anexar",
     "attachmentFailed": "O anexo \"{{name}}\" não pôde ser processado ({{reason}}) — a resposta foi gerada sem ele.",
+    "retrievalFailed": "Não foi possível buscar nos seus documentos ({{reason}}) — a resposta foi gerada sem eles.",
+    "dismiss": "Dispensar",
     "attachmentsRejected": "Arquivos não suportados ignorados: {{files}}"
   },
   "documents": {
@@ -166,7 +168,7 @@
     "themeDark": "Escuro",
     "themeLight": "Claro",
     "themeOcean": "Oceano",
-    "themeClaude": "Claude",
+    "themeTerracotta": "Terracota",
     "languageEnglish": "English",
     "languagePortuguese": "Português"
   },
@@ -179,6 +181,9 @@
     "themeLabel": "Escolha um tema",
     "languageLabel": "Escolha um idioma",
     "finish": "Começar",
-    "settingUp": "Configurando..."
+    "settingUp": "Configurando...",
+    "storageLostTitle": "Pasta de armazenamento não encontrada",
+    "storageLostSubtitle": "Confirme onde o LocalMind deve guardar seus dados para continuar.",
+    "storageLostWarning": "A pasta {{path}} não está mais disponível. Se ela estiver num drive removível, conecte-o de volta e escolha a mesma pasta; caso contrário, escolha outra. Os dados que estavam nela não são recuperados por esta etapa."
   }
 }

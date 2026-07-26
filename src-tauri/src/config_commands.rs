@@ -14,6 +14,15 @@ pub fn get_default_base_path(app: AppHandle) -> Result<String, String> {
     config::default_base_path(&app)
 }
 
+/// Lets the frontend tell "first run" apart from "the storage folder is gone".
+/// Both end at the wizard, but only the second one owes the user an
+/// explanation of why they are seeing it again.
+#[tauri::command]
+pub fn get_storage_status(app: AppHandle, db: State<DbState>) -> Result<config::StorageStatus, String> {
+    let db_open = db.0.lock().map(|guard| guard.is_some()).unwrap_or(false);
+    config::storage_status(&app, db_open)
+}
+
 #[tauri::command]
 pub fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
     match app.dialog().file().blocking_pick_folder() {

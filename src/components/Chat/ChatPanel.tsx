@@ -49,8 +49,10 @@ export function ChatPanel() {
     streamingChatId,
     generatingChatId,
     error,
+    retrievalWarning,
     createChat,
     setUseGlobalRag,
+    dismissRetrievalWarning,
   } = useChatStore();
   const activeChat = chats.find((c) => c.id === activeChatId);
   // Only this chat's own generation shows up here; another chat streaming in
@@ -143,6 +145,24 @@ export function ChatPanel() {
             })}
           </p>
         ))}
+
+        {/* Retrieval failing is silent from the outside: the answer arrives,
+            just without the documents. Saying so is the difference between a
+            bug the user can report and one they blame on the model. */}
+        {retrievalWarning && (
+          <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-500">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            <span className="min-w-0">
+              {t("chatPanel.retrievalFailed", { reason: retrievalWarning })}{" "}
+              <button
+                onClick={dismissRetrievalWarning}
+                className="underline underline-offset-2 hover:text-[var(--text-primary)]"
+              >
+                {t("chatPanel.dismiss")}
+              </button>
+            </span>
+          </p>
+        )}
 
         {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
         <div ref={bottomRef} />

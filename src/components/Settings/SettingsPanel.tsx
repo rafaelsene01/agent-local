@@ -12,7 +12,7 @@ const THEME_LABEL_KEYS: Record<Theme, string> = {
   dark: "settings.themeDark",
   light: "settings.themeLight",
   ocean: "settings.themeOcean",
-  claude: "settings.themeClaude",
+  terracotta: "settings.themeTerracotta",
 };
 
 const LANGUAGE_LABEL_KEYS: Record<SupportedLanguage, string> = {

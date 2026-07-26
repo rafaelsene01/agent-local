@@ -112,6 +112,7 @@ pub fn run() {
             chat_commands::list_chat_attachments,
             config_commands::get_app_config,
             config_commands::get_default_base_path,
+            config_commands::get_storage_status,
             config_commands::pick_folder,
             config_commands::complete_onboarding,
             config_commands::update_theme,

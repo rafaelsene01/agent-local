@@ -35,6 +35,13 @@ export interface ChatStreamChunk {
   error: string | null;
 }
 
+/** Mirrors `ChatRetrievalWarning` in chat_commands.rs. The answer still came;
+ *  it just came without the knowledge base. */
+export interface ChatRetrievalWarning {
+  chat_id: string;
+  reason: string;
+}
+
 export interface AppConfig {
   base_path: string;
   theme: string;
@@ -42,6 +49,15 @@ export interface AppConfig {
   onboarding_completed: boolean;
   auto_update_check: boolean;
   skipped_version: string | null;
+}
+
+/** Mirrors `StorageStatus` in config.rs. `configured && !ready` is the folder
+ *  that vanished between sessions: the wizard reopens with a warning naming
+ *  `base_path`, instead of the app booting with every command broken. */
+export interface StorageStatus {
+  configured: boolean;
+  ready: boolean;
+  base_path: string;
 }
 
 /** Mirrors `InstallFlavor` in update/mod.rs. Decided by a marker file next to

@@ -33,6 +33,8 @@
     "generating": "Generating…",
     "fileDialogTitle": "Choose files to attach",
     "attachmentFailed": "Attachment \"{{name}}\" could not be processed ({{reason}}) — the answer was generated without it.",
+    "retrievalFailed": "Your documents could not be searched ({{reason}}) — the answer was generated without them.",
+    "dismiss": "Dismiss",
     "attachmentsRejected": "Unsupported files ignored: {{files}}"
   },
   "documents": {
@@ -166,7 +168,7 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "themeOcean": "Ocean",
-    "themeClaude": "Claude",
+    "themeTerracotta": "Terracotta",
     "languageEnglish": "English",
     "languagePortuguese": "Português"
   },
@@ -179,6 +181,9 @@
     "themeLabel": "Pick a theme",
     "languageLabel": "Pick a language",
     "finish": "Get started",
-    "settingUp": "Setting up..."
+    "settingUp": "Setting up...",
+    "storageLostTitle": "Storage folder not found",
+    "storageLostSubtitle": "Confirm where LocalMind should store your data to continue.",
+    "storageLostWarning": "The folder {{path}} is no longer available. If it is on a removable drive, plug it back in and choose the same folder; otherwise pick a new one. Data that was inside it is not recovered by this step."
   }
 }

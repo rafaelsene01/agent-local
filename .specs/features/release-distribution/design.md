@@ -91,7 +91,7 @@ Ordem exata — as guardas vêm **antes** de qualquer escrita:
 2. **Guarda de branch (REL-07):** se `github.ref_name != 'master'` → falha.
 3. **Cálculo da versão (REL-03, REL-04):** última tag por `git tag --list 'v*' --sort=-v:refname | head -1`. Se não houver nenhuma, a base é a versão de `package.json`. Aplica o bump escolhido.
 4. **Guarda de tag (REL-07):** se `vX.Y.Z` já existe (local ou remoto) → falha antes de escrever qualquer arquivo.
-5. **`node scripts/bump-version.mjs <versão>`** — grava a versão nos 5 arquivos.
+5. **`node scripts/bump-version.mjs <versão>`** — grava a versão nos arquivos que a duplicam (revisão de 2026-07-26: 4, não 5 — ver abaixo).
 6. **CHANGELOG (REL-05):** `git-cliff` gera o arquivo completo e, numa segunda chamada, só a seção nova (para o corpo da release).
 7. **Commit + tag + push (REL-06):** `chore(release): vX.Y.Z`, tag anotada `vX.Y.Z`, push de ambos.
 8. **Outputs:** `version`, `tag`, `notes`.
@@ -138,11 +138,12 @@ Node puro, sem dependência. Recebe a versão nova e grava em:
 | --- | --- |
 | `package.json` | `version` |
 | `package-lock.json` | `version` e `packages[""].version` |
-| `src-tauri/tauri.conf.json` | `version` |
 | `src-tauri/Cargo.toml` | `[package] version` (primeira ocorrência, regex ancorada na seção) |
 | `src-tauri/Cargo.lock` | via `cargo update -p tauri-app --precise <versão>`… **não** — o lock é atualizado rodando `cargo metadata`/`cargo check` depois do bump do `Cargo.toml`, que é o caminho que não corre risco de corromper o arquivo |
 
 O parsing/serialização de versão semântica e a função de bump são **puras** → cobertas por teste unitário (ver Testing, abaixo).
+
+**Revisão de 2026-07-26 — `tauri.conf.json` saiu da tabela.** O schema do Tauri 2 aceita, no campo `version`, **ou** um semver **ou** o caminho de um `package.json` de onde ler a versão. Passou a ser `"../package.json"`: uma cópia a menos para divergir, e o próprio `tauri-build` valida — apontar para um arquivo inexistente falha o build com ``tauri.conf.json > version` must be a semver string`` (verificado por experimento nesta máquina, não deduzido do schema). Dois testes protegem a decisão: um afirma que o campo continua sendo o caminho, o outro que `applyVersion` escreve exatamente os três arquivos restantes.
 
 ---
 

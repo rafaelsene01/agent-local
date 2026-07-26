@@ -193,27 +193,48 @@ impl VectorStore {
 
         let mut out = Vec::new();
         for batch in batches {
-            let doc_ids = column_as_strings(&batch, "doc_id")?;
-            let texts = column_as_strings(&batch, "text")?;
-            let indexes = batch
-                .column_by_name("chunk_index")
-                .and_then(|c| c.as_any().downcast_ref::<Int32Array>())
-                .ok_or_else(|| StoreError::Backend("coluna chunk_index ausente".to_string()))?;
-            // LanceDB appends the distance of each row to the result set.
-            let distances = batch
-                .column_by_name("_distance")
-                .and_then(|c| c.as_any().downcast_ref::<arrow_array::Float32Array>());
-
-            for row in 0..batch.num_rows() {
-                out.push(RetrievedChunk {
-                    doc_id: doc_ids.value(row).to_string(),
-                    text: texts.value(row).to_string(),
-                    chunk_index: indexes.value(row),
-                    distance: distances.map(|d| d.value(row)).unwrap_or(f32::NAN),
-                });
-            }
+            out.extend(rows_from_batch(&batch)?);
         }
         Ok(out)
+    }
+
+    /// Fetches one chunk by its position in a document.
+    ///
+    /// Used to append the passage that immediately follows a hit: when someone
+    /// asks to continue a text, the continuation is in the next chunk far more
+    /// often than in whatever else the query happens to be close to.
+    pub async fn chunk_at(
+        &self,
+        namespace: &str,
+        doc_id: &str,
+        chunk_index: i32,
+    ) -> Result<Option<RetrievedChunk>, StoreError> {
+        let Some(table) = self.table().await? else {
+            return Ok(None);
+        };
+
+        let batches = table
+            .query()
+            .only_if(format!(
+                "namespace = '{}' AND doc_id = '{}' AND chunk_index = {}",
+                escape_sql(namespace),
+                escape_sql(doc_id),
+                chunk_index
+            ))
+            .limit(1)
+            .execute()
+            .await
+            .map_err(backend)?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(backend)?;
+
+        for batch in batches {
+            if let Some(chunk) = rows_from_batch(&batch)?.into_iter().next() {
+                return Ok(Some(chunk));
+            }
+        }
+        Ok(None)
     }
 
     pub async fn delete_by_doc(&self, namespace: &str, doc_id: &str) -> Result<(), StoreError> {
@@ -241,6 +262,29 @@ impl VectorStore {
             .map(|_| ())
             .map_err(backend)
     }
+}
+
+/// `_distance` is only present on vector searches; a plain filtered read has no
+/// score, and NaN says exactly that instead of pretending it is a perfect match.
+fn rows_from_batch(batch: &RecordBatch) -> Result<Vec<RetrievedChunk>, StoreError> {
+    let doc_ids = column_as_strings(batch, "doc_id")?;
+    let texts = column_as_strings(batch, "text")?;
+    let indexes = batch
+        .column_by_name("chunk_index")
+        .and_then(|c| c.as_any().downcast_ref::<Int32Array>())
+        .ok_or_else(|| StoreError::Backend("coluna chunk_index ausente".to_string()))?;
+    let distances = batch
+        .column_by_name("_distance")
+        .and_then(|c| c.as_any().downcast_ref::<arrow_array::Float32Array>());
+
+    Ok((0..batch.num_rows())
+        .map(|row| RetrievedChunk {
+            doc_id: doc_ids.value(row).to_string(),
+            text: texts.value(row).to_string(),
+            chunk_index: indexes.value(row),
+            distance: distances.map(|d| d.value(row)).unwrap_or(f32::NAN),
+        })
+        .collect())
 }
 
 fn column_as_strings<'a>(

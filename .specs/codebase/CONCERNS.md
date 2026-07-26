@@ -57,11 +57,11 @@ Riscos observados no código real (com caminho/arquivo como evidência), prioriz
 
 ## Baixo impacto
 
-### C-09: Sem linter, formatter ou CI
+### C-09: Sem linter nem formatter — CI resolvido pelo M8 (2026-07-26)
 
-**Evidência:** não existem `.eslintrc*`, `.prettierrc*`, `rustfmt.toml`, `clippy.toml` nem `.github/workflows/`.
-**Risco:** estilo mantido só por disciplina manual (as convenções em CONVENTIONS.md são reais, mas não são impostas por ferramenta). Nada impede um commit quebrar o build já que nada roda automaticamente.
-**Fix sugerido:** CI está planejado pro M8; `cargo clippy` e `prettier --check` são baratos de adicionar antes disso.
+**Evidência:** não existem `.eslintrc*`, `.prettierrc*`, `rustfmt.toml` nem `clippy.toml`. `.github/workflows/` **passou a existir** com o M8: `ci.yml` roda `npm run build`, `cargo test` e valida Conventional Commits em todo push e PR. **Nunca foi executado no GitHub**, porém — o repositório ainda não teve um push que o dispare.
+**Risco (o que sobrou):** estilo mantido só por disciplina manual. O build quebrado agora é pego pelo CI; o estilo divergente não.
+**Fix sugerido:** `cargo clippy -D warnings` e `cargo fmt --check` foram deixados **de fora do M8 de propósito** (AD-034): o código atual não passa, e introduzi-los junto com o CI viraria uma refatoração disfarçada. Entram depois de pagar as dívidas — o `cargo check` de hoje ainda emite 5 warnings de dead code, incluindo o C-11.
 
 ### C-10: Semeadura de conexão casa por `provider`, não por URL
 

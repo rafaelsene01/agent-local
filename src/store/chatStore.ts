@@ -2,7 +2,13 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { chatApi } from "../lib/chatApi";
 import i18n from "../i18n";
-import type { Chat, ChatAttachment, ChatStreamChunk, Message } from "../types";
+import type {
+  Chat,
+  ChatAttachment,
+  ChatRetrievalWarning,
+  ChatStreamChunk,
+  Message,
+} from "../types";
 
 interface ChatState {
   chats: Chat[];
@@ -17,6 +23,9 @@ interface ChatState {
   generatingChatId: string | null;
   isLoading: boolean;
   error: string | null;
+  /** Set when an answer was produced without the knowledge base because
+   *  retrieval failed. Distinct from `error`: the message itself worked. */
+  retrievalWarning: string | null;
 
   loadChats: () => Promise<void>;
   createChat: () => Promise<void>;
@@ -26,6 +35,7 @@ interface ChatState {
   setUseGlobalRag: (id: string, enabled: boolean) => Promise<void>;
   sendMessage: (content: string, attachmentPaths: string[]) => Promise<void>;
   cancelGeneration: () => Promise<void>;
+  dismissRetrievalWarning: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -38,6 +48,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   generatingChatId: null,
   isLoading: false,
   error: null,
+  retrievalWarning: null,
 
   loadChats: async () => {
     set({ isLoading: true, error: null });
@@ -62,7 +73,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Streaming state is left alone: coming back to a chat that is still
   // generating must show the answer it accumulated meanwhile.
   selectChat: async (id: string) => {
-    set({ activeChatId: id, error: null });
+    set({ activeChatId: id, error: null, retrievalWarning: null });
     try {
       const [messages, attachments] = await Promise.all([
         chatApi.listMessages(id),
@@ -132,6 +143,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamingChatId: chatId,
       streamingContent: "",
       error: null,
+      retrievalWarning: null,
     });
     try {
       await chatApi.sendMessage(chatId, content, attachmentPaths);
@@ -164,7 +176,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ error: String(err) });
     }
   },
+
+  dismissRetrievalWarning: () => set({ retrievalWarning: null }),
 }));
+
+// Retrieval failing is not the message failing: the answer is on its way, it
+// just has no documents behind it. Reported separately so the user can tell
+// "the knowledge base broke" from "the model ignored my document".
+listen<ChatRetrievalWarning>("chat-retrieval-warning", (event) => {
+  const { chat_id, reason } = event.payload;
+  if (useChatStore.getState().activeChatId !== chat_id) return;
+  useChatStore.setState({ retrievalWarning: reason });
+});
 
 listen<ChatStreamChunk>("chat-stream-chunk", (event) => {
   const { chat_id, delta, done, error } = event.payload;

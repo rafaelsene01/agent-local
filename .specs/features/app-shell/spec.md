@@ -89,14 +89,14 @@ O produto precisa de um esqueleto funcional (walking skeleton) antes de qualquer
 
 | Requirement ID | Story                          | Phase  | Status  |
 | --------------- | ------------------------------- | ------ | ------- |
-| SHELL-01       | P1: Sidebar de 3 zonas         | Tasks  | Pending |
-| SHELL-02       | P1: Estado vazio do painel     | Tasks  | Pending |
-| SHELL-03       | P1: Criar chat                 | Tasks  | Pending |
-| SHELL-04       | P1: Persistir/listar chats     | Tasks  | Pending |
-| SHELL-05       | P1: Selecionar chat ativo      | Tasks  | Pending |
-| SHELL-06       | P2: Renomear chat              | Tasks  | Pending |
-| SHELL-07       | P2: Excluir chat + mensagens   | Tasks  | Pending |
-| SHELL-08       | Edge: init DB + migrações      | Tasks  | Pending |
+| SHELL-01       | P1: Sidebar de 3 zonas         | Implemented | Implemented |
+| SHELL-02       | P1: Estado vazio do painel     | Implemented | Implemented |
+| SHELL-03       | P1: Criar chat                 | Implemented | Implemented |
+| SHELL-04       | P1: Persistir/listar chats     | Implemented | Implemented |
+| SHELL-05       | P1: Selecionar chat ativo      | Implemented | Implemented |
+| SHELL-06       | P2: Renomear chat              | Implemented | Implemented |
+| SHELL-07       | P2: Excluir chat + mensagens   | Implemented | Implemented |
+| SHELL-08       | Edge: init DB + migrações      | Implemented | Implemented |
 
 **ID format:** `SHELL-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
