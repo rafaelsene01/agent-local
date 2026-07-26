@@ -41,6 +41,8 @@
 - **O `retrievalWarning` é por chat ativo e some ao trocar de conversa.** Guardá-lo por chat seria mais estado para um aviso transitório.
 - **A migração do tema é do lado do frontend** (`normalizeTheme` + regravação da config no boot). O backend não valida tema, então não havia onde colocar uma migração de banco.
 
+**Primeira release disparada de verdade, e cancelada (2026-07-26):** `patch` → `prepare` passou em 20s e o build do Linux chegou a bundlar `.deb` e `.AppImage` em 26m15s, quando o mantenedor cancelou a execução. Isso expôs que o pipeline não tinha caminho de retentativa: tag e commit de versão vão para o remoto **antes** dos builds, então a interrupção queimou o número `0.1.1`. Entrou o job `cleanup` (`always()`, porque cancelamento não dispara `failure()`), que apaga release e tag e reverte o commit de versão — `git revert`, nunca force-push. O estado que ficou foi limpo na mão: tag apagada, commit revertido (`93feb2e`), `master` de volta em `0.1.0`, zero tags, zero releases. `actions/checkout` e `actions/setup-node` também subiram para `@v5`. Ver L-006.
+
 **Correção pós-auditoria, no mesmo dia — o CI rodou de verdade pela primeira vez e falhou:** `node --test "scripts/**/*.test.mjs"` não achou arquivo nenhum no runner. O glob entre aspas exigia que o **Node** o expandisse, e isso só existe a partir do Node 22 — o CI rodava Node 20 (fora de suporte desde abril de 2026), enquanto esta máquina roda Node 24 e passava. As aspas saíram (a shell expande no CI, o Node expande no Windows, verificado nas duas formas), o `node-version` foi para 24 nos quatro pontos dos dois workflows, e `engines.node: ">=22"` entrou no `package.json`. Ver L-005.
 
 **Não verificado (e não dá para verificar daqui):** nenhum dos fluxos novos foi exercitado clicando — o wizard de recuperação, o aviso de retrieval, o tema renomeado e o efeito prático da expansão de vizinho na qualidade das respostas seguem por verificar na UI.
@@ -474,6 +476,16 @@ _Nenhum._
 ---
 
 ## Lessons Learned
+
+### L-006: Um pipeline que escreve antes de construir precisa saber se desfazer (2026-07-26)
+
+A primeira execução do `release.yml` foi **cancelada** pelo mantenedor aos 29 minutos. Não foi falha — e mesmo assim deixou estrago: tag `v0.1.1` no remoto, commit `chore(release)` em `master`, nenhuma release, e o número `0.1.1` **queimado** (o disparo seguinte calcularia `0.1.2`, porque passaria a existir uma tag mais nova).
+
+A causa é de ordem, não de código: o `prepare` faz push do commit e da tag **antes** de qualquer build. Isso é conveniente — o `tauri-action` precisa da tag para anexar os artefatos — mas significa que toda interrupção entre "taguear" e "publicar" deixa o repositório num estado que nenhum disparo seguinte consegue reaproveitar.
+
+A lição não é "não escreva cedo": às vezes é preciso. É que **todo passo que escreve fora do runner antes do resultado estar garantido precisa de um caminho de desfazer**, e esse caminho tem que rodar com `always()`, porque cancelamento não é falha e não dispara `failure()`. O `cleanup` reverte com `git revert`, nunca com force-push — `master` é branch publicada, e uma reescrita quebraria todo clone para poupar um commit feio.
+
+Nota de método: o log colado pelo usuário mostrava só `Error: The operation was canceled`, que parece falha de infraestrutura. Quem respondeu isso foi o `gh run view` — `The run was canceled by @rafaelsene01`. Ler o estado real custou 20 segundos e evitou depurar um bug que não existia.
 
 ### L-005: "YAML válido" não é evidência de que o CI funciona — e o glob do `node --test` depende da versão do Node (2026-07-26)
 

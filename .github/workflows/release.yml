@@ -30,6 +30,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       notes: ${{ steps.notes.outputs.notes }}
+      release_sha: ${{ steps.commit.outputs.sha }}
     steps:
       # Guard first, before the checkout: nothing should be written if this is
       # the wrong branch.
@@ -39,11 +40,11 @@ jobs:
           echo "::error::Release só pode ser disparada a partir de master (veio de '${{ github.ref_name }}')"
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # version calculation and changelog need the full history
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -121,6 +122,7 @@ jobs:
           rm -f RELEASE_NOTES.md
 
       - name: Commitar e taguear
+        id: commit
         run: |
           set -euo pipefail
           git config user.name  'github-actions[bot]'
@@ -131,6 +133,9 @@ jobs:
           git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
           git push origin HEAD:master
           git push origin "${{ steps.version.outputs.tag }}"
+          # Handed to `cleanup`, which reverts exactly this commit if the run
+          # never reaches a published release.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Empacotar (${{ matrix.os }})
@@ -147,12 +152,12 @@ jobs:
             bundles: deb,appimage
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Build from the tag, so the artifact matches exactly what was tagged.
           ref: ${{ needs.prepare.outputs.tag }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -225,11 +230,11 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.tag }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
 
@@ -260,3 +265,62 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false
+
+  # `prepare` pushes the tag and the version commit before anything is built,
+  # so a build that fails — or that someone cancels — used to leave a tag
+  # pointing at a release that does not exist, and a version number burned:
+  # the next run would compute the one after it. Happened for real on the first
+  # release attempt (v0.1.1, cancelled at 29 min). This job puts the repository
+  # back where it was, so retrying reuses the same number.
+  cleanup:
+    name: Desfazer uma release interrompida
+    needs: [prepare, build, finalize]
+    # Only when `prepare` actually wrote something and the run did not end in a
+    # published release. `always()` is required for the job to run at all after
+    # a failed or cancelled dependency.
+    if: >-
+      always()
+      && needs.prepare.result == 'success'
+      && (needs.build.result != 'success' || needs.finalize.result != 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0 # the revert needs the release commit in history
+
+      - name: Apagar a release e a tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.prepare.outputs.tag }}"
+
+          # The draft goes first: deleting the tag underneath a release leaves
+          # the release behind, orphaned and undeletable by tag.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes
+            echo "Release $TAG apagada"
+          else
+            echo "Nenhuma release $TAG para apagar"
+          fi
+
+          git push origin ":refs/tags/$TAG" || echo "::warning::A tag $TAG já não existia no remoto"
+
+      - name: Reverter o commit de versão
+        run: |
+          set -euo pipefail
+          SHA="${{ needs.prepare.outputs.release_sha }}"
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # Revert, never force-push: master is a published branch and rewriting
+          # it would break every clone. A revert commit is ugly and safe.
+          if git revert --no-edit "$SHA"; then
+            git push origin HEAD:master
+            echo "Commit de versão $SHA revertido"
+          else
+            git revert --abort || true
+            echo "::error::Não foi possível reverter $SHA automaticamente (provavelmente houve outro push em master). A versão em package.json continua adiantada — reverta na mão antes da próxima release."
+            exit 1
+          fi

@@ -65,6 +65,12 @@ O resto é automático, numa única execução:
 - acrescenta a entrada portátil no `latest.json`;
 - **só então** tira a release do rascunho.
 
+### Se a execução falhar ou você cancelar
+
+O commit de versão e a tag são pushados **antes** dos builds (o `tauri-action` precisa da tag para anexar os artefatos). Por isso existe o job `cleanup`: quando a execução não chega a publicar, ele apaga a release e a tag e **reverte** o commit de versão, devolvendo o número para o próximo disparo. Nada de force-push — o revert aparece no histórico de propósito.
+
+Se o revert conflitar (alguém deu push em `master` no meio), o job falha com instrução: reverta o `chore(release)` na mão antes da próxima tentativa, senão a versão em `package.json` fica adiantada e o bump seguinte pula um número.
+
 Ao terminar, a release deve conter:
 
 ```

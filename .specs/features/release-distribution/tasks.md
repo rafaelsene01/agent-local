@@ -52,6 +52,24 @@ Error: Process completed with exit code 1.
 1. `npm run test:scripts` virou `node --test scripts/*.test.mjs` — **sem aspas**. Na shell do CI quem expande é a shell (funciona em qualquer Node); no Windows, onde o npm chama o `cmd.exe`, que não expande, quem expande é o Node. Verificado nas **duas** formas nesta máquina, 27 testes em cada.
 2. `node-version` passou de 20 para **24** nos quatro pontos dos dois workflows. O Node 20 saiu do suporte em abril de 2026 — o CI estava rodando numa versão morta. `engines.node: ">=22"` entrou no `package.json` para deixar o requisito escrito.
 
+Com isso, o `ci.yml` **rodou verde no GitHub em 2m17s** (run 30219419571) — a primeira validação real do pipeline.
+
+### Primeira execução real do `release.yml` (2026-07-26) — cancelada, e o que ela ensinou
+
+Disparada com `patch`. O `prepare` passou em 20s (versão `0.1.1`, CHANGELOG, commit, tag, push). Os dois builds rodaram ~29 min e **o mantenedor cancelou a execução** (`The run was canceled by @rafaelsene01` — não foi falha).
+
+**O que já funcionava, medido:** o build do Linux compilou o binário de release em **26m15s** e bundlou os dois artefatos antes do cancelamento — `LocalMind_0.1.1_amd64.deb` e `LocalMind_0.1.1_amd64.AppImage`. A metade Linux do REL-08 está essencialmente provada; o Windows ainda não terminou nenhuma vez.
+
+**O defeito de projeto que o cancelamento expôs:** o `prepare` faz push do commit e da tag **antes** de qualquer build. Uma interrupção deixava tag órfã, nenhuma release, e o número da versão **queimado** — o disparo seguinte calcularia `0.1.2`, porque a última tag passaria a ser `v0.1.1`. Não havia caminho de retentativa.
+
+**Correção — job `cleanup`:** roda com `if: always() && needs.prepare.result == 'success' && (needs.build.result != 'success' || needs.finalize.result != 'success')`, ou seja, sempre que o `prepare` escreveu algo e a execução não terminou em release publicada. Ele apaga a release (draft primeiro — apagar a tag por baixo deixaria a release órfã), apaga a tag, e **reverte** o commit de versão via `git revert`, nunca force-push: `master` é branch publicada. Se o revert conflitar (houve outro push no meio), ele falha alto com instrução em vez de tentar adivinhar. O `prepare` ganhou o output `release_sha` para o `cleanup` saber exatamente o que reverter.
+
+**Limpeza manual do estado que ficou:** tag `v0.1.1` apagada do remoto e do local, commit `chore(release): v0.1.1` revertido (`93feb2e`, pushado). `master` voltou a `0.1.0`, zero tags, zero releases — a próxima release com `patch` volta a ser a `0.1.1`.
+
+**Também corrigido:** `actions/checkout` e `actions/setup-node` subiram de `@v4` para `@v5` nos 10 pontos dos dois workflows. O log anotava `Node.js 20 is deprecated… being forced to run on Node.js 24` — é o runtime das actions, não o nosso `node-version`.
+
+**Decisão mantida:** `codegen-units = 1` + thin LTO continuam, apesar dos 26 min. O binário trafega inteiro em cada auto-update; o tempo de CI é o lado barato dessa troca.
+
 ---
 
 ## Execution Plan
