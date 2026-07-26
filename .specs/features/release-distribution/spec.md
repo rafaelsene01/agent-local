@@ -228,7 +228,7 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 | REL-22 | P2: Seção "Atualizações" em Configurações com a versão instalada | Implemented | Compila; **não clicado** |
 | REL-23 | P2: Botão "Verificar agora" com resultado visível nos dois casos | Implemented | Compila; **não clicado** |
 | REL-24 | P2: Toggle de opt-out persistido; desligado = zero rede no boot | Implemented | Persistência testada; **ausência de rede não medida** |
-| REL-25 | P2: CI de validação (`npm run build` + `cargo test`) em push e PR | Implemented | YAML válido; **não executado no GitHub** |
+| REL-25 | P2: CI de validação (`npm run build` + `cargo test`) em push e PR | Implemented | **Executado no GitHub em 2026-07-26**: falhou no job de scripts (glob de `node --test` + Node 20), corrigido. Os demais jobs ainda não foram vistos verdes de ponta a ponta |
 | REL-26 | P2: Validação de Conventional Commits em PR | Implemented | YAML válido; **não executado** |
 | REL-27 | P3: `strip` + LTO no perfil de release, redução medida | Partial | Perfil configurado; **medição pendente**. `lto` ficou `"thin"` e `panic = "abort"` ficou de fora — ver tasks.md |
 

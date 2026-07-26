@@ -41,6 +41,8 @@
 - **O `retrievalWarning` é por chat ativo e some ao trocar de conversa.** Guardá-lo por chat seria mais estado para um aviso transitório.
 - **A migração do tema é do lado do frontend** (`normalizeTheme` + regravação da config no boot). O backend não valida tema, então não havia onde colocar uma migração de banco.
 
+**Correção pós-auditoria, no mesmo dia — o CI rodou de verdade pela primeira vez e falhou:** `node --test "scripts/**/*.test.mjs"` não achou arquivo nenhum no runner. O glob entre aspas exigia que o **Node** o expandisse, e isso só existe a partir do Node 22 — o CI rodava Node 20 (fora de suporte desde abril de 2026), enquanto esta máquina roda Node 24 e passava. As aspas saíram (a shell expande no CI, o Node expande no Windows, verificado nas duas formas), o `node-version` foi para 24 nos quatro pontos dos dois workflows, e `engines.node: ">=22"` entrou no `package.json`. Ver L-005.
+
 **Não verificado (e não dá para verificar daqui):** nenhum dos fluxos novos foi exercitado clicando — o wizard de recuperação, o aviso de retrieval, o tema renomeado e o efeito prático da expansão de vizinho na qualidade das respostas seguem por verificar na UI.
 
 ### AD-035: M8 implementado — 23 de 24 tasks; a que falta não é código (2026-07-26)
@@ -472,6 +474,18 @@ _Nenhum._
 ---
 
 ## Lessons Learned
+
+### L-005: "YAML válido" não é evidência de que o CI funciona — e o glob do `node --test` depende da versão do Node (2026-07-26)
+
+O `ci.yml` foi marcado como pronto com a evidência "YAML validado com `yaml.safe_load`". Na **primeira execução real** ele falhou: `Could not find '.../scripts/**/*.test.mjs'`.
+
+O padrão estava entre aspas no `package.json`, o que impede a shell de expandi-lo — sobrava para o Node expandir, e o `--test` só ganhou suporte a glob no **Node 22**. O CI rodava Node 20; a máquina de desenvolvimento roda Node 24, onde o mesmo comando passa. Verde local, vermelho no CI, e nenhuma das duas coisas era mentira.
+
+Duas lições, não uma:
+- **Validar a sintaxe de um workflow prova só que ele é parseável.** Um workflow é código que só existe quando executa, exatamente como as AD-024/AD-028 já tinham mostrado para o app.
+- **Comando que depende de expansão de glob tem dois expansores possíveis** (a shell e o programa), e qual deles atua muda com o sistema e com a versão. A correção foi tirar as aspas, para que **qualquer um dos dois** resolva, e verificar as duas formas de propósito.
+
+De quebra, a falha revelou que o CI rodava **Node 20, fora de suporte desde abril de 2026**.
 
 ### L-004: `tauri signer generate` produz dois blobs base64 quase idênticos, e um deles é segredo (2026-07-26)
 

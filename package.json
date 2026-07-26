@@ -7,8 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "tauri": "tauri"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -2,9 +2,9 @@
 
 **Design**: `.specs/features/release-distribution/design.md`
 **Spec**: `.specs/features/release-distribution/spec.md`
-**Status**: In Progress — 22/24 implementadas em 2026-07-26; **T2 e T24 bloqueadas** (ver abaixo)
+**Status**: In Progress — **23/24 implementadas**; T2 concluída pelo mantenedor em 2026-07-26, **só a T24 continua aberta**
 
-> **T2 exige ação humana** (gerar o par de chaves e cadastrar os secrets no GitHub). Nenhum agente pode fazer isso sozinho — a execução para nessa task até o mantenedor rodar os comandos.
+> **T2 exigiu ação humana** (gerar o par de chaves e cadastrar os secrets no GitHub) e foi feita. A T24 depende de uma release publicada de verdade.
 
 ---
 
@@ -16,7 +16,7 @@
 | T2 | ✅ | Par gerado pelo mantenedor; `gh secret list` confirma `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (2026-07-26 19:36 UTC); `plugins.updater.pubkey` preenchida e validada (2 linhas, `minisign public key`, 42 bytes). **Incidente:** a chave **privada** foi colada primeiro por engano — pega antes de qualquer commit, e agora há um teste (`the_configured_public_key_is_a_public_key_and_parses`) que falha o `cargo test` se isso se repetir |
 | T3 | ✅ | 10 testes verdes. Conferido na mão: `patch` sobre `0.1.0` → `0.1.1`; `minor` sobre `v1.9.3` → `1.10.0` (prova que o bump não é lexicográfico) |
 | T4 | ✅ | `git cliff --unreleased --strip all` rodado contra o histórico real: 40+ commits agrupados em Novidades/Correções/Documentação/Refatoração/Testes/Manutenção, exit 0 |
-| T5 | ✅ | YAML validado com `yaml.safe_load`. **Não verificado:** execução real no GitHub |
+| T5 | ✅ | YAML validado com `yaml.safe_load`. **Executado no GitHub em 2026-07-26 e falhou na primeira vez** — ver "Primeira execução real", abaixo. Corrigido e re-verificado localmente nas duas formas (shell expandindo o glob e Node expandindo) |
 | T6 | ✅ | YAML válido; guardas de branch e de tag existente antes de qualquer escrita |
 | T7 | ✅ | 4 testes verdes; erro claro quando o binário não existe (exit 1). **Não verificado:** o zip em si (exige `tauri build`) |
 | T8 | ✅ | YAML válido. **Não verificado:** execução real |
@@ -34,7 +34,23 @@
 | T23 | ⚠️ Parcial | `[profile.release]` com `strip`, `codegen-units = 1`, `lto = "thin"`. **Desvios do plano:** `lto = true` (fat) virou `"thin"` — fat LTO sobre arrow/lancedb/onnx joga o build do CI para dezenas de minutos; e `panic = "abort"` ficou **de fora**, porque remove unwinding de que os stacks SQLite/Arrow podem depender. **Medição pendente** (exige build de release completo) |
 | T24 | ⛔ **Bloqueada** | Exige publicar release de verdade (depende de T2) e instalar/atualizar em conta sem administrador |
 
-**Totais medidos:** `cargo test` → **112 passando, 0 falhas, 4 ignorados** (74 antes do M8). `node --test "scripts/**/*.test.mjs"` → **25 passando**. `npm run build` limpo.
+**Totais medidos (atualizados em 2026-07-26 após a AD-036):** `cargo test` → **123 passando, 0 falhas, 4 ignorados** (112 antes, 74 antes do M8). `npm run test:scripts` → **27 passando** (eram 25). `npm run build` limpo.
+
+### Primeira execução real do `ci.yml` (2026-07-26)
+
+O job de scripts falhou:
+
+```
+> node --test "scripts/**/*.test.mjs"
+Could not find '/home/runner/work/agent-local/agent-local/scripts/**/*.test.mjs'
+Error: Process completed with exit code 1.
+```
+
+**Causa:** o padrão vinha entre aspas, o que impede a shell de expandi-lo, então quem tinha que expandir era o próprio Node — e o `--test` só ganhou suporte a glob a partir do Node 22. O CI rodava **Node 20**. Na máquina de desenvolvimento (Node 24) o mesmo comando passava, porque lá o Node expandia. Um caso clássico de verde local com vermelho no CI, e a prova de que "YAML válido" nunca foi evidência de que o workflow funciona.
+
+**Correção, em duas camadas:**
+1. `npm run test:scripts` virou `node --test scripts/*.test.mjs` — **sem aspas**. Na shell do CI quem expande é a shell (funciona em qualquer Node); no Windows, onde o npm chama o `cmd.exe`, que não expande, quem expande é o Node. Verificado nas **duas** formas nesta máquina, 27 testes em cada.
+2. `node-version` passou de 20 para **24** nos quatro pontos dos dois workflows. O Node 20 saiu do suporte em abril de 2026 — o CI estava rodando numa versão morta. `engines.node: ">=22"` entrou no `package.json` para deixar o requisito escrito.
 
 ---
 
@@ -143,7 +159,7 @@ Fase 7 — Verificação real
 - [x] `node scripts/bump-version.mjs <versão>` grava em `package.json`, `package-lock.json` (`version` e `packages[""].version`) e `src-tauri/Cargo.toml` (`[package] version`, sem tocar em versões de dependências). **Revisão de 2026-07-26:** `src-tauri/tauri.conf.json` saiu da lista — o campo `version` dele virou `"../package.json"`, que o Tauri resolve no build. Uma cópia a menos para divergir, e há teste que falha se alguém colar uma versão literal de volta
 - [ ] Função pura de bump exportada e testada: `1.2.3`+patch→`1.2.4`, +minor→`1.3.0`, +major→`2.0.0`, e `0.1.0`+minor→`0.2.0`
 - [ ] Versão inválida ou bump desconhecido → erro com exit code ≠ 0
-- [ ] Gate check passa: `node --test scripts/`
+- [x] Gate check passa: `npm run test:scripts`
 - [ ] Test count: ≥6 testes passam
 
 **Tests**: unit
@@ -241,7 +257,7 @@ Fase 7 — Verificação real
 - [ ] Falha com mensagem clara se o binário de origem não existir
 - [ ] Imprime o caminho absoluto do zip em stdout (o workflow consome isso)
 - [ ] Função de montagem do nome do arquivo é pura e testada
-- [ ] Gate check passa: `node --test scripts/`
+- [x] Gate check passa: `npm run test:scripts`
 - [ ] Test count: ≥8 testes passam no total do diretório (≥6 de T3 + ≥2 daqui)
 
 **Tests**: unit
@@ -290,7 +306,7 @@ Fase 7 — Verificação real
 - [ ] Acrescenta `platforms["windows-x86_64-portable"] = { url, signature }` preservando **todas** as chaves existentes
 - [ ] A URL do zip é **lida da lista de assets da release**, não montada por suposição (Open Question #4 do design)
 - [ ] Erro claro se o `latest.json` de entrada não tiver `platforms`
-- [ ] Gate check passa: `node --test scripts/`
+- [x] Gate check passa: `npm run test:scripts`
 - [ ] Test count: ≥11 testes passam no total do diretório
 
 **Tests**: unit
