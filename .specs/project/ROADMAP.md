@@ -1,7 +1,7 @@
 # Roadmap
 
 **Current Milestone:** M6 — Memória de conversa (RAG híbrido). M3.1, M7, M5 e M4 concluídos em 2026-07-25. Restam **M6 → M8**.
-**Status:** In Progress
+**Status:** In Progress — **M8 já está planejado** (`.specs/features/release-distribution/`, 2026-07-26) e pode ser executado antes do M6, já que não depende dele.
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
 
@@ -211,18 +211,37 @@ flowchart TB
 
 ---
 
-## M8 — Empacotamento & Distribuição — PLANNED
+## M8 — Empacotamento & Distribuição — 📋 PLANEJADO (spec + design + tasks prontos, 2026-07-26)
 
-**Goal:** Gerar os instaladores finais multiplataforma.
-**Target:** `.msi`/`.exe` (Windows) e `.AppImage`/`.deb` (Linux) no CI.
+**Goal:** Gerar os instaladores finais multiplataforma, publicá-los por disparo manual com versão semântica, e fazer o app se atualizar sozinho — inclusive sem direitos de administrador.
+**Target:** Um "Run workflow" + escolher `major`/`minor`/`patch` produz versão, CHANGELOG, tag e uma release com `.msi`, `-setup.exe`, `.deb`, `.AppImage` e `.zip` portátil, todos assinados. O app instalado **e** o portátil detectam a versão nova, perguntam e se atualizam.
+
+**Planejamento:** `.specs/features/release-distribution/` — `context.md` + `spec.md` (27 requisitos REL-01…REL-27) + `design.md` + `tasks.md` (24 tasks). Ver AD-034.
 
 ### Features
 
-**Build & Instaladores** — PLANNED
+**Pipeline de release manual com versão semântica** — PLANNED (REL-01…REL-07, REL-25, REL-26)
 
-- Bundler Tauri por SO (ícones, assinatura opcional)
-- GitHub Actions: matrix Windows + Linux, artefatos versionados
-- Auto-update (opcional); config inicial fica no wizard de 1º uso (não no instalador — AD-010)
+- `ci.yml`: valida todo push/PR (`npm run build`, `cargo test`, Conventional Commits)
+- `release.yml`: **só** `workflow_dispatch`, com select `bump`. Push em `master` nunca publica
+- Uma execução faz tudo: calcula a versão da última tag, grava nos 5 arquivos, gera CHANGELOG (git-cliff), commita, tagueia e publica
+
+**Instaladores + bundle portátil** — PLANNED (REL-08…REL-12)
+
+- Matriz `windows-latest` + `ubuntu-22.04` via `tauri-action`; release nasce draft e só é publicada com todos os artefatos no lugar
+- NSIS em `installMode: currentUser` — instala em `%LOCALAPPDATA%`, **sem UAC**
+- `.zip` portátil de Windows assinado com a mesma chave minisign dos instaladores
+- Linux não ganha zip: o `.AppImage` já roda sem instalar e já é atualizável sem root
+
+**Auto-update nos dois modos** — PLANNED (REL-13…REL-24)
+
+- Modo detectado por arquivo marcador `.portable` ao lado do executável
+- Portátil grava config e dados ao lado do executável (nunca `%APPDATA%`)
+- Instalado → `tauri-plugin-updater` oficial; portátil → troca de arquivos in-place (rename-then-replace, com rollback), sem elevação
+- Banner não bloqueante com Atualizar / Depois / Pular esta versão; Configurações ganha versão, "Verificar agora" e toggle de opt-out
+- Config inicial segue no wizard de 1º uso, não no instalador (AD-010)
+
+**Fora do escopo:** code signing (SmartScreen vai avisar), macOS, canal beta, delta updates.
 
 ---
 

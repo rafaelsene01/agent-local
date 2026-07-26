@@ -40,6 +40,32 @@ export interface AppConfig {
   theme: string;
   language: string;
   onboarding_completed: boolean;
+  auto_update_check: boolean;
+  skipped_version: string | null;
+}
+
+/** Mirrors `InstallFlavor` in update/mod.rs. Decided by a marker file next to
+ *  the executable, never by inspecting the install path. */
+export type InstallFlavor = "installed" | "portable";
+
+export interface UpdateInfo {
+  version: string;
+  current_version: string;
+  notes: string | null;
+  pub_date: string | null;
+  flavor: InstallFlavor;
+}
+
+export interface UpdateSettings {
+  current_version: string;
+  auto_check: boolean;
+  flavor: InstallFlavor;
+  skipped_version: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
 }
 
 /** Mirrors `DocumentStatus` in rag/pipeline.rs. Everything before `ready` is

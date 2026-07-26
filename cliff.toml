@@ -1,0 +1,57 @@
+# git-cliff configuration — generates CHANGELOG.md from Conventional Commits.
+# The release workflow calls this twice: once for the full file, once with
+# --unreleased --strip all for the GitHub Release body.
+
+[changelog]
+header = """
+# Changelog
+
+Todas as mudanças relevantes deste projeto são registradas aqui.
+O formato segue [Conventional Commits](https://www.conventionalcommits.org/)
+e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).\n
+"""
+
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Não lançado]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}\n
+"""
+
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+protect_breaking_commits = true
+
+commit_parsers = [
+  # Release commits are bookkeeping, not changes worth listing.
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^Merge ", skip = true },
+
+  { body = ".*BREAKING CHANGE", group = "Mudanças incompatíveis" },
+  { message = "^feat", group = "Novidades" },
+  { message = "^fix", group = "Correções" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refatoração" },
+  { message = "^docs", group = "Documentação" },
+  { message = "^test", group = "Testes" },
+  { message = "^ci", group = "Build e CI" },
+  { message = "^build", group = "Build e CI" },
+  { message = "^style", group = "Estilo" },
+  { message = "^chore", group = "Manutenção" },
+  { message = ".*", group = "Outros" },
+]
+
+filter_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"

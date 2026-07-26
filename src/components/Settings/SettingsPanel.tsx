@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, FolderOpen } from "lucide-react";
+import { ArrowLeft, FolderOpen, RefreshCw } from "lucide-react";
 import { useConfigStore } from "../../store/configStore";
 import { useUiStore } from "../../store/uiStore";
+import { useUpdateStore } from "../../store/updateStore";
 import { configApi } from "../../lib/configApi";
 import { SUPPORTED_THEMES, type Theme } from "../../lib/theme";
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "../../i18n";
@@ -24,6 +25,22 @@ export function SettingsPanel() {
   const { config, setTheme, setLanguage, setBasePath } = useConfigStore();
   const setActiveView = useUiStore((s) => s.setActiveView);
   const [isChangingFolder, setIsChangingFolder] = useState(false);
+
+  const {
+    settings: updateSettings,
+    available,
+    checking,
+    checkedManually,
+    error: updateError,
+    init: initUpdates,
+    checkNow,
+    setAutoCheck,
+  } = useUpdateStore();
+
+  // The panel can be opened before the boot effect has loaded settings.
+  useEffect(() => {
+    if (!updateSettings) void initUpdates();
+  }, [updateSettings, initUpdates]);
 
   if (!config) return null;
 
@@ -103,6 +120,63 @@ export function SettingsPanel() {
             <FolderOpen size={14} />
             {t("settings.changeFolder")}
           </button>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-medium">{t("settings.updates")}</h2>
+
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-elevated)] px-3 py-2 text-sm">
+            <span className="text-[var(--text-secondary)]">
+              {t("settings.currentVersion", {
+                version: updateSettings?.current_version ?? "—",
+              })}
+            </span>
+            {updateSettings && (
+              <span className="rounded-full border border-[var(--border-color)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">
+                {t(
+                  updateSettings.flavor === "portable"
+                    ? "settings.flavorPortable"
+                    : "settings.flavorInstalled",
+                )}
+              </span>
+            )}
+          </div>
+
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={updateSettings?.auto_check ?? true}
+              onChange={(e) => setAutoCheck(e.target.checked)}
+            />
+            <span>
+              {t("settings.autoUpdateCheck")}
+              <span className="block text-xs text-[var(--text-secondary)]">
+                {t("settings.autoUpdateCheckHint")}
+              </span>
+            </span>
+          </label>
+
+          <button
+            onClick={checkNow}
+            disabled={checking}
+            className="mt-3 flex items-center gap-1.5 rounded-md border border-[var(--border-color)] px-3 py-1.5 text-sm hover:bg-[var(--bg-elevated)] disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={checking ? "animate-spin" : undefined} />
+            {t("settings.checkForUpdates")}
+          </button>
+
+          {/* Unlike the boot check, a manual check always says something —
+              "you are up to date" is a real answer the user asked for. */}
+          {updateError ? (
+            <p className="mt-2 text-xs text-[var(--danger,#f87171)]">{updateError}</p>
+          ) : checkedManually ? (
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">
+              {available
+                ? t("settings.updateFound", { version: available.version })
+                : t("settings.upToDate")}
+            </p>
+          ) : null}
         </section>
       </div>
     </div>

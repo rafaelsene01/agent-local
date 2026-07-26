@@ -14,6 +14,8 @@ mod providers;
 mod rag;
 mod runtime;
 mod system_info;
+mod update;
+mod update_commands;
 
 use db::DbState;
 use runtime::process::SidecarState;
@@ -63,7 +65,12 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Removes the executable a previous portable update renamed aside.
+            // Runs before anything else so a leftover can never accumulate.
+            update_commands::cleanup_after_update();
+
             let handle = app.handle();
             let existing_conn = match config::load_config(handle) {
                 Ok(Some(cfg)) if cfg.onboarding_completed => {
@@ -130,6 +137,11 @@ pub fn run() {
             document_commands::import_documents,
             document_commands::list_documents,
             document_commands::delete_document,
+            update_commands::check_for_update,
+            update_commands::install_update,
+            update_commands::skip_update_version,
+            update_commands::get_update_settings,
+            update_commands::set_auto_update_check,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

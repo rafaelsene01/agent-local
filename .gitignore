@@ -26,3 +26,12 @@ dist-ssr
 # fastembed drops its ONNX model here when no cache dir is set (tests do
 # that). The app itself points the cache at the user's base folder.
 src-tauri/.fastembed_cache/
+
+# Updater signing keys. The PRIVATE key must never be committed — whoever has
+# it (plus the password) can sign an update that every installed copy of the
+# app will trust and install. It belongs in a password manager and in the
+# TAURI_SIGNING_PRIVATE_KEY repository secret, nowhere else.
+# The public key is not secret, but it lives in tauri.conf.json, not loose here.
+*.key
+*.key.pub
+localmind.key*

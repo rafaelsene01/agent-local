@@ -13,6 +13,11 @@ Ver planejamento completo em [`.specs/`](.specs/project/PROJECT.md) (visão, roa
 | **Windows: "Desktop development with C++"** | Linker MSVC exigido pelo Rust no Windows | Visual Studio Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
 | **Linux: libwebkit2gtk, build-essential, etc.** | Webview e build no Linux | ver checklist oficial: https://tauri.app/start/prerequisites/ |
 | **WebView2 Runtime (Windows)** | Renderização da UI | normalmente já vem no Windows 11 |
+| **protoc (Protocol Buffers)** | Exigido pelo `lance-encoding`, dependência do `lancedb`. **Sem ele o `cargo build` falha** com *"Could not find `protoc`"* | Windows: `winget install Google.Protobuf` · Linux: `apt install protobuf-compiler` |
+
+O **ONNX Runtime não** é pré-requisito de build: o app baixa a biblioteca na
+primeira indexação de documento, assim como faz com o binário do llama.cpp e com
+o pdfium.
 
 Checklist oficial e completo por SO: https://tauri.app/start/prerequisites/
 
@@ -50,7 +55,17 @@ Gera o instalador **para o sistema operacional em que o comando é executado** (
 - **Rodando no Windows** → `.msi` e `.exe` (NSIS) em `src-tauri/target/release/bundle/{msi,nsis}/`
 - **Rodando no Linux** → `.AppImage` e `.deb` em `src-tauri/target/release/bundle/{appimage,deb}/`
 
-Como esta máquina é Windows, `npm run tauri build` aqui produz apenas os instaladores Windows. Para gerar o instalador Linux, rode o mesmo comando em uma máquina/VM/container Linux, ou use CI (GitHub Actions com matrix `windows-latest` + `ubuntu-latest`) — planejado no roadmap como **M6 — Empacotamento & Distribuição**.
+Como esta máquina é Windows, `npm run tauri build` aqui produz apenas os instaladores Windows. Os artefatos das duas plataformas saem juntos pelo CI.
+
+## Publicar uma release
+
+Releases são **manuais**: nenhum push publica nada. Vá em **Actions → Release →
+Run workflow** e escolha `patch`, `minor` ou `major`; a execução cuida de versão,
+CHANGELOG, tag, instaladores (`.msi`, `-setup.exe`, `.deb`, `.AppImage`), bundle
+portátil e do manifesto de auto-update.
+
+O passo-a-passo, o setup da chave de assinatura e o que fazer quando o workflow
+falha no meio estão em **[docs/RELEASING.md](docs/RELEASING.md)**.
 
 Build só do frontend (sem empacotar o app nativo), útil para checar erros de TypeScript/Vite:
 

@@ -1,0 +1,261 @@
+name: Release
+
+# Manual only. There is deliberately no `push`, `tag` or `schedule` trigger in
+# this file — "a push never publishes a release" is structural, not a convention
+# someone has to remember.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Tipo de incremento da versão"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Versão, changelog e tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      # Guard first, before the checkout: nothing should be written if this is
+      # the wrong branch.
+      - name: Guarda — releases só saem de master
+        if: github.ref_name != 'master'
+        run: |
+          echo "::error::Release só pode ser disparada a partir de master (veio de '${{ github.ref_name }}')"
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # version calculation and changelog need the full history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Calcular a próxima versão
+        id: version
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            # No tag yet: the version currently in package.json is treated as the
+            # last released one, so the first release is a bump over it.
+            BASE=$(node -p "require('./package.json').version")
+            echo "Nenhuma tag encontrada; usando package.json como base ($BASE)"
+          else
+            BASE=${LAST_TAG#v}
+            echo "Última tag: $LAST_TAG (base $BASE)"
+          fi
+
+          VERSION=$(node scripts/bump-version.mjs "${{ inputs.bump }}" --base "$BASE" --dry-run)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Nova versão: $VERSION"
+
+      - name: Guarda — a tag não pode já existir
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::A tag $TAG já existe localmente"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::A tag $TAG já existe no remoto"
+            exit 1
+          fi
+
+      - name: Gravar a versão nos arquivos que a duplicam
+        run: node scripts/bump-version.mjs "${{ steps.version.outputs.version }}"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Atualizar Cargo.lock
+        # `cargo metadata` refreshes the lockfile without building anything, so
+        # this job needs neither protoc nor the webkit system dependencies.
+        run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 > /dev/null
+
+      - name: Gerar CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.version.outputs.tag }}
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Gerar as notas desta versão
+        uses: orhun/git-cliff-action@v4
+        id: cliff_notes
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.version.outputs.tag }} --unreleased --strip all
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
+      - name: Expor as notas como output
+        id: notes
+        run: |
+          {
+            echo 'notes<<RELEASE_NOTES_EOF'
+            cat RELEASE_NOTES.md
+            echo 'RELEASE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+          rm -f RELEASE_NOTES.md
+
+      - name: Commitar e taguear
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock CHANGELOG.md
+          git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
+          git push origin HEAD:master
+          git push origin "${{ steps.version.outputs.tag }}"
+
+  build:
+    name: Empacotar (${{ matrix.os }})
+    needs: prepare
+    # One platform failing must not cancel the other: a half-built draft is
+    # still salvageable, a cancelled one is not.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: msi,nsis
+          - os: ubuntu-22.04
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build from the tag, so the artifact matches exactly what was tagged.
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependências de sistema (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential \
+            file \
+            patchelf \
+            libfuse2 \
+            wget \
+            curl \
+            protobuf-compiler
+
+      - name: protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install protoc -y
+
+      - run: npm ci
+
+      - name: Build + bundle
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: LocalMind ${{ needs.prepare.outputs.tag }}
+          releaseBody: ${{ needs.prepare.outputs.notes }}
+          # Stays a draft until `finalize` confirms every artifact landed.
+          releaseDraft: true
+          prerelease: false
+          args: --bundles ${{ matrix.bundles }}
+
+      # Tauri has no portable target and the official updater has no portable
+      # path on Windows, so this bundle is assembled and signed by hand — with
+      # the same key, so both update paths share one trust root.
+      - name: Bundle portátil (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ZIP=$(node scripts/make-portable.mjs --version "${{ needs.prepare.outputs.version }}")
+          echo "Bundle portátil: $ZIP"
+          npx tauri signer sign "$ZIP"
+          gh release upload "${{ needs.prepare.outputs.tag }}" "$ZIP" "$ZIP.sig" --clobber
+
+  finalize:
+    name: Publicar a release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Injetar a entrada portátil no latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.prepare.outputs.tag }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ZIP_NAME="LocalMind_${VERSION}_x64-portable.zip"
+
+          gh release download "$TAG" -p latest.json -p "${ZIP_NAME}.sig" --clobber
+          # The asset URL is read from the release, never rebuilt from a guess:
+          # Tauri's artifact naming varies between versions and locales.
+          gh release view "$TAG" --json assets --jq '.assets' > assets.json
+
+          node scripts/patch-latest-json.mjs \
+            --manifest latest.json \
+            --key windows-x86_64-portable \
+            --assets assets.json \
+            --name "$ZIP_NAME" \
+            --signature-file "${ZIP_NAME}.sig"
+
+          gh release upload "$TAG" latest.json --clobber
+
+      - name: Publicar (sair de rascunho)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false

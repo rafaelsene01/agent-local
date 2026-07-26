@@ -1,11 +1,78 @@
 # State
 
 **Last Updated:** 2026-07-26
-**Current Work:** RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Current Work:** **M8 planejado em 2026-07-26** (ver AD-034): `.specs/features/release-distribution/` com `context.md` + `spec.md` (27 requisitos) + `design.md` + `tasks.md` (24 tasks), pronto para Execute e sem dependência do M6. Cobre as três coisas que o usuário pediu numa tacada: CI de release semântica com disparo **manual** (select `major`/`minor`/`patch`, e a execução faz versão + CHANGELOG + tag + release sozinha), artefatos de instalação em toda release (`.msi`, `-setup.exe`, `.deb`, `.AppImage`) **mais** um `.zip` portátil, e auto-update no app que funciona nos dois modos **sem pedir administrador**. Nada implementado ainda — é planejamento. Contexto anterior: RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-035: M8 implementado — 22 de 24 tasks; as 2 que faltam não são código (2026-07-26)
+
+**Decision:** Executado o `tasks.md` de `release-distribution` inteiro, menos o que exige um humano ou uma release de verdade. Entraram: dois workflows (`ci.yml`, `release.yml`), três scripts Node com teste (`bump-version`, `make-portable`, `patch-latest-json`), o módulo `update/` no backend (`mod`, `signature`, `manifest`, `portable`), `update_commands.rs`, a bifurcação portátil no `config.rs`, e a UI (banner + seção em Configurações).
+
+**Reason:** Pedido do usuário — "execute em paralelo todas task/spec não executada".
+
+**O que está bloqueado, e por quê:**
+- **T2 (chave de assinatura)** — `npx tauri signer generate` + `gh secret set` produzem um segredo que é do mantenedor; nenhum agente deve gerá-lo ou escolher a senha. `plugins.updater.pubkey` está `""` até isso ser feito, e **sem ele nada é assinado nem validado** — o pipeline roda, mas o auto-update não funciona.
+- **T24 (verificação real)** — depende da T2 e de instalar/atualizar numa conta Windows sem administrador.
+
+**Verificado de verdade (não é "compilou"):**
+- **O formato de chave do Tauri é mesmo a pegadinha que o design previu.** Rodando `npx tauri signer generate` e `sign` nesta máquina: o `.pub` é base64 de um arquivo minisign de 2 linhas, e o `.sig` é base64 do arquivo de 4 linhas — nenhum dos dois é o que `PublicKey::from_base64`/`Signature::decode` aceitam. A conversão virou `update::signature` com fixture real commitada; **assinatura válida passa, conteúdo adulterado é recusado**.
+- `tauri signer sign <FILE>` **escreve `<FILE>.sig` ao lado do arquivo** — confirmado, e é disso que o workflow depende para o zip portátil.
+- `git cliff` rodado contra o histórico real: 40+ commits agrupados corretamente, exit 0.
+- `bump-version.mjs`: `minor` sobre `v1.9.3` → `1.10.0` (bump numérico, não lexicográfico), e sem `--base` lê o `package.json`.
+- `is_newer("0.1.10", "0.1.9") == true` — o mesmo erro do outro lado, coberto por teste.
+- Ambos os workflows passam por `yaml.safe_load`.
+- `npm run build` limpo (1859 módulos); i18n com **158 chaves em EN e 158 em PT**, sem divergência.
+- **`cargo test`: 112 passando, 0 falhas, 4 ignorados** (eram 74 antes do M8 — 38 testes novos, todos em `update::*`, `config::` e nos scripts Node contados à parte: mais 25 em `node --test`).
+- **O app ainda sobe.** Esse era o risco real de regressão: registrar o `tauri-plugin-updater` com `pubkey: ""` poderia derrubar o boot. `npm run tauri dev` rodado — processo de pé por vários minutos, nenhum panic, nenhum erro no log. O plugin valida a chave em `app.updater()`, não na inicialização.
+- **`mainBinaryName` não afeta o `cargo run` de desenvolvimento** — em dev o binário continua `tauri-app.exe`; o rename para `LocalMind.exe` acontece no bundling. Ou seja, `scripts/make-portable.mjs` só pode ser exercitado depois de um `tauri build`, não de um `tauri dev`.
+
+**Trade-off/Notas (desvios conscientes do plano):**
+- **Os pacotes npm do `tauri-plugin-updater` não foram instalados.** O frontend fala só com os nossos 5 comandos; o plugin é usado apenas do lado Rust. Uma superfície de API em vez de duas.
+- **`lto = "thin"`, não `true`.** Fat LTO sobre arrow/lancedb/onnx joga o build do CI para dezenas de minutos por um ganho marginal. E **`panic = "abort"` ficou de fora**: removeria unwinding de que os stacks SQLite/Arrow podem depender, o que troca bytes por uma classe de crash que só aparece em produção. A **medição** do REL-27 segue pendente (exige build de release completo).
+- **`platform_key(Installed)` devolve `None`**, não uma chave de instalador. O design dizia "a chave do instalador", mas quem resolve isso no modo instalado é o próprio plugin — devolver uma chave que nunca usamos seria código morto que parece útil.
+- **`current_exe()` é lido antes da troca**, não depois: no Windows o caminho da imagem é cacheado no PEB e não acompanha o rename, então ler depois seria apostar em comportamento não documentado.
+- **`app.restart()` não serve no caminho portátil** (relançaria o `.old`); é spawn explícito do caminho novo + `exit(0)`.
+- **`pickAssetUrl` por substring é ambíguo na vida real**: `"…x64-portable.zip"` casa também com `"…x64-portable.zip.sig"`. O workflow usa `pickAssetUrlByName` (nome exato), e a versão por substring recusa ambiguidade em vez de escolher errado.
+- **`ci.yml` roda `cargo test` só em `ubuntu-22.04`**, não em matriz — decisão registrada na AD-034.
+- **Só o `.zip` portátil é Windows.** No Linux o AppImage já cobre o caso.
+
+**Não verificado (e não dá para verificar daqui):** publicar uma release, gerar os instaladores, o zip portátil real, instalar sem UAC, a troca de arquivos do update portátil, qualquer clique na UI nova, e se o `tauri-plugin-updater` de fato ignora a chave `windows-x86_64-portable` no `latest.json` (Open Question #2 do design — o plano B é um manifesto separado, uma linha no `finalize` e uma URL no `manifest.rs`).
+
+### AD-034: M8 planejado — release manual com versão semântica, bundle portátil e auto-update sem administrador (2026-07-26)
+
+**Decision:** Planejamento completo do M8 em `.specs/features/release-distribution/` (context + spec + design + tasks). Quatro escolhas fecharam o desenho, todas confirmadas pelo usuário por pergunta direta:
+
+1. **Branches:** `master` + feature branches. Sem `develop`, sem `release/*` — projeto solo, um mantenedor. Releases saem sempre de `master` e o workflow recusa disparo de qualquer outra ref.
+2. **Versionamento:** `workflow_dispatch` com **select `major`/`minor`/`patch`** — o usuário escolhe o bump, e a mesma execução calcula a versão a partir da última tag, grava nos 5 arquivos que a duplicam, gera o CHANGELOG (git-cliff, dos Conventional Commits), commita, tagueia e publica a release. Nenhuma versão digitada à mão. Descartados `semantic-release`/`release-please`: deduzir a versão dos commits foi explicitamente recusado.
+3. **Artefatos:** instaladores nativos **e** `.zip` portátil, com **dois caminhos de atualização e uma única UI** — instalado usa o `tauri-plugin-updater` oficial, portátil usa atualizador próprio.
+4. **UX:** verifica no boot + botão "Verificar agora" em Configurações + **toggle de opt-out** (padrão ligado).
+
+**Reason:** Pedido literal do usuário — *"ajuste o CI do gitflow, para termos releases semânticas, mas lançamento de novas release eu quero engatilhar manualmente… pois pode ter computador que não deixa instalar, pedindo credenciais de administrador"*.
+
+**Pesquisa obrigatória cumprida (verificada, não deduzida):**
+- **O updater oficial do Tauri 2 aceita só `.msi`, NSIS `-setup.exe` e `.AppImage`** — **não** tem suporte a portátil/zip no Windows. É esta a razão de o modo portátil precisar de código próprio; não é preferência.
+- **O NSIS do Tauri já usa `installMode: currentUser` por padrão** (instala em `%LOCALAPPDATA%`, sem UAC). Ou seja, boa parte do problema de admin já se resolve por config — o portátil cobre o caso mais duro (política que bloqueia instaladores, execução de pendrive).
+- **`tauri signer sign <FILE>` assina arquivo arbitrário** — confirmado rodando `npx tauri signer sign --help` nesta máquina. Logo o zip portátil usa **a mesma chave** dos instaladores: um segredo, uma rotação, uma superfície de confiança.
+- **`minisign-verify` 0.2.5** (zero deps, ~4,1M downloads) é o que valida a assinatura do lado do app. **Pegadinha registrada no design:** o `tauri signer` emite o *arquivo* minisign inteiro em base64 (2 linhas, com `untrusted comment:`), enquanto o crate espera a linha da chave — a conversão é pura string e ganhou teste unitário com par de chaves real, porque é o tipo de bug que passa em `cargo check` e só falha no dia do update.
+- **`tauri-plugin-updater` 2.10.1** (2026-04-04); desde a 2.10.0 o `latest.json` aceita chaves `{os}-{arch}-{installer}`. `platforms` é um mapa, então uma chave extra `windows-x86_64-portable` convive com as oficiais — um manifesto, dois leitores.
+- **Linux precisa compilar em `ubuntu-22.04`**: base mais nova eleva o glibc mínimo e quebra em máquinas antigas.
+
+**Trade-off/Notas:**
+- **Portátil é Windows-only.** No Linux o `.AppImage` já roda sem instalar, já é atualizável pelo plugin oficial sem root, e embute o `webkit2gtk` que o binário nu exigiria do sistema — um zip de Linux seria estritamente pior.
+- **Troca de arquivos sem processo auxiliar:** no Windows não se sobrescreve um `.exe` em execução, mas **se renomeia**. O fluxo é rename-then-replace com rollback; dispensa um helper que seria mais um binário para assinar, distribuir e explicar ao antivírus corporativo. `app.restart()` não serve depois do rename (aponta para o `.old`) — é spawn explícito + `exit(0)`.
+- **Tensão real com o offline-first do PROJECT.md:** verificar update é chamada de rede. O toggle de opt-out é o que a transforma em escolha do usuário, e a verificação só roda **depois** do onboarding concluído. Foi decisão do usuário deixar ligado por padrão.
+- **Modo detectado por marcador `.portable`**, não por caminho: NSIS `currentUser` instala em `%LOCALAPPDATA%` e o portátil pode ser descompactado em qualquer lugar, inclusive `Program Files`.
+- **O portátil obriga a mexer no `config.rs`:** um app "portátil" que grava em `%APPDATA%` não é portátil. `bootstrap_file_path` e `default_base_path` ganham uma bifurcação por modo — a AD-012 e a AD-008 seguem valendo, muda só *onde* o ponteiro mora.
+- **`cargo test` só em `ubuntu-22.04` no CI de validação**, não em matriz: o build é caro (lancedb/fastembed/rusqlite bundled) e o que diverge por SO é o *bundling*, exercitado na release.
+- **`mainBinaryName` vai mudar** de `tauri-app` para `LocalMind` — hoje o executável compilado se chama `tauri-app.exe` apesar do `productName` ser `LocalMind`. Não há release publicada, é a hora certa.
+- **Fora de escopo por decisão:** code signing (sem certificado, o SmartScreen vai avisar na 1ª execução), macOS, canal beta, delta updates, e `clippy -D warnings`/`fmt --check` no CI (o código atual não passa — ver as dívidas da AD-033 — e isso viraria uma refatoração disfarçada de "introduzir CI").
+
+**Números do estado atual que o plano precisa encarar:** `.github/` não existe; **zero tags**; versão `0.1.0` repetida em 3 arquivos; `tauri-app.exe` com **226 MB** (é isso que trafega em cada atualização — daí o REL-27 de `strip`+LTO, com a redução a ser **medida**, não estimada).
+
+**Impact:** M8 sai de "PLANNED sem spec" para planejado por inteiro no ROADMAP. Resolve o C-09 do CONCERNS.md (sem linter/CI) na parte de CI. **Nada implementado** — o gate `full` desta feature não é "compila", é uma release publicada de verdade e um update aplicado de verdade nos dois modos (T24), justamente a classe de coisa que as AD-024/AD-028 mostraram que só aparece quando se executa.
 
 ### AD-033: O `pdf-extract` corrompia metade do corpus, e o contexto do RAG estava no lugar errado do prompt — corrige a AD-032 (2026-07-26)
 
@@ -366,6 +433,13 @@ _Nenhum._
 
 ## Lessons Learned
 
+### L-004: `tauri signer generate` produz dois blobs base64 quase idênticos, e um deles é segredo (2026-07-26)
+
+**Context:** Fechando a T2 do M8, o mantenedor gerou o par de chaves e colou o valor em `plugins.updater.pubkey` do `tauri.conf.json`.
+**Problem:** O que foi colado era o conteúdo de `localmind.key` — a chave **privada**. Os dois arquivos (`.key` e `.key.pub`) são blobs base64 de tamanho parecido, sem nada no valor que denuncie qual é qual; a diferença só aparece **depois** de decodificar (`rsign encrypted secret key` vs `minisign public key`). O `tauri.conf.json` é versionado, então o passo seguinte natural — commitar — teria colocado a chave privada no repositório. E o modo de falha funcional era igualmente tardio: nem o plugin nem o nosso `decode_pubkey` reclamam na inicialização, só em `app.updater()` ou na hora de verificar um download.
+**Solution:** Pego antes de qualquer commit (`HEAD` ainda era `9cf3fe7`, arquivo só modificado no working tree) porque o valor foi decodificado antes de seguir adiante. Substituído pelo `.key.pub` de verdade e validado: 2 linhas, `minisign public key`, 42 bytes. A chave estava cifrada com senha e nunca saiu da máquina — não houve exposição e não foi preciso rotacionar.
+**Prevents:** Entrou o teste `update::signature::the_configured_public_key_is_a_public_key_and_parses`, que lê o `tauri.conf.json` via `include_str!`, decodifica a `pubkey` e falha o `cargo test` se ela estiver vazia, se contiver `secret key`, ou se não parsear. A regra geral: **valor opaco em arquivo versionado se decodifica e se confere antes de commitar** — "parece a chave certa" não é verificação, e aqui o custo do engano seria um segredo publicado.
+
 ### L-001: `create-tauri-app --force` apaga o conteúdo existente do diretório (2026-07-24)
 
 **Context:** Rodei `npx create-tauri-app@latest . -f` dentro de `D:\chat-ia-local`, que já continha `.specs/` com PROJECT.md, ROADMAP.md, STATE.md e o spec do app-shell.
@@ -407,6 +481,11 @@ _Nenhum._
 - [ ] Detecção de VRAM por GPU para filtragem de modelos mais precisa — Captured during: replanejamento (M3 começa só com RAM)
 - [ ] Build CUDA do llama.cpp embutido, para quem tem NVIDIA de ponta (~35% mais rápido em prompt processing que Vulkan) — Captured during: design do M7 (ver AD-022)
 - [ ] Atualizar o binário do llama.cpp embutido para releases mais novos (v1 fixa o tag resolvido no primeiro download) — Captured during: spec do M7
+- [ ] Code signing de verdade (certificado Authenticode / notarização) — Captured during: planejamento do M8 (AD-034); é custo e burocracia externa, não código
+- [ ] Canal beta / pré-releases (`0.4.0-beta.1`) para testar o auto-update antes de soltar estável — Captured during: planejamento do M8; recusado em favor de `master` puro
+- [ ] Delta updates (baixar só o diff em vez do bundle inteiro de ~226 MB) — Captured during: planejamento do M8
+- [ ] Rollback para a versão anterior pela UI (o `.old` da troca portátil já dá um caminho manual de emergência) — Captured during: planejamento do M8
+- [ ] `cargo clippy -D warnings` e `cargo fmt --check` no CI — Captured during: planejamento do M8; o código atual não passa hoje, então entra depois de pagar as dívidas da AD-033
 
 ---
 
@@ -429,7 +508,10 @@ _Nenhum._
 - [ ] **Pré-requisito de build novo**: `protoc` (instalado via winget nesta máquina) é obrigatório para compilar o `lancedb` — documentar no README/STACK antes de qualquer outra pessoa clonar o repo
 - [ ] O `onnxruntime.dll` é baixado em runtime na primeira indexação (~79 MB); nunca foi exercitado pelo caminho do app (só por teste com a DLL apontada à mão) — confirmar que `rag::onnxruntime::ensure_dylib` baixa e extrai certo
 - [ ] Encarar os itens de `.specs/codebase/CONCERNS.md` não cobertos pelas features planejadas: C-03 (espelhamento manual de tipos Rust↔TS), C-04 (zero teste no frontend), C-06 (polling de download do LM Studio sem timeout), C-09 (sem linter/CI), C-10, C-11
-- [ ] Avaliar assinatura de código dos instaladores (Windows) — design M8
+- [ ] **Executar `release-distribution` tasks.md** (24 tasks, M8) — não depende do M6, pode ir antes. **T2 trava até o mantenedor rodar `npx tauri signer generate` e cadastrar `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` via `gh secret set`** — nenhum agente faz isso sozinho
+- [ ] **T24 do M8 é verificação real, não build**: publicar release de verdade, instalar o `-setup.exe` numa conta **sem** direitos de administrador (zero prompts de UAC), rodar o zip portátil e confirmar que nada foi escrito em `%APPDATA%`, e aplicar uma atualização de verdade nos dois modos
+- [ ] Confirmar na execução do M8 as Open Questions do design: flag `--bundles` da versão corrente do `tauri-action`; se o `tauri-plugin-updater` ignora mesmo a chave `windows-x86_64-portable` no `latest.json` (plano B: manifesto separado); comando que atualiza a versão no `Cargo.lock` sem tocar em mais nada; e os nomes exatos dos artefatos (o `patch-latest-json.mjs` deve **ler** os assets da release, não presumir os nomes)
+- [ ] Avaliar assinatura de código dos instaladores (Windows) — fora do escopo do M8 por decisão (AD-034); sem certificado, o SmartScreen avisa na 1ª execução
 - [ ] Depois do M1, avaliar excluir os ícones padrão do template (`Square*.png`, `StoreLogo.png`) não usados no bundle final
 
 ---

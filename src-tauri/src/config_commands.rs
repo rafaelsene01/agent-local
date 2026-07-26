@@ -51,6 +51,7 @@ pub fn complete_onboarding(
         theme,
         language,
         onboarding_completed: true,
+        ..Default::default()
     };
     config::save_config(&app, &cfg)?;
     Ok(cfg)
