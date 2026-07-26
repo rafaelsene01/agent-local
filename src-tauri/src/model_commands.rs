@@ -2,7 +2,7 @@ use crate::connections::{self, Connection};
 use crate::embedded_commands;
 use crate::db::{require_conn, DbState};
 use crate::models::catalog::{curated_models, CuratedModelInfo};
-use crate::providers::{embedded, ConfigApplied, GpuOffload, InstalledModel, PullProgress};
+use crate::providers::{embedded, ConfigApplied, GpuOffload, InstalledModel, ModelLimits, PullProgress};
 use crate::system_info;
 use rusqlite::{params, Connection as SqlConnection, OptionalExtension};
 use serde::Serialize;
@@ -140,11 +140,29 @@ pub async fn pull_model(
 /// belongs to (ACTIVE-05): two separate calls would leave a window where the
 /// active model belongs to an inactive connection.
 #[tauri::command]
-pub fn set_active_model(
-    db: State<DbState>,
+pub async fn set_active_model(
+    app: AppHandle,
+    db: State<'_, DbState>,
     connection_id: String,
     model_name: String,
 ) -> Result<(), String> {
+    let provider = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::list_connections(sql)?
+            .into_iter()
+            .find(|c| c.id == connection_id)
+            .map(|c| c.provider)
+            .ok_or_else(|| "Conexão não encontrada".to_string())?
+    };
+
+    // The embedded sidecar has to be pointed at the new file (and restarted)
+    // before the choice is recorded — a failure here must not leave a model
+    // marked active that the runtime isn't actually serving.
+    if provider == "embedded" {
+        embedded_commands::apply_active_model(&app, &db, &model_name).await?;
+    }
+
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
 
@@ -201,6 +219,32 @@ pub fn get_active_pair(db: State<DbState>) -> Result<ActivePair, String> {
         .map_err(|e| e.to_string())?;
 
     Ok(ActivePair { connection, model })
+}
+
+/// Feeds the context-length field its ceiling (CONN-12): each model has a
+/// trained window and typing past it either errors or is silently clamped by
+/// the runtime.
+#[tauri::command]
+pub async fn model_limits(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    connection_id: String,
+    model_name: String,
+) -> Result<ModelLimits, String> {
+    let manager = embedded_commands::manager(&app);
+    let conn = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        connections::list_connections(sql)?
+            .into_iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| "Conexão não encontrada".to_string())?
+    };
+    manager
+        .provider_for(&conn)
+        .model_limits(&model_name)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

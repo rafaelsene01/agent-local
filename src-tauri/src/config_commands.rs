@@ -35,6 +35,10 @@ pub fn complete_onboarding(
 ) -> Result<AppConfig, String> {
     let base = PathBuf::from(&base_path);
     config::ensure_folder_structure(&base)?;
+    // Boot ran before this folder existed, so the embedding model would
+    // otherwise download into a hidden cache instead of the chosen folder
+    // (AD-008) for this whole first session.
+    crate::rag::embedding::set_cache_dir(base.join("models"));
 
     let conn = db::open(&config::db_path(&base))?;
     {
@@ -83,6 +87,7 @@ pub fn update_base_path(
     let new_base = PathBuf::from(&new_base_path);
 
     config::ensure_folder_structure(&new_base)?;
+    crate::rag::embedding::set_cache_dir(new_base.join("models"));
 
     let old_db_file = config::db_path(&old_base);
     let new_db_file = config::db_path(&new_base);

@@ -84,6 +84,47 @@ pub fn set_chat_use_global_rag(
     Ok(())
 }
 
+/// What the chat shows about each file the user attached. `extracted_text` is
+/// deliberately left out: it can be thousands of characters and the UI only
+/// needs to say whether the file made it into the context (CHAT-10).
+#[derive(Debug, Serialize, Clone)]
+pub struct ChatAttachment {
+    pub id: String,
+    pub filename: String,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub fn list_chat_attachments(
+    db: State<DbState>,
+    chat_id: String,
+) -> Result<Vec<ChatAttachment>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = require_conn(&guard)?;
+    let mut stmt = sql
+        .prepare(
+            "SELECT id, filename, status, error_message, created_at FROM chat_attachments
+             WHERE chat_id = ?1 ORDER BY created_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![chat_id], |row| {
+            Ok(ChatAttachment {
+                id: row.get(0)?,
+                filename: row.get(1)?,
+                status: row.get(2)?,
+                error_message: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
 struct ActiveTarget {
     connection: connections::Connection,
     model_name: String,
@@ -122,6 +163,27 @@ fn active_target(app: &AppHandle) -> Result<ActiveTarget, String> {
     })
 }
 
+/// The window to budget the prompt against. A missing `context_length` used to
+/// mean "assume 4096", which cost the embedded runtime four fifths of its real
+/// window — the sidecar reports `n_ctx_slot = 21760` for Phi-3.5, and the
+/// document context was being truncated to fit a limit that did not exist.
+///
+/// Best-effort on purpose: a provider that cannot answer falls back to the old
+/// assumption instead of failing the message.
+async fn budget_context(
+    client: &dyn crate::providers::ProviderClient,
+    target: &ActiveTarget,
+) -> Option<u32> {
+    if target.context_length.is_some() {
+        return target.context_length;
+    }
+    client
+        .model_limits(&target.model_name)
+        .await
+        .ok()
+        .and_then(|limits| limits.current_context)
+}
+
 fn use_global_rag(app: &AppHandle, chat_id: &str) -> Result<bool, String> {
     let db = app.state::<DbState>();
     let guard = db.0.lock().map_err(|e| e.to_string())?;
@@ -152,12 +214,16 @@ pub async fn send_message(
     // Attachment failures are recorded per file and never block the message.
     attachments::ingest(&app, &chat_id, &attachment_paths).await?;
 
+    let manager = embedded_commands::manager(&app);
+    let client = manager.provider_for(&target.connection);
+
     let messages = context_assembler::assemble(
         &app,
         &chat_id,
         &content,
+        &user_message.id,
         use_global_rag(&app, &chat_id)?,
-        target.context_length,
+        budget_context(client.as_ref(), &target).await,
     )
     .await?;
 
@@ -165,8 +231,6 @@ pub async fn send_message(
         .state::<CancellationRegistry>()
         .register(&chat_id);
     let assistant_message_id = Uuid::new_v4().to_string();
-    let manager = embedded_commands::manager(&app);
-    let client = manager.provider_for(&target.connection);
 
     let mut stream = match client
         .stream_chat(

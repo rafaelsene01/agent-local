@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Chat, Message } from "../types";
+import type { Chat, ChatAttachment, Message } from "../types";
 
 export const chatApi = {
   createChat: (title?: string) => invoke<Chat>("create_chat", { title }),
@@ -15,4 +15,6 @@ export const chatApi = {
   cancelGeneration: (chatId: string) => invoke<void>("cancel_generation", { chatId }),
   setChatUseGlobalRag: (chatId: string, enabled: boolean) =>
     invoke<void>("set_chat_use_global_rag", { chatId, enabled }),
+  listChatAttachments: (chatId: string) =>
+    invoke<ChatAttachment[]>("list_chat_attachments", { chatId }),
 };

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Plus } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
@@ -26,6 +26,12 @@ export function ConnectionsList() {
   const [provider, setProvider] = useState<ConnectionProvider>("custom");
   const [baseUrl, setBaseUrl] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+
+  // Re-checked on open for the same reason as in ModelsList: the sidecar may
+  // have finished starting after the app booted.
+  useEffect(() => {
+    loadConnections();
+  }, [loadConnections]);
 
   async function handleAdd(e: FormEvent) {
     e.preventDefault();

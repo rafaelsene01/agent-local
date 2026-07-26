@@ -244,6 +244,14 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   },
 }));
 
+// The embedded sidecar takes seconds to load its model, so the status read at
+// boot is stale by the time it answers.
+listen("connections-changed", () => {
+  const store = useConnectionsStore.getState();
+  store.loadConnections();
+  store.loadEmbeddedStatus();
+});
+
 listen<EmbeddedSetupProgressEvent>("embedded-setup-progress", (event) => {
   useConnectionsStore.setState({ embeddedProgress: event.payload });
 });

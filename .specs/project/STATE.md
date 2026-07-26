@@ -1,11 +1,131 @@
 # State
 
-**Last Updated:** 2026-07-25
-**Current Work:** Todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Last Updated:** 2026-07-26
+**Current Work:** RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-033: O `pdf-extract` corrompia metade do corpus, e o contexto do RAG estava no lugar errado do prompt — corrige a AD-032 (2026-07-26)
+
+**Decision:** Quatro mudanças, todas medidas contra a base real do usuário:
+
+1. **Motor de PDF trocado: `pdf-extract` 0.12 → `pdfium-render` 0.9.3**, com a biblioteca baixada em runtime (`rag/pdfium.rs`), mesmo padrão do llama.cpp (AD-022) e do ONNX Runtime (AD-025). Release fixado em `bblanchon/pdfium-binaries` `chromium/7961`, asset `pdfium-win-x64.tgz` verificado ao vivo (200, 3,74 MB). A feature `thread_safe` do crate é default e serializa o acesso, então DOC-07 (dois documentos indexando junto) não precisou do tratamento que o `embedding.rs` teve que fazer com o `INIT_LOCK`.
+2. **Trechos recuperados entram no mesmo turno da pergunta**, logo acima dela (`question_with_context`), em vez de num bloco `system` no topo do prompt.
+3. **Orçamento de histórico consumido do mais novo para o mais antigo** (`fit_history`). Antes, `recent_history` era percorrido em ordem cronológica e o `budget.take` gastava o orçamento nas mensagens velhas — quando apertava, quem era descartado era o turno recente.
+4. **`context_length` NULL passou a ser resolvido no provedor** (`budget_context` → `ProviderClient::model_limits`), com fallback silencioso. O sidecar reporta `n_ctx_slot = 21760` e o montador assumia 4096.
+
+**Reason:** Usuário relatou de novo que a IA não continuava um trecho do documento, e desta vez que "no documento que está no RAG, os textos estão completamente diferentes". A AD-032 tinha fechado o caso como limitação do modelo — estava errado.
+
+**Evidência (medida, não deduzida):**
+- **Corrupção quantificada:** 322 de 628 chunks (**51,3%**) continham pelo menos uma palavra destruída. 551 ocorrências de "que" tinham perdido o `q` contra 3.144 intactas (14,9%). O `pdf-extract` engolia `q`, `v`, `x`, `b`, `f` e todas as vogais acentuadas, além de vírgulas e hífens: "salvo se o exercício da profissão" saía como `salo se o eerccio da profisso`.
+- **Não era PDF quebrado nem caso de OCR:** o `pdftotext` (poppler) lê o mesmo arquivo com **zero** perdas — 3.227 "que", nenhum quebrado. Foi a referência independente que provou que o defeito era do crate. O pdfium pelo caminho do app deu **exatamente os mesmos 3.227/0**.
+- **A montagem de prompt era um defeito separado:** para a pergunta do Art. 968 o chunk 257 estava **íntegro** e mesmo assim o modelo errava. Olhando as mensagens no banco, a resposta das 02:55 era cópia quase literal da das 02:11 — o modelo estava imitando o próprio histórico, que ficava colado na pergunta enquanto o documento ficava ~10 mil chars acima.
+
+**Trade-off/Notas:**
+- Documentos indexados antes desta mudança continuam corrompidos no LanceDB; **nada reindexa sozinho**, é apagar e reimportar. O usuário fez isso e confirmou o resultado na UI.
+- `pdfium-render` traz o crate `image` junto pelas features default. Dá para enxugar com `default-features = false` + `["pdfium_latest", "thread_safe"]`; não feito, para não trocar risco por bytes sem necessidade.
+- O valor resolvido de `context_length` alimenta **só** o orçamento do prompt; o que vai para `stream_chat` continua sendo o configurado, para não mudar o que é enviado ao provedor de carona.
+- `fit_history` e `question_with_context` foram extraídas como funções puras exatamente para serem testáveis — `assemble` exige um `AppHandle` e não é coberto por teste.
+
+**Impact:** 74 testes Rust verdes (6 novos). `pdf-extract` saiu do `Cargo.toml`. **Verificado pelo usuário na UI:** depois de reimportar o documento e abrir um chat novo, a continuação do Art. 968 saiu correta.
+
+**Ainda em aberto (encontrado na mesma revisão, não corrigido):**
+- `retrieve` descarta `distance` e `chunk_index` — o compilador acusa os dois como dead code. Sem piso de relevância, sem ordenação por score entre namespaces e sem expansão de vizinho (o chunk `index+1` é justamente onde a continuação de um trecho costuma cair).
+- Falha de retrieval é invisível: só `eprintln!("retrieval skipped")`. O usuário não tem como distinguir "RAG quebrou" de "modelo ignorou o documento" — foi literalmente a dúvida que abriu esta investigação.
+- `RESPONSE_RESERVE_TOKENS` (512) não bate com `answer_token_budget` (até 2048): o prompt é montado deixando 512 de folga e o pedido manda gerar 2048. Inofensivo com janela de 21760, morde com 4096 configurado na mão.
+- O `SYSTEM_PROMPT` ("responda no menor número de frases possível", "diga claramente quando não souber") é calibrado para pergunta-e-resposta curta e briga com pedidos do tipo "continue este texto".
+
+### AD-032: ~~"O RAG não funciona" — o RAG funciona, o modelo é que é fraco~~ — **PARCIALMENTE CORRIGIDA em 2026-07-26 pela AD-033** (2026-07-25)
+
+> **O que se sustentou:** o pipeline de retrieval funciona mesmo — a busca devolve o chunk certo em primeiro lugar, e o `rejoin_hyphenated_words` era uma correção real.
+>
+> **O que caiu:** a conclusão "o modelo é que é fraco" e o veredito de que a perda de letras era "limitação registrada, sem correção". Nunca foi testado outro extrator; quando foi, o poppler leu o mesmo PDF perfeitamente e o pdfium resolveu por completo. A investigação também não mediu o estrago — eram **51,3% dos chunks**, não "partes do texto". E o "1 acerto em 4" atribuído ao modelo tinha uma causa estrutural: o histórico com as respostas erradas anteriores ficava mais perto da pergunta do que o documento. Ver AD-033.
+>
+> Texto original preservado abaixo como histórico.
+
+**Decision:** Nenhuma mudança na arquitetura de RAG. A investigação (diagnóstico temporário rodando contra a base real do usuário, removido depois) mostrou:
+- O documento estava `ready`, `use_global_rag = 1`, e a busca devolveu **o trecho certo em 1º lugar** — o chunk 259 contém literalmente "Art. 968. A inscrição do empresário far-se-á mediante requerimento que contenha: I – o seu nome…". Nenhum "retrieval skipped" no log.
+- Reproduzindo o **prompt real inteiro** (10.365 chars, 4 chunks) contra o sidecar: o Phi-3.5 acerta a continuação **1 vez em 4**. Nas outras, responde com *outra* frase verdadeira do mesmo artigo (o §1º) — ou seja, usa o documento, mas erra a passagem.
+- `temperature` não é a causa: 1/4 em 0.8 e 1/4 em 0.2. Reordenar os trechos e reduzir para top-2/top-1 também não deu resultado estável.
+
+**O que era defeito de verdade e foi corrigido:** o PDF quebra palavras na paginação e o extrator entregava "liqui- dação", "empre- sário". `rejoin_hyphenated_words` junta os pedaços quando há hífen + espaço + minúscula, preservando hífen legítimo ("far-se-á", "guarda-chuva") e início de frase. Vale para documentos importados **daqui em diante** — os já indexados precisam ser reimportados.
+
+**Limitação registrada, sem correção:** o mesmo PDF perde letras em partes do texto ("crdito", "cnjuge soreio", "atiidade", "profisso") — é o `pdf-extract` não resolvendo a codificação de fonte daquelas seções. Já está na versão mais recente publicada (0.12, 2026-06-25), então não há bump disponível; trocar de motor (pdfium baixado em runtime, como o llama.cpp e o ONNX Runtime) seria a saída.
+**Reason:** Usuário relatou que a IA não continuou uma frase que estava no documento e concluiu que "possivelmente o RAG não está funcionando".
+**Impact:** O caminho para respostas melhores sobre documento é modelo maior — o catálogo já oferece Qwen2.5 7B e Llama 3.1 8B, que cabem na RTX 3060 de 12 GB desta máquina.
+
+### AD-031: Turnos precisam alternar — geração interrompida deixava dois `user` seguidos (2026-07-25)
+
+**Decision:** `assemble` passou a normalizar a conversa com `merge_consecutive_turns`: mensagens seguidas do mesmo papel viram um turno só (unidas por linha em branco). Isso cobre o caso real — cancelar ou quebrar uma geração persiste a pergunta **sem resposta**, então todo pedido seguinte mandava dois `user` em sequência — e de quebra funde os dois `system` (prompt base + contexto) num só, que é o que templates de um único system esperam. O `SYSTEM_PROMPT` também ficou mais restritivo contra parágrafo de cortesia.
+
+**Reason:** Usuário perguntou por que o assistente respondia "oi" e emendava "Sinta-se à vontade para compartilhar seus pensamentos…".
+**Evidência (medida no sidecar, mesmo histórico, só mudando a estrutura):**
+- com a mensagem órfã → *"Entendido! Se você tiver mais perguntas… fique à vontade para perguntar."* (119 chars de cortesia)
+- sem ela, turnos alternando → *"Olá! Como posso ajudá-lo hoje?"* (30 chars)
+
+O `/apply-template` do llama.cpp confirmou que o prompt em si estava bem formado (`<|system|>…<|end|><|user|>…<|end|><|assistant|>`) — o defeito era a sequência de papéis, não a formatação.
+**Verificado na UI:** chat novo respondeu curto e direto. O chat antigo continua degradado porque o histórico dele guarda o texto da geração desgovernada da AD-030 — o modelo imita o que já está na conversa. Não há limpeza retroativa: apagar mensagens do usuário sem ele pedir seria pior.
+**Ainda em aberto:** o Phi-3.5 é verborrágico por natureza e às vezes ainda fecha com uma frase de cortesia. As alavancas restantes seriam expor `temperature` (hoje fica no padrão 0.8 do llama-server) ou usar um modelo menos falante.
+
+### AD-030: A pergunta ia duplicada no prompt e a resposta não tinha teto — chat entrava em loop (2026-07-25)
+
+**Decision:** Duas correções na montagem e no envio da conversa:
+1. **`send_message` persiste a mensagem do usuário antes de montar o contexto**, e o `recent_history` lia as últimas 20 mensagens do banco — incluindo essa. Como o `assemble` ainda anexa a pergunta no fim, o modelo recebia **dois turnos `user` idênticos e seguidos**. `assemble` passou a receber o id da mensagem e o `SELECT` a excluí-la (`AND id <> ?`).
+2. **Nenhum teto de geração.** `max_tokens` só era enviado quando havia contexto configurado — e, quando ia, era o tamanho da janela inteira, não o orçamento da resposta. Entra `providers::answer_token_budget()`: 2048 tokens por padrão, limitado a metade da janela quando ela é pequena. Vale para o caminho OpenAI-compatible (`max_tokens`) e para o Ollama (`num_predict`, que também é ilimitado por padrão).
+
+**Reason:** Relato do usuário — "mandei uma mensagem e ele bugou, parece que a resposta está em loop dando enter infinito". O log do sidecar mostrou `n_decoded = 6189` e subindo, sem parar.
+**Evidência (chamada direta ao sidecar, não dedução):** com os dois turnos `user` duplicados o Phi-3.5 emenda seções novas e nunca emite o stop (`finish_reason: "length"` no teto artificial de 80 tokens); com um único turno, `finish_reason: "stop"` e resposta fechada. O bug era o prompt malformado; o teto de tokens é a rede de segurança para quando o modelo erra o stop token de qualquer forma.
+**Verificado na UI:** pergunta enviada depois da correção respondeu e parou sozinha.
+**Trade-off:** resposta acima de 2048 tokens é cortada. Preferível a um chat travado, e o corte é visível.
+
+### AD-029: Tamanho de contexto vira spinner com o teto real do modelo (2026-07-25)
+
+**Decision:** O campo de contexto (CONN-12) deixou de ser um número solto: agora é spinner (`min` 512, `step` 512, `max` = janela treinada do modelo) + slider, com o rótulo "máx. X · em uso: Y". O teto vem de um comando novo, `model_limits`, e cada provedor responde do jeito que sabe:
+- **llama.cpp (embutido/custom)**: `GET /v1/models` → `data[].meta.n_ctx_train` (teto) e `meta.n_ctx` (alocado). **Verificado ao vivo** no sidecar rodando: 131072 e 21760 para o Phi-3.5.
+- **Ollama**: `POST /api/show` → `model_info["<arch>.context_length"]` — o prefixo é a arquitetura (`llama.`, `gemma4.`…), então a chave é casada por sufixo. Confirmado na doc oficial, **não** contra um Ollama rodando (não há um nesta máquina).
+- **LM Studio**: `max_context_length` da listagem de modelos. Documentado, **não verificado ao vivo**.
+- Qualquer outro: `ModelLimits::default()` — sem teto, o campo continua livre e o slider nem aparece.
+
+**Reason:** Pergunta do usuário: "o tamanho de contexto poderia ser um spinner? cada modelo tem tamanho máximo, é possível já ter essa informação?". Tem sim, e vinha sendo ignorada.
+**Trade-off/Notas:** `max_context` e `current_context` são `Option`; um provedor que não informa não ganha um número inventado — a UI cai para campo livre. O teto é a janela **treinada**, não o que cabe na memória: pedir 131072 no llama.cpp pode falhar ao alocar o KV cache, e é por isso que o "em uso" aparece ao lado.
+**Verificado na UI:** o formulário abriu mostrando `máx. 131.072 · em uso: 21.760` com spinner e slider funcionando. De quebra, a tela confirmou que o download de GGUF do catálogo funciona: o `Qwen2.5-1.5B-Instruct-Q4_K_M.gguf` (1.0 GB) apareceu na lista de instalados depois de baixado pelo card.
+
+### AD-028: App rodado de verdade — 2 bugs de bloqueio encontrados, e o catálogo passou a servir o runtime embutido (2026-07-25)
+
+**Decision:** `npm run tauri dev` executado e a UI dirigida por script (clique/screenshot via PowerShell). Rodar achou o que teste nenhum tinha achado:
+
+1. **Timeout de 5 s matava toda resposta longa.** Os três `ProviderClient` construíam o `reqwest::Client` com `.timeout(5s)`, que no reqwest vale para a requisição inteira — inclusive o corpo. O `llama-server` registrou `stop: cancel task` exatos 5 s depois de começar a gerar, e a UI ficava em "Gerando…" para sempre. O mesmo timeout também limitaria um `pull` de modelo de vários GB. Trocado por `providers::http_client()`: `connect_timeout` de 5 s (falha rápido quando não há ninguém escutando) e **nenhum** timeout total; chamadas curtas passaram a declarar `SHORT_REQUEST_TIMEOUT` (30 s) por requisição. Teste de regressão em `openai_stream` com servidor falso que espera 7 s antes do primeiro token.
+2. **Status de conexão nascia velho.** As conexões eram checadas uma única vez, no boot da sidebar — antes do sidecar terminar de carregar o modelo (~5 s). O runtime embutido ficava "indisponível" até o usuário atualizar na mão, e a aba Modelos não listava nada. O autostart passou a emitir `connections-changed`, e Conexões/Modelos recarregam ao abrir.
+
+**Pedidos do usuário atendidos na mesma passada:**
+- **Lista de modelos instalados** virou uma lista plana: nome à esquerda, `tamanho em GB · conexão` à direita. Os três blocos "esta conexão não está respondendo" saíram.
+- **Botão "Baixar" que não baixava**: todo o catálogo era `provider: "ollama"`, então sem Ollama rodando o botão ficava desabilitado com o motivo escondido num `title`. O motivo agora é texto visível, e o que dá para baixar aparece primeiro.
+- **Modelos para o runtime embutido**: seis entradas GGUF novas no catálogo (Qwen2.5 1.5B/7B, Llama 3.2 3B, Phi-3.5 Mini, Mistral 7B v0.3, Llama 3.1 8B). Cada URL foi verificada com `HEAD` (200 + `content-length`) e o `content-length` virou `download_bytes` — o card mostra o tamanho real de download, não a estimativa de RAM.
+- **Trocar de modelo no runtime embutido** passou a funcionar: `list_installed_models` do `EmbeddedClient` lê os `.gguf` da pasta (o `/v1/models` só conhece o que está carregado e não tem tamanho), e `set_active_model` virou async — para o provider `embedded` ele reescreve `embedded_runtime.model_path` e reinicia o sidecar, porque o modelo é flag de inicialização.
+- **A mensagem do usuário aparece na hora** (otimista na store): antes ela só surgia quando a geração terminava, porque o comando só retorna no fim.
+- **Instrução de citação saiu do system prompt** e foi para o bloco de contexto: sem documento nenhum, o Phi-3.5 imitava o formato e respondia "[fonte: GPT-3 informações geral]".
+
+**Verificado ao vivo:** app abre; sidecar sobe sozinho no boot (EMBED-06, agora exercitado de verdade); conexão embutida fica verde; Phi-3.5 listado como `2.4 GB · Runtime embutido`; marcar como ativo funciona; **conversa real com streaming respondeu duas perguntas** pelo llama.cpp embutido.
+**Não verificado:** se um chat **novo** (sem histórico contaminado) ainda produz "[fonte: ...]" inventado — as duas observações vieram de um chat cujo histórico já continha o padrão. Também não testados por clique: download de um GGUF do catálogo, troca entre dois modelos com restart do sidecar, e o fim do processo ao fechar o app (EMBED-07).
+
+### AD-027: Auditoria de código fechou 6 requisitos implementados pela metade (2026-07-25)
+
+**Decision:** Uma auditoria spec-a-código (a pedido do usuário) encontrou seis requisitos em que o backend cumpria e a UI não fechava o ciclo. Todos corrigidos na mesma sessão; 59 testes Rust verdes (era 58, +1 novo) e `npm run build` limpo.
+
+1. **CHAT-14 — o toggle nunca era lido de volta.** `ChatPanel` guardava `useState(true)` local e `list_chats` não devolvia a coluna. `models::Chat` ganhou `use_global_rag`, `SELECT_CHAT` passou a ser um só (list/rename), e a store atualiza a lista junto com o banco. Trocar de chat agora mostra a escolha real de cada um.
+2. **Trocar de chat durante o streaming corrompia a lista.** O `finally` de `sendMessage` recarregava as mensagens do chat que enviou e jogava em `messages` sem checar quem estava na tela. Estado passou de `isGenerating`/`streamingContent` globais para `generatingChatId` + `streamingChatId`: o parcial continua acumulando em background e reaparece ao voltar, e `cancelGeneration` cancela o chat que está gerando, não o que está visível.
+3. **CHAT-10 — falha de anexo era invisível.** Nenhum comando lia `chat_attachments`. Entrou `list_chat_attachments` (sem `extracted_text`, que pode ter milhares de chars); o chat mostra os anexos aceitos e um aviso por anexo com erro. O seletor de anexo ganhou o filtro de formatos e recusa não suportados **antes** do envio, como o edge case pedia.
+4. **Citações (DOC-12 no consumo do M4).** `retrieve` descartava o `doc_id` que o `VectorStore` já devolvia. Cada bloco agora entra como `[fonte: <arquivo>]`, resolvido em `documents` ou `chat_attachments` conforme o namespace, e o system prompt manda citar. Anexo pequeno injetado inteiro usa o mesmo formato.
+5. **Modelo de embedding fora da pasta-base na 1ª sessão.** `set_cache_dir` só rodava no boot com config existente; quem acabava de passar pelo wizard baixava os ~120MB no cache padrão do fastembed. `MODEL_CACHE_DIR` virou `Mutex<Option<PathBuf>>` (era `OnceLock`) e `complete_onboarding`/`update_base_path` passaram a apontá-lo. Vale a pasta vigente na primeira carga do modelo — o processo só carrega uma vez.
+6. **DOC-03 derrubava o lote inteiro.** Um arquivo inválido abortava a importação e os já copiados sumiam do retorno. `import_documents` devolve `ImportResult { imported, rejected }` e a aba Documentos lista os recusados com o motivo.
+
+**Reason:** O usuário pediu "veja minhas specs e avalie o código para ver se foi tudo implementado" e mandou corrigir o que a auditoria achou.
+**Trade-off/Notas:**
+- Enviar em A, trocar para B e enviar em B faz o parcial de A parar de ser exibido (só um `streamingChatId` por vez); o texto não se perde — o backend persiste e o `selectChat` recarrega. Um mapa por chat resolveria, e não pareceu justificar o estado extra.
+- `ImportResult` mudou a assinatura de `import_documents`; `documentsApi` e a store acompanharam.
+**Impact:** Nada nas specs mudou de status — os requisitos já estavam marcados como implementados e agora de fato estão. Segue pendente tudo que exige clicar na UI.
 
 ### AD-026: M4 (chat-messaging) implementado — 12/12 tasks (2026-07-25)
 
@@ -262,11 +382,18 @@ _Nenhum._
 
 ---
 
+### L-003: Uma limitação de biblioteca só é limitação depois de comparada com outra implementação (2026-07-26)
+
+**Context:** A AD-032 registrou que o `pdf-extract` perdia letras em partes do PDF do usuário e concluiu que não havia saída: o crate já estava na versão mais recente publicada, logo "não há bump disponível".
+**Problem:** O raciocínio parou na versão do crate e nunca perguntou se *outro* leitor daria o mesmo resultado. Com isso, um defeito que destruía 51,3% do corpus ficou um dia inteiro registrado como limitação aceita, e a culpa foi para o modelo. Pior: o diagnóstico "o modelo é que é fraco" é do tipo que encerra a investigação, porque não sugere nada verificável.
+**Solution:** Rodar um extrator independente (`pdftotext`, do poppler, já instalado na máquina) contra o mesmo arquivo levou dois minutos e devolveu o texto perfeito — provando na hora que o PDF era legível e o problema era do crate. Só depois disso a troca por pdfium virou uma decisão óbvia em vez de uma aposta.
+**Prevents:** Antes de escrever "limitação sem correção" sobre qualquer dependência, gastar os minutos de rodar uma segunda implementação no mesmo insumo. E desconfiar de diagnóstico que termina em "a ferramenta é fraca" sem um número do lado — a AD-032 não tinha medido que fração do corpus estava corrompida, e a fração era metade.
+
 ## Quick Tasks Completed
 
 | #   | Description | Date | Commit | Status |
 | --- | ----------- | ---- | ------ | ------ |
-| —   | —           | —    | —      | —      |
+| 1   | Chat em balões com lados: mensagens do usuário à direita (cor de destaque), respostas do modelo à esquerda. Rótulo de papel saiu — o lado já diz quem falou; `system` (se algum dia for persistido) fica centralizado e discreto, e `aria-label` mantém o papel para leitor de tela | 2026-07-25 | — | Feito, verificado na UI |
 
 ---
 
@@ -291,11 +418,14 @@ _Nenhum._
 - [x] ~~**1º — Executar `single-active-connection` tasks.md** (10 tasks)~~ — feito em 2026-07-25 (ver AD-023)
 - [ ] Verificar manualmente na UI o fluxo do par ativo: ativar Ollama → ativar LM Studio → só a última marcada; escolher modelo da outra conexão → conexão ativa acompanha (T9 do `single-active-connection`, único item não verificado)
 - [x] ~~**2º — Executar `embedded-runtime` tasks.md** (16 tasks)~~ — feito em 2026-07-25 (ver AD-024); URL do Phi-3.5 verificada ao vivo, C-07/C-02 pagos
-- [ ] Verificar na UI o fluxo do runtime embutido: clicar em instalar no card (baixa ~2,4 GB do Phi-3.5), ativar a conexão embutida, fechar o app e confirmar no `tasklist` que o `llama-server` sumiu, reabrir e confirmar o autostart (T16, EMBED-06/07)
+- [x] ~~Verificar na UI o fluxo do runtime embutido (T16, EMBED-06/07)~~ — **fechado em 2026-07-25**: instalação pelo card baixou o Phi-3.5 e o Qwen2.5 1.5B; o autostart subiu o sidecar em todo reinício do `tauri dev` (`embedded runtime listening on 127.0.0.1:<porta>` no log, várias vezes); e ao encerrar o app o `tasklist` não achou nem `tauri-app.exe` nem `llama-server.exe` — inclusive com uma geração em andamento no momento do fechamento
 - [x] ~~**3º — Executar `documents-rag` tasks.md** (11 tasks)~~ — feito em 2026-07-25 (ver AD-025)
 - [x] ~~**4º — Executar `chat-messaging` tasks.md** (12 tasks)~~ — feito em 2026-07-25 (ver AD-026)
 - [x] ~~Pesquisa obrigatória de crates/modelos em `documents-rag` T3/T4/T5~~ — feita e registrada na AD-025
 - [ ] **Verificar na UI o fluxo do M5/M4**: importar um documento e ver chegar a "ready"; enviar mensagem e ver streaming; anexar um `.txt` com um fato inventado e perguntar sobre ele; repetir a pergunta em outro chat e confirmar que NÃO usa o contexto (CHAT-11); excluir o chat e confirmar que `chats/<id>/tmp/` sumiu (CHAT-12)
+- [ ] **Verificar na UI as correções da AD-027**: desligar "usar meus documentos" no chat A, ir ao B e voltar (o estado tem que acompanhar cada chat); enviar no A, trocar para o B durante a resposta e confirmar que o B não mostra as mensagens do A; anexar um `.zip` (tem que ser recusado antes do envio) e um `.pdf` só com imagem (tem que virar aviso no chat); importar 2 arquivos sendo 1 inválido e confirmar que o válido entra; conferir que a resposta cita `[fonte: <arquivo>]`
+- [ ] **Dívidas de RAG achadas na revisão da AD-033, não corrigidas**: (a) `retrieve` descarta `distance` e `chunk_index` — sem piso de relevância, sem ordenação por score entre namespaces e sem expansão de vizinho (`index+1`), que é onde a continuação de um trecho costuma cair; (b) falha de retrieval só existe como `eprintln!`, invisível na UI; (c) `RESPONSE_RESERVE_TOKENS` (512) não bate com `answer_token_budget` (2048); (d) o `SYSTEM_PROMPT` é calibrado para resposta curta e briga com "continue este texto"
+- [ ] Qualquer PDF importado **antes de 2026-07-26** está indexado com o texto corrompido do `pdf-extract` e precisa ser apagado e reimportado (o `Código Civil 2 ed.pdf` já foi)
 - [ ] **Pré-requisito de build novo**: `protoc` (instalado via winget nesta máquina) é obrigatório para compilar o `lancedb` — documentar no README/STACK antes de qualquer outra pessoa clonar o repo
 - [ ] O `onnxruntime.dll` é baixado em runtime na primeira indexação (~79 MB); nunca foi exercitado pelo caminho do app (só por teste com a DLL apontada à mão) — confirmar que `rag::onnxruntime::ensure_dylib` baixa e extrai certo
 - [ ] Encarar os itens de `.specs/codebase/CONCERNS.md` não cobertos pelas features planejadas: C-03 (espelhamento manual de tipos Rust↔TS), C-04 (zero teste no frontend), C-06 (polling de download do LM Studio sem timeout), C-09 (sem linter/CI), C-10, C-11

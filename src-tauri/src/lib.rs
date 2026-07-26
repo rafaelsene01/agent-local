@@ -18,7 +18,7 @@ mod system_info;
 use db::DbState;
 use runtime::process::SidecarState;
 use std::sync::Mutex;
-use tauri::{Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent};
 
 /// Starts the sidecar at boot when it was already set up and its connection
 /// is the active one, so the user doesn't have to re-click anything after a
@@ -46,7 +46,13 @@ fn autostart_sidecar(app: &tauri::AppHandle) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         match embedded_commands::start_sidecar_from_row(&handle, &row).await {
-            Ok(port) => println!("embedded runtime listening on 127.0.0.1:{port}"),
+            Ok(port) => {
+                println!("embedded runtime listening on 127.0.0.1:{port}");
+                // The UI checked every connection while this was still loading
+                // its model, so it saw "unavailable"; without this it would
+                // keep showing that until the user hit refresh by hand.
+                let _ = handle.emit("connections-changed", ());
+            }
             Err(e) => eprintln!("failed to start embedded runtime: {e}"),
         }
     });
@@ -96,6 +102,7 @@ pub fn run() {
             chat_commands::send_message,
             chat_commands::cancel_generation,
             chat_commands::set_chat_use_global_rag,
+            chat_commands::list_chat_attachments,
             config_commands::get_app_config,
             config_commands::get_default_base_path,
             config_commands::pick_folder,
@@ -114,6 +121,7 @@ pub fn run() {
             model_commands::set_active_model,
             model_commands::get_active_pair,
             model_commands::configure_model,
+            model_commands::model_limits,
             embedded_commands::setup_embedded_runtime,
             embedded_commands::start_embedded_runtime,
             embedded_commands::stop_embedded_runtime,

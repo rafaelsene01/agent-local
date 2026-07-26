@@ -5,12 +5,27 @@ import { Paperclip, Send, Square } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useConnectionsStore } from "../../store/connectionsStore";
 
+/** Same list the documents pipeline parses (DOC-03); anything else is refused
+ *  before sending instead of failing silently after the message went out. */
+const SUPPORTED_EXTENSIONS = ["pdf", "docx", "txt", "md"];
+
+function isSupported(path: string) {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return SUPPORTED_EXTENSIONS.includes(ext);
+}
+
+function basename(path: string) {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
 export function MessageInput() {
   const { t } = useTranslation();
-  const { isGenerating, sendMessage, cancelGeneration } = useChatStore();
+  const { activeChatId, generatingChatId, sendMessage, cancelGeneration } = useChatStore();
   const { activePair, loadActivePair } = useConnectionsStore();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [rejected, setRejected] = useState<string[]>([]);
+  const isGenerating = generatingChatId !== null && generatingChatId === activeChatId;
 
   useEffect(() => {
     loadActivePair();
@@ -21,9 +36,15 @@ export function MessageInput() {
   const canSend = Boolean(activePair.connection && activePair.model);
 
   async function handleAttach() {
-    const selected = await open({ multiple: true, title: t("chatPanel.fileDialogTitle") });
+    const selected = await open({
+      multiple: true,
+      title: t("chatPanel.fileDialogTitle"),
+      filters: [{ name: t("documents.supportedFormats"), extensions: SUPPORTED_EXTENSIONS }],
+    });
     if (!selected) return;
-    setAttachments(Array.isArray(selected) ? selected : [selected]);
+    const picked = Array.isArray(selected) ? selected : [selected];
+    setAttachments(picked.filter(isSupported));
+    setRejected(picked.filter((p) => !isSupported(p)).map(basename));
   }
 
   function handleSubmit(e: FormEvent) {
@@ -33,6 +54,7 @@ export function MessageInput() {
     setText("");
     const files = attachments;
     setAttachments([]);
+    setRejected([]);
     sendMessage(content, files);
   }
 
@@ -52,12 +74,21 @@ export function MessageInput() {
         <p className="mb-2 text-xs text-amber-500">{t("chatPanel.noActiveModel")}</p>
       )}
 
+      {rejected.length > 0 && (
+        <p className="mb-2 text-xs text-amber-500">
+          {t("chatPanel.attachmentsRejected", { files: rejected.join(", ") })}
+        </p>
+      )}
+
       {attachments.length > 0 && (
         <div className="mb-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
           <span>{t("chatPanel.attachmentsSelected", { count: attachments.length })}</span>
           <button
             type="button"
-            onClick={() => setAttachments([])}
+            onClick={() => {
+              setAttachments([]);
+              setRejected([]);
+            }}
             className="underline hover:text-[var(--text-primary)]"
           >
             {t("chatPanel.clearAttachments")}

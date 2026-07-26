@@ -2,6 +2,7 @@ pub mod chunking;
 pub mod embedding;
 pub mod onnxruntime;
 pub mod parsing;
+pub mod pdfium;
 pub mod pipeline;
 pub mod store;
 

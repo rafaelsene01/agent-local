@@ -9,6 +9,10 @@ pub struct Chat {
     pub title: String,
     pub created_at: String,
     pub updated_at: String,
+    /// Whether this chat also searches the global knowledge base (CHAT-14).
+    /// Travels with the chat so the UI can show the persisted choice instead
+    /// of assuming a default per render.
+    pub use_global_rag: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]

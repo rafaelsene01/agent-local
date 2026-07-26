@@ -1,6 +1,6 @@
 use super::{
     custom::CustomClient, ChatMessage, ChatStream, ConfigApplied, GpuOffload, InstalledModel,
-    ProviderClient, ProviderError, PullProgress,
+    ModelLimits, ProviderClient, ProviderError, PullProgress,
 };
 use crate::runtime::model;
 use async_trait::async_trait;
@@ -27,6 +27,34 @@ impl EmbeddedClient {
         let port = self.port.ok_or(ProviderError::Unavailable)?;
         Ok(CustomClient::new(format!("http://127.0.0.1:{port}")))
     }
+
+    /// Installed = the GGUF files sitting in the models folder, not the single
+    /// one the running server happens to have loaded. `/v1/models` would only
+    /// ever report that one, and it carries no size — reading the directory
+    /// answers both "what can I switch to" and "how big is it".
+    fn installed_from_disk(&self) -> Vec<InstalledModel> {
+        let Ok(entries) = std::fs::read_dir(&self.models_dir) else {
+            return Vec::new();
+        };
+        let mut models: Vec<InstalledModel> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let is_gguf = path
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"));
+                if !is_gguf {
+                    return None;
+                }
+                Some(InstalledModel {
+                    name: path.file_name()?.to_string_lossy().to_string(),
+                    size_bytes: entry.metadata().ok().map(|meta| meta.len()),
+                })
+            })
+            .collect();
+        models.sort_by(|a, b| a.name.cmp(&b.name));
+        models
+    }
 }
 
 #[async_trait]
@@ -36,7 +64,13 @@ impl ProviderClient for EmbeddedClient {
     }
 
     async fn list_installed_models(&self) -> Result<Vec<InstalledModel>, ProviderError> {
-        self.client()?.list_installed_models().await
+        Ok(self.installed_from_disk())
+    }
+
+    /// Only the running sidecar knows the model's trained window: it comes
+    /// from the GGUF header it loaded, so a stopped runtime reports nothing.
+    async fn model_limits(&self, model: &str) -> Result<ModelLimits, ProviderError> {
+        self.client()?.model_limits(model).await
     }
 
     /// `identifier` is a direct `.gguf` URL (EMBED-13) — there is no registry
@@ -101,6 +135,33 @@ pub fn gpu_layers_for(offload: &GpuOffload) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_models_are_the_gguf_files_with_their_sizes() {
+        let dir = std::env::temp_dir().join(format!("localmind-models-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Phi-3.5-mini-instruct-Q4_K_M.gguf"), vec![0u8; 2048]).unwrap();
+        std::fs::write(dir.join("Qwen2.5-1.5B-Instruct-Q4_K_M.GGUF"), vec![0u8; 4096]).unwrap();
+        // The embedding model cache shares this folder — it must not show up.
+        std::fs::write(dir.join("model.onnx"), vec![0u8; 10]).unwrap();
+
+        let models = EmbeddedClient::new(None, dir.clone()).installed_from_disk();
+
+        assert_eq!(models.len(), 2, "only .gguf files are models");
+        assert_eq!(models[0].name, "Phi-3.5-mini-instruct-Q4_K_M.gguf");
+        assert_eq!(models[0].size_bytes, Some(2048));
+        assert_eq!(models[1].size_bytes, Some(4096), "uppercase .GGUF counts too");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_models_folder_lists_nothing_instead_of_failing() {
+        let dir = std::env::temp_dir().join("localmind-models-does-not-exist");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(EmbeddedClient::new(None, dir).installed_from_disk().is_empty());
+    }
 
     #[test]
     fn gpu_offload_maps_to_all_or_nothing_layers() {

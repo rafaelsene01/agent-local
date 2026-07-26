@@ -125,6 +125,8 @@ async fn run_pipeline(
         return Ok(());
     }
     set_status(app, doc_id, DocumentStatus::Parsing, None)?;
+    // Downloads the pdfium library on the first PDF; a no-op otherwise.
+    super::pdfium::ensure_for(app, file_path).await?;
     let text = parsing::extract_text(file_path).map_err(|e| e.to_string())?;
 
     if !still_exists(app, doc_id) {

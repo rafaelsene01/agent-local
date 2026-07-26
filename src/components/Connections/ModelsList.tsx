@@ -4,6 +4,18 @@ import { Download, Settings2 } from "lucide-react";
 import { useConnectionsStore } from "../../store/connectionsStore";
 import { ModelConfigForm } from "./ModelConfigForm";
 import { ModelDownloadCard } from "./ModelDownloadCard";
+import type { DownloadableModel } from "../../types";
+
+/** Size comes from the provider and isn't always known (llama.cpp's
+ *  `/v1/models` has no size field when the file can't be matched on disk). */
+function formatSize(bytes: number | null) {
+  if (!bytes) return "—";
+  return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function providerLabel(provider: string, t: (key: string) => string) {
+  return provider === "embedded" ? t("connections.providerEmbedded") : provider;
+}
 
 export function ModelsList() {
   const { t } = useTranslation();
@@ -14,6 +26,7 @@ export function ModelsList() {
     ramDetectedGb,
     activePair,
     downloadProgress,
+    loadConnections,
     loadAvailableInstalledModels,
     loadDownloadableModels,
     loadActivePair,
@@ -32,15 +45,25 @@ export function ModelsList() {
     () => connections.filter((c) => c.status === "available"),
     [connections],
   );
-  const unavailableConnections = useMemo(
-    () => connections.filter((c) => c.status !== "available"),
-    [connections],
+
+  // One flat list instead of a block per connection: the connection is just
+  // another column on the right, next to the size.
+  const installedRows = useMemo(
+    () =>
+      availableConnections.flatMap((conn) =>
+        (installedModelsByConnection[conn.id] ?? []).map((model) => ({ conn, model })),
+      ),
+    [availableConnections, installedModelsByConnection],
   );
 
+  // Status is re-checked when this screen opens: a runtime that came up after
+  // boot (the embedded sidecar takes seconds to load its model) would
+  // otherwise stay "unavailable" here and its models invisible.
   useEffect(() => {
+    loadConnections();
     loadDownloadableModels();
     loadActivePair();
-  }, [loadDownloadableModels, loadActivePair]);
+  }, [loadConnections, loadDownloadableModels, loadActivePair]);
 
   useEffect(() => {
     loadAvailableInstalledModels();
@@ -53,7 +76,16 @@ export function ModelsList() {
     }
   }, [availableConnections, manualConnectionId]);
 
-  const visibleDownloadable = downloadableModels.filter((m) => showAll || m.fits_ram);
+  // What can be downloaded right now comes first: a list that opens on eight
+  // disabled cards reads as "nothing here works".
+  const visibleDownloadable = useMemo(() => {
+    const installable = (model: DownloadableModel) =>
+      availableConnections.some((c) => c.provider === model.provider);
+    return downloadableModels
+      .filter((m) => showAll || m.fits_ram)
+      .slice()
+      .sort((a, b) => Number(installable(b)) - Number(installable(a)));
+  }, [downloadableModels, showAll, availableConnections]);
 
   function handleManualPull(e: FormEvent) {
     e.preventDefault();
@@ -66,81 +98,63 @@ export function ModelsList() {
     <div className="space-y-8">
       <section>
         <h3 className="text-sm font-medium">{t("connections.installedModels")}</h3>
-        {availableConnections.length === 0 && (
+
+        {installedRows.length === 0 && (
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            {t("connections.noAvailableConnections")}
+            {availableConnections.length === 0
+              ? t("connections.noAvailableConnections")
+              : t("connections.noInstalledModels")}
           </p>
         )}
-        <div className="mt-2 space-y-4">
-          {availableConnections.map((conn) => {
-            const models = installedModelsByConnection[conn.id] ?? [];
+
+        <div className="mt-2 space-y-1">
+          {installedRows.map(({ conn, model }) => {
+            const isActive =
+              activePair.model?.connection_id === conn.id &&
+              activePair.model?.model_name === model.name;
+            const key = `${conn.id}:${model.name}`;
+            const isConfiguring = configuringKey === key;
             return (
-              <div key={conn.id}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-                  {conn.provider} · {conn.base_url}
-                </p>
-                {models.length === 0 ? (
-                  <p className="mt-1 text-xs text-[var(--text-secondary)]">{t("connections.noInstalledModels")}</p>
-                ) : (
-                  <div className="mt-1 space-y-1">
-                    {models.map((m) => {
-                      const isActive =
-                        activePair.model?.connection_id === conn.id &&
-                        activePair.model?.model_name === m.name;
-                      const key = `${conn.id}:${m.name}`;
-                      const isConfiguring = configuringKey === key;
-                      return (
-                        <div key={m.name}>
-                          <div className="flex items-center justify-between rounded-md border border-[var(--border-color)] px-3 py-1.5">
-                            <span className="text-sm">{m.name}</span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setConfiguringKey(isConfiguring ? null : key)}
-                                className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
-                                title={t("connections.configureModel", { model: m.name })}
-                              >
-                                <Settings2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => setActiveModel(conn.id, m.name)}
-                                className={`rounded-md px-2 py-1 text-xs font-medium ${
-                                  isActive
-                                    ? "bg-[var(--accent)] text-[var(--accent-fg)]"
-                                    : "border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                }`}
-                              >
-                                {isActive ? t("connections.active") : t("connections.useModel")}
-                              </button>
-                            </div>
-                          </div>
-                          {isConfiguring && (
-                            <div className="mt-1">
-                              <ModelConfigForm
-                                connectionId={conn.id}
-                                modelName={m.name}
-                                onClose={() => setConfiguringKey(null)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+              <div key={key}>
+                <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--border-color)] px-3 py-1.5">
+                  <span className="min-w-0 truncate text-sm" title={model.name}>
+                    {model.name}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      {formatSize(model.size_bytes)} · {providerLabel(conn.provider, t)}
+                    </span>
+                    <button
+                      onClick={() => setConfiguringKey(isConfiguring ? null : key)}
+                      className="rounded-md p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                      title={t("connections.configureModel", { model: model.name })}
+                    >
+                      <Settings2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => setActiveModel(conn.id, model.name)}
+                      className={`rounded-md px-2 py-1 text-xs font-medium ${
+                        isActive
+                          ? "bg-[var(--accent)] text-[var(--accent-fg)]"
+                          : "border border-[var(--border-color)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {isActive ? t("connections.active") : t("connections.useModel")}
+                    </button>
+                  </div>
+                </div>
+                {isConfiguring && (
+                  <div className="mt-1">
+                    <ModelConfigForm
+                      connectionId={conn.id}
+                      modelName={model.name}
+                      onClose={() => setConfiguringKey(null)}
+                    />
                   </div>
                 )}
               </div>
             );
           })}
-
-          {unavailableConnections.map((conn) => (
-            <div key={conn.id}>
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-secondary)]">
-                {conn.provider} · {conn.base_url}
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                {t("connections.connectionUnavailable")}
-              </p>
-            </div>
-          ))}
         </div>
       </section>
 
@@ -161,9 +175,16 @@ export function ModelsList() {
               <ModelDownloadCard
                 key={model.id}
                 model={model}
+                providerLabel={providerLabel(model.provider, t)}
                 progress={key ? downloadProgress[key] : undefined}
                 disabled={!targetConnection}
-                disabledReason={!targetConnection ? t("connections.noConnectionForProvider") : undefined}
+                disabledReason={
+                  !targetConnection
+                    ? t("connections.requiresProvider", {
+                        provider: providerLabel(model.provider, t),
+                      })
+                    : undefined
+                }
                 onPull={() => targetConnection && pullModel(targetConnection.id, model.pull_identifier)}
               />
             );

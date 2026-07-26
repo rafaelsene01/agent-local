@@ -21,7 +21,7 @@
   "chatPanel": {
     "selectOrCreate": "Select a chat or create a new one to get started",
     "newChat": "New chat",
-    "noMessages": "No messages yet. Sending messages arrives in the next milestone (connecting to LM Studio/Ollama).",
+    "noMessages": "No messages yet. Ask something to get started.",
     "placeholder": "Ask something…",
     "send": "Send",
     "cancel": "Stop",
@@ -31,7 +31,9 @@
     "attachmentsSelected": "{{count}} file(s) attached",
     "clearAttachments": "Clear",
     "generating": "Generating…",
-    "fileDialogTitle": "Choose files to attach"
+    "fileDialogTitle": "Choose files to attach",
+    "attachmentFailed": "Attachment \"{{name}}\" could not be processed ({{reason}}) — the answer was generated without it.",
+    "attachmentsRejected": "Unsupported files ignored: {{files}}"
   },
   "documents": {
     "title": "Documents",
@@ -49,7 +51,8 @@
     "remove": "Remove",
     "retryHint": "Remove it and import again.",
     "supportedFormats": "PDF, DOCX, TXT and MD",
-    "fileDialogTitle": "Choose documents"
+    "fileDialogTitle": "Choose documents",
+    "rejected": "Not imported: {{name}} — {{reason}}"
   },
   "connections": {
     "title": "Connections",
@@ -98,7 +101,6 @@
     "tabModels": "Models",
     "installedModels": "Installed models",
     "noAvailableConnections": "No reachable connection to list models from.",
-    "connectionUnavailable": "This connection is not responding, so its models can't be listed.",
     "noInstalledModels": "No installed models yet.",
     "active": "Active",
     "useModel": "Use this model",
@@ -109,14 +111,13 @@
     "download": "Download",
     "downloaded": "Downloaded",
     "downloadError": "Download failed",
-    "noConnectionForProvider": "No reachable connection supports this provider",
     "manualPull": "Download by name or link",
     "manualPullPlaceholder": "Model name (Ollama) or Hugging Face link (LM Studio)",
     "pull": "Download",
     "configureModel": "Configure {{model}}",
     "close": "Close",
     "contextLength": "Context length",
-    "contextLengthPlaceholder": "Provider default",
+    "contextLengthPlaceholder": "Default",
     "gpuOffload": "GPU offload",
     "gpuMode": {
       "default": "Default",
@@ -126,7 +127,13 @@
     },
     "save": "Save",
     "notApplied": "not applied",
-    "requiresReload": "This provider only applies these settings on the next model (re)load."
+    "requiresReload": "This provider only applies these settings on the next model (re)load.",
+    "requiresProvider": "Needs {{provider}} running to download — start it and refresh the connection.",
+    "ramEstimate": "~{{gb}} GB RAM",
+    "contextMax": "max {{max}}",
+    "contextMaxUnknown": "this provider does not report the limit",
+    "contextCurrent": "in use: {{current}}",
+    "useProviderDefault": "Use provider default"
   },
   "settings": {
     "title": "Settings",

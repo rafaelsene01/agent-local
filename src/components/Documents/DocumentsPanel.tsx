@@ -9,8 +9,15 @@ import { DocumentRow } from "./DocumentRow";
 export function DocumentsPanel() {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
-  const { documents, isImporting, error, loadDocuments, importDocuments, deleteDocument } =
-    useDocumentsStore();
+  const {
+    documents,
+    rejected,
+    isImporting,
+    error,
+    loadDocuments,
+    importDocuments,
+    deleteDocument,
+  } = useDocumentsStore();
 
   useEffect(() => {
     loadDocuments();
@@ -55,6 +62,15 @@ export function DocumentsPanel() {
         </p>
 
         {error && <p className="mt-3 text-xs text-red-500">{error}</p>}
+
+        {rejected.map((item) => (
+          <p key={item.path} className="mt-2 text-xs text-amber-500">
+            {t("documents.rejected", {
+              name: item.path.split(/[\\/]/).pop() ?? item.path,
+              reason: item.reason,
+            })}
+          </p>
+        ))}
 
         <div className="mt-6 space-y-2">
           {documents.length === 0 ? (

@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DocumentRecord } from "../types";
+import type { DocumentRecord, ImportResult } from "../types";
 
 export const documentsApi = {
-  importDocuments: (paths: string[]) => invoke<DocumentRecord[]>("import_documents", { paths }),
+  importDocuments: (paths: string[]) => invoke<ImportResult>("import_documents", { paths }),
   listDocuments: () => invoke<DocumentRecord[]>("list_documents"),
   deleteDocument: (id: string) => invoke<void>("delete_document", { id }),
 };

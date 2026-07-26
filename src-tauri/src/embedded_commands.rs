@@ -327,6 +327,43 @@ pub async fn apply_runtime_config(
     Ok(())
 }
 
+/// The model is a `-m` startup flag, so switching it means rewriting the
+/// persisted row and restarting the process — the same shape as
+/// `apply_runtime_config`, and the reason picking a model for the embedded
+/// runtime can't be a pure database write (EMBED-05).
+pub async fn apply_active_model(
+    app: &AppHandle,
+    db: &DbState,
+    model_name: &str,
+) -> Result<(), String> {
+    let path = models_dir(app)?.join(model_name);
+    if !path.exists() {
+        return Err(format!(
+            "o arquivo {} não está na pasta de modelos",
+            path.display()
+        ));
+    }
+    let wanted = path.to_string_lossy().to_string();
+
+    let (row, changed) = {
+        let guard = db.0.lock().map_err(|e| e.to_string())?;
+        let sql = require_conn(&guard)?;
+        let mut row = store::load(sql)?;
+        let changed = row.model_path.as_deref() != Some(wanted.as_str());
+        if changed {
+            row.model_path = Some(wanted);
+            store::save(sql, &row)?;
+        }
+        (row, changed)
+    };
+
+    if changed && running_port(app).is_some() {
+        stop_embedded_runtime(app.clone())?;
+        start_sidecar_from_row(app, &row).await?;
+    }
+    Ok(())
+}
+
 /// Every command that talks to a provider builds its manager through here, so
 /// the embedded connection resolves to the port the sidecar actually picked
 /// instead of a placeholder URL.

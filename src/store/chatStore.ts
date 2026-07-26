@@ -2,15 +2,19 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { chatApi } from "../lib/chatApi";
 import i18n from "../i18n";
-import type { Chat, ChatStreamChunk, Message } from "../types";
+import type { Chat, ChatAttachment, ChatStreamChunk, Message } from "../types";
 
 interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
   messages: Message[];
+  attachments: ChatAttachment[];
   /** Text accumulated from stream events, not yet persisted as a Message. */
   streamingContent: string;
-  isGenerating: boolean;
+  /** Which chat the accumulated text belongs to — generation keeps running
+   *  after the user switches away, so it can't be assumed to be the active one. */
+  streamingChatId: string | null;
+  generatingChatId: string | null;
   isLoading: boolean;
   error: string | null;
 
@@ -19,6 +23,7 @@ interface ChatState {
   selectChat: (id: string) => Promise<void>;
   renameChat: (id: string, title: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
+  setUseGlobalRag: (id: string, enabled: boolean) => Promise<void>;
   sendMessage: (content: string, attachmentPaths: string[]) => Promise<void>;
   cancelGeneration: () => Promise<void>;
 }
@@ -27,8 +32,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: null,
   messages: [],
+  attachments: [],
   streamingContent: "",
-  isGenerating: false,
+  streamingChatId: null,
+  generatingChatId: null,
   isLoading: false,
   error: null,
 
@@ -46,17 +53,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const chat = await chatApi.createChat(i18n.t("chats.defaultTitle"));
       await get().loadChats();
-      set({ activeChatId: chat.id, messages: [], streamingContent: "" });
+      set({ activeChatId: chat.id, messages: [], attachments: [] });
     } catch (err) {
       set({ error: String(err) });
     }
   },
 
+  // Streaming state is left alone: coming back to a chat that is still
+  // generating must show the answer it accumulated meanwhile.
   selectChat: async (id: string) => {
-    set({ activeChatId: id, error: null, streamingContent: "" });
+    set({ activeChatId: id, error: null });
     try {
-      const messages = await chatApi.listMessages(id);
-      set({ messages });
+      const [messages, attachments] = await Promise.all([
+        chatApi.listMessages(id),
+        chatApi.listChatAttachments(id),
+      ]);
+      set({ messages, attachments });
     } catch (err) {
       set({ error: String(err) });
     }
@@ -77,34 +89,74 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const wasActive = get().activeChatId === id;
       await get().loadChats();
       if (wasActive) {
-        set({ activeChatId: null, messages: [] });
+        set({ activeChatId: null, messages: [], attachments: [] });
       }
     } catch (err) {
       set({ error: String(err) });
     }
   },
 
+  // The checkbox reflects `chats[].use_global_rag`, so the local list is
+  // updated together with the database (CHAT-14).
+  setUseGlobalRag: async (id, enabled) => {
+    const previous = get().chats;
+    set({
+      chats: previous.map((c) => (c.id === id ? { ...c, use_global_rag: enabled } : c)),
+    });
+    try {
+      await chatApi.setChatUseGlobalRag(id, enabled);
+    } catch (err) {
+      set({ error: String(err), chats: previous });
+    }
+  },
+
   // The command resolves only when generation ends; tokens arrive meanwhile
-  // through the listener below, so the message list is reloaded at the end to
-  // pick up what the backend persisted.
+  // through the listener below. Everything here is scoped to `chatId` because
+  // the user may be looking at another chat by the time it finishes.
   sendMessage: async (content, attachmentPaths) => {
     const chatId = get().activeChatId;
     if (!chatId) return;
-    set({ isGenerating: true, error: null, streamingContent: "" });
+    // Shown immediately: the backend only persists it as part of a call that
+    // lasts as long as the answer, and until then the user would see their own
+    // message vanish.
+    const pending: Message = {
+      id: `pending-${Date.now()}`,
+      chat_id: chatId,
+      role: "user",
+      content,
+      created_at: new Date().toISOString(),
+    };
+    set({
+      messages: [...get().messages, pending],
+      generatingChatId: chatId,
+      streamingChatId: chatId,
+      streamingContent: "",
+      error: null,
+    });
     try {
       await chatApi.sendMessage(chatId, content, attachmentPaths);
     } catch (err) {
-      set({ error: String(err) });
+      if (get().activeChatId === chatId) set({ error: String(err) });
     } finally {
-      set({ isGenerating: false, streamingContent: "" });
-      const messages = await chatApi.listMessages(chatId);
-      set({ messages });
+      if (get().generatingChatId === chatId) set({ generatingChatId: null });
+      if (get().streamingChatId === chatId) {
+        set({ streamingChatId: null, streamingContent: "" });
+      }
+      // Reloading another chat's messages into the view would replace what the
+      // user is reading with a different conversation.
+      if (get().activeChatId === chatId) {
+        const [messages, attachments] = await Promise.all([
+          chatApi.listMessages(chatId),
+          chatApi.listChatAttachments(chatId),
+        ]);
+        set({ messages, attachments });
+      }
       await get().loadChats();
     }
   },
 
   cancelGeneration: async () => {
-    const chatId = get().activeChatId;
+    const chatId = get().generatingChatId;
     if (!chatId) return;
     try {
       await chatApi.cancelGeneration(chatId);
@@ -117,16 +169,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 listen<ChatStreamChunk>("chat-stream-chunk", (event) => {
   const { chat_id, delta, done, error } = event.payload;
   const state = useChatStore.getState();
-  // Chunks for a chat the user has navigated away from are dropped rather
-  // than appended to whatever is on screen now.
-  if (state.activeChatId !== chat_id) return;
+  // Chunks are accumulated even for a chat the user navigated away from —
+  // the generation keeps running and the text must be there on return.
+  if (state.streamingChatId !== chat_id) return;
 
   if (error) {
-    useChatStore.setState({ error, isGenerating: false });
+    useChatStore.setState({
+      generatingChatId: null,
+      ...(state.activeChatId === chat_id ? { error } : {}),
+    });
     return;
   }
   if (done) {
-    useChatStore.setState({ isGenerating: false });
+    useChatStore.setState({ generatingChatId: null });
     return;
   }
   useChatStore.setState({ streamingContent: state.streamingContent + delta });

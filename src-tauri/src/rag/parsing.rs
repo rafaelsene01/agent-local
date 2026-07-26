@@ -39,10 +39,9 @@ pub fn is_supported(path: &Path) -> bool {
     SUPPORTED_EXTENSIONS.contains(&extension_of(path).as_str())
 }
 
-/// Crates confirmed on crates.io on 2026-07-25: `pdf-extract` 0.12 (updated
-/// 2026-06-25) and `docx-rs` 0.4.22 (updated 2026-07-21). `dotext`, the other
-/// DOCX candidate named in the design, was rejected — its last release is
-/// from 2017.
+/// PDFs go through pdfium (see `rag::pdfium` for why `pdf-extract` was
+/// dropped); `docx-rs` 0.4.22 handles DOCX. `dotext`, the other DOCX candidate
+/// named in the design, was rejected — its last release is from 2017.
 pub fn extract_text(path: &Path) -> Result<String, ParseError> {
     let text = match extension_of(path).as_str() {
         "txt" | "md" => {
@@ -60,7 +59,37 @@ pub fn extract_text(path: &Path) -> Result<String, ParseError> {
 }
 
 fn extract_pdf(path: &Path) -> Result<String, ParseError> {
-    pdf_extract::extract_text(path).map_err(|e| ParseError::ReadFailed(e.to_string()))
+    let text = super::pdfium::extract_text(path).map_err(ParseError::ReadFailed)?;
+    Ok(rejoin_hyphenated_words(&text))
+}
+
+/// A PDF breaks words across lines, and the extractor turns that break into
+/// "liqui- dação" or "empre- sário". Left alone, those halves are what gets
+/// embedded and what the model reads — seen in the user's Civil Code import.
+///
+/// Only a hyphen *followed by a space and a lowercase letter* is joined: a
+/// real Portuguese hyphen ("far-se-á", "guarda-chuva") has no space after it,
+/// and a lowercase continuation is what a broken word looks like.
+fn rejoin_hyphenated_words(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let is_break = chars[i] == '-'
+            && i > 0
+            && chars[i - 1].is_alphabetic()
+            && chars.get(i + 1).is_some_and(|c| *c == ' ' || *c == '\n')
+            && chars
+                .get(i + 2)
+                .is_some_and(|c| c.is_alphabetic() && c.is_lowercase());
+        if is_break {
+            i += 2; // drop the hyphen and the whitespace
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 /// docx-rs exposes the document as a tree of nodes; the text lives in the
@@ -117,6 +146,31 @@ mod tests {
         assert!(is_supported(Path::new("report.PDF")));
         assert!(!is_supported(Path::new("photo.png")));
         assert!(!is_supported(Path::new("no-extension")));
+    }
+
+    #[test]
+    fn words_split_across_pdf_lines_are_put_back_together() {
+        // Taken from the user's Civil Code import.
+        let joined = rejoin_hyphenated_words("arrecadação e liqui- dação da massa");
+        assert_eq!(joined, "arrecadação e liquidação da massa");
+        assert_eq!(
+            rejoin_hyphenated_words("simplificado ao empre-\nsário rural"),
+            "simplificado ao empresário rural"
+        );
+    }
+
+    #[test]
+    fn real_hyphens_survive() {
+        for text in [
+            "a inscrição far-se-á mediante requerimento",
+            "um guarda-chuva novo",
+            // A dash between words, not a broken word.
+            "empresário - pessoa física",
+            // Uppercase after the break is a new sentence, not a continuation.
+            "termina aqui- Outra frase",
+        ] {
+            assert_eq!(rejoin_hyphenated_words(text), text, "mudou: {text}");
+        }
     }
 
     #[test]

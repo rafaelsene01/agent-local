@@ -1,10 +1,16 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { documentsApi } from "../lib/documentsApi";
-import type { DocumentRecord, DocumentStatusEvent } from "../types";
+import type {
+  DocumentRecord,
+  DocumentStatusEvent,
+  RejectedImport,
+} from "../types";
 
 interface DocumentsState {
   documents: DocumentRecord[];
+  /** Files refused by the last import, kept next to the ones that went in. */
+  rejected: RejectedImport[];
   isLoading: boolean;
   isImporting: boolean;
   error: string | null;
@@ -16,6 +22,7 @@ interface DocumentsState {
 
 export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   documents: [],
+  rejected: [],
   isLoading: false,
   isImporting: false,
   error: null,
@@ -33,9 +40,12 @@ export const useDocumentsStore = create<DocumentsState>((set, get) => ({
   // The rows come back as `queued`; the pipeline reports every later step
   // through the `document-status` listener below.
   importDocuments: async (paths) => {
-    set({ isImporting: true, error: null });
+    set({ isImporting: true, error: null, rejected: [] });
     try {
-      await documentsApi.importDocuments(paths);
+      // A partly valid selection is normal: the accepted files are already
+      // queued, the refused ones are reported by name (DOC-03).
+      const { rejected } = await documentsApi.importDocuments(paths);
+      set({ rejected });
       await get().loadDocuments();
     } catch (err) {
       set({ error: String(err) });

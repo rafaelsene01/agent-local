@@ -1,8 +1,7 @@
 use super::openai_stream;
-use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress};
+use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, SHORT_REQUEST_TIMEOUT, ConfigApplied, GpuOffload, InstalledModel, ModelLimits, ProviderClient, ProviderError, PullProgress};
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
 /// Generic client for a manually-added "OpenAI-compatible" server (CONN-01
@@ -16,10 +15,7 @@ pub struct CustomClient {
 
 impl CustomClient {
     pub fn new(base_url: String) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("failed to build reqwest client");
+        let client = super::http_client();
         CustomClient { base_url, client }
     }
 }
@@ -32,6 +28,17 @@ struct ModelsListResponse {
 #[derive(Debug, Deserialize)]
 struct ModelEntry {
     id: String,
+    /// llama.cpp's `/v1/models` adds this block; other OpenAI-compatible
+    /// servers don't, hence the Option. Verified live against `llama-server`
+    /// on 2026-07-25: `meta.n_ctx_train` = 131072 for Phi-3.5 Mini (the model's
+    /// trained window) and `meta.n_ctx` = 21760 (what it allocated).
+    meta: Option<ModelMeta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelMeta {
+    n_ctx: Option<u32>,
+    n_ctx_train: Option<u32>,
 }
 
 #[async_trait]
@@ -54,6 +61,7 @@ impl ProviderClient for CustomClient {
         let resp = self
             .client
             .get(format!("{}/v1/models", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
             .send()
             .await?;
         let parsed: ModelsListResponse = resp
@@ -68,6 +76,37 @@ impl ProviderClient for CustomClient {
                 size_bytes: None,
             })
             .collect())
+    }
+
+    /// Matches by the exact id first and falls back to a suffix match: the
+    /// embedded runtime knows its models by file name while `llama-server`
+    /// reports the full path it was started with.
+    async fn model_limits(&self, model: &str) -> Result<ModelLimits, ProviderError> {
+        let resp = self
+            .client
+            .get(format!("{}/v1/models", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
+            .send()
+            .await?;
+        let parsed: ModelsListResponse = resp
+            .json()
+            .await
+            .map_err(|e| ProviderError::ParseError(e.to_string()))?;
+
+        let entry = parsed
+            .data
+            .iter()
+            .find(|m| m.id == model)
+            .or_else(|| parsed.data.iter().find(|m| m.id.ends_with(model)))
+            .or_else(|| parsed.data.first());
+
+        Ok(entry
+            .and_then(|m| m.meta.as_ref())
+            .map(|meta| ModelLimits {
+                max_context: meta.n_ctx_train,
+                current_context: meta.n_ctx,
+            })
+            .unwrap_or_default())
     }
 
     async fn pull_model(

@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useConnectionsStore } from "../../store/connectionsStore";
-import type { ConfigApplied } from "../../types";
+import { connectionsApi } from "../../lib/connectionsApi";
+import type { ConfigApplied, ModelLimits } from "../../types";
 
 type GpuMode = "default" | "off" | "max" | "fraction";
+
+/// Below this a chat barely fits a system prompt, and llama.cpp rounds tiny
+/// windows up anyway.
+const MIN_CONTEXT = 512;
+const CONTEXT_STEP = 512;
 
 interface Props {
   connectionId: string;
@@ -20,6 +26,29 @@ export function ModelConfigForm({ connectionId, modelName, onClose }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [applied, setApplied] = useState<ConfigApplied | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [limits, setLimits] = useState<ModelLimits | null>(null);
+
+  // The ceiling comes from the model itself (llama.cpp reports `n_ctx_train`,
+  // Ollama `<arch>.context_length`). A provider that can't report it leaves
+  // the field free instead of getting an invented limit.
+  useEffect(() => {
+    let active = true;
+    connectionsApi
+      .modelLimits(connectionId, modelName)
+      .then((result) => active && setLimits(result))
+      .catch(() => active && setLimits(null));
+    return () => {
+      active = false;
+    };
+  }, [connectionId, modelName]);
+
+  const maxContext = limits?.max_context ?? null;
+  const sliderValue = Number(contextLength) || limits?.current_context || MIN_CONTEXT;
+
+  function setClamped(value: number) {
+    const ceiling = maxContext ?? value;
+    setContextLength(String(Math.min(Math.max(value, MIN_CONTEXT), ceiling)));
+  }
 
   function gpuOffloadValue(): string | null {
     if (gpuMode === "off") return "off";
@@ -60,15 +89,57 @@ export function ModelConfigForm({ connectionId, modelName, onClose }: Props) {
 
       <div className="mt-3 space-y-3">
         <div>
-          <label className="text-xs text-[var(--text-secondary)]">{t("connections.contextLength")}</label>
-          <input
-            type="number"
-            min={1}
-            value={contextLength}
-            onChange={(e) => setContextLength(e.target.value)}
-            placeholder={t("connections.contextLengthPlaceholder")}
-            className="mt-1 w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm"
-          />
+          <div className="flex items-baseline justify-between gap-2">
+            <label className="text-xs text-[var(--text-secondary)]">
+              {t("connections.contextLength")}
+            </label>
+            <span className="text-xs text-[var(--text-secondary)]">
+              {maxContext
+                ? t("connections.contextMax", { max: maxContext.toLocaleString() })
+                : t("connections.contextMaxUnknown")}
+              {limits?.current_context
+                ? ` · ${t("connections.contextCurrent", {
+                    current: limits.current_context.toLocaleString(),
+                  })}`
+                : ""}
+            </span>
+          </div>
+
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="number"
+              min={MIN_CONTEXT}
+              max={maxContext ?? undefined}
+              step={CONTEXT_STEP}
+              value={contextLength}
+              onChange={(e) => setContextLength(e.target.value)}
+              onBlur={(e) => e.target.value && setClamped(Number(e.target.value))}
+              placeholder={t("connections.contextLengthPlaceholder")}
+              className="w-28 rounded-md border border-[var(--border-color)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm"
+            />
+            {/* The slider only exists when there is a real ceiling to slide
+                against; without one it would imply a limit nobody reported. */}
+            {maxContext && (
+              <input
+                type="range"
+                min={MIN_CONTEXT}
+                max={maxContext}
+                step={CONTEXT_STEP}
+                value={sliderValue}
+                onChange={(e) => setClamped(Number(e.target.value))}
+                className="flex-1 accent-[var(--accent)]"
+              />
+            )}
+            {contextLength && (
+              <button
+                type="button"
+                onClick={() => setContextLength("")}
+                className="shrink-0 text-xs text-[var(--text-secondary)] underline hover:text-[var(--text-primary)]"
+              >
+                {t("connections.useProviderDefault")}
+              </button>
+            )}
+          </div>
         </div>
 
         <div>

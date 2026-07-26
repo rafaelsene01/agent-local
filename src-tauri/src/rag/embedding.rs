@@ -30,14 +30,20 @@ impl std::fmt::Display for EmbeddingError {
 
 impl std::error::Error for EmbeddingError {}
 
-static MODEL_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+/// Rewritable, not a `OnceLock`: the folder is only known after the wizard on
+/// a first run, and it changes again whenever the user moves the base path.
+/// The value that counts is the one set when the model is first loaded.
+static MODEL_CACHE_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 static EMBEDDER: OnceLock<Mutex<TextEmbedding>> = OnceLock::new();
 
 /// Points the model download at the user's base folder (AD-008) instead of a
-/// hidden cache. Must be called before the first `embed_batch`; ignored
-/// afterwards, since the model is only loaded once.
+/// hidden cache. Called at boot, at the end of onboarding and when the base
+/// path changes; only the value present at the first `embed_batch` decides
+/// where the model actually lands, since it is loaded once per process.
 pub fn set_cache_dir(dir: PathBuf) {
-    let _ = MODEL_CACHE_DIR.set(dir);
+    if let Ok(mut current) = MODEL_CACHE_DIR.lock() {
+        *current = Some(dir);
+    }
 }
 
 /// Serializes the first initialization. Without it, two documents indexing at
@@ -63,8 +69,9 @@ fn embedder() -> Result<&'static Mutex<TextEmbedding>, EmbeddingError> {
     }
 
     let mut options = TextInitOptions::new(MODEL).with_show_download_progress(false);
-    if let Some(dir) = MODEL_CACHE_DIR.get() {
-        options = options.with_cache_dir(dir.clone());
+    let cache_dir = MODEL_CACHE_DIR.lock().ok().and_then(|d| d.clone());
+    if let Some(dir) = cache_dir {
+        options = options.with_cache_dir(dir);
     }
 
     let model =

@@ -26,26 +26,33 @@ pub fn create_chat(db: State<DbState>, title: Option<String>) -> Result<Chat, St
         title,
         created_at: now.clone(),
         updated_at: now,
+        // Matches the column default; a new chat starts using the global base.
+        use_global_rag: true,
     })
 }
+
+fn row_to_chat(row: &rusqlite::Row) -> rusqlite::Result<Chat> {
+    Ok(Chat {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        created_at: row.get(2)?,
+        updated_at: row.get(3)?,
+        use_global_rag: row.get::<_, i64>(4)? != 0,
+    })
+}
+
+const SELECT_CHAT: &str = "SELECT id, title, created_at, updated_at, use_global_rag FROM chats";
 
 #[tauri::command]
 pub fn list_chats(db: State<DbState>) -> Result<Vec<Chat>, String> {
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let conn = require_conn(&guard)?;
     let mut stmt = conn
-        .prepare("SELECT id, title, created_at, updated_at FROM chats ORDER BY updated_at DESC")
+        .prepare(&format!("{SELECT_CHAT} ORDER BY updated_at DESC"))
         .map_err(|e| e.to_string())?;
 
     let chats = stmt
-        .query_map([], |row| {
-            Ok(Chat {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-            })
-        })
+        .query_map([], row_to_chat)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<Chat>, _>>()
         .map_err(|e| e.to_string())?;
@@ -74,16 +81,12 @@ pub fn rename_chat(db: State<DbState>, id: String, title: String) -> Result<Chat
         return Err("Chat não encontrado".to_string());
     }
 
-    let created_at: String = conn
-        .query_row("SELECT created_at FROM chats WHERE id = ?1", params![id], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-
-    Ok(Chat {
-        id,
-        title: title.to_string(),
-        created_at,
-        updated_at: now,
-    })
+    conn.query_row(
+        &format!("{SELECT_CHAT} WHERE id = ?1"),
+        params![id],
+        row_to_chat,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Deleting a chat takes its attachments with it (AD-004/CHAT-12): the rows,

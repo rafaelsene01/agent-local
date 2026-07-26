@@ -1,11 +1,10 @@
-use super::{HEALTH_CHECK_TIMEOUT,
-    ChatMessage, ChatStream, ChatToken, ConfigApplied, GpuOffload, InstalledModel, ProviderClient,
+use super::{HEALTH_CHECK_TIMEOUT, SHORT_REQUEST_TIMEOUT,
+    ChatMessage, ChatStream, ChatToken, ConfigApplied, GpuOffload, InstalledModel, ModelLimits, ProviderClient,
     ProviderError, PullProgress, PullStatus,
 };
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
 pub struct OllamaClient {
@@ -15,10 +14,7 @@ pub struct OllamaClient {
 
 impl OllamaClient {
     pub fn new(base_url: String) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("failed to build reqwest client");
+        let client = super::http_client();
         OllamaClient { base_url, client }
     }
 }
@@ -44,6 +40,24 @@ struct TagsResponse {
 struct TagModel {
     name: String,
     size: Option<u64>,
+}
+
+/// `POST /api/show` answers with a `model_info` map whose keys are prefixed by
+/// the architecture — `llama.context_length`, `gemma4.context_length` and so
+/// on (docs.ollama.com/api-reference/show-model-details, checked 2026-07-25).
+/// The prefix isn't knowable up front, so the key is matched by its suffix.
+#[derive(Debug, Deserialize)]
+struct ShowResponse {
+    model_info: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+fn context_length_from_model_info(
+    info: &serde_json::Map<String, serde_json::Value>,
+) -> Option<u32> {
+    info.iter()
+        .find(|(key, _)| key.ends_with(".context_length"))
+        .and_then(|(_, value)| value.as_u64())
+        .map(|v| v as u32)
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +115,7 @@ impl ProviderClient for OllamaClient {
         let resp = self
             .client
             .get(format!("{}/api/tags", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
             .send()
             .await?;
         let parsed: TagsResponse = resp
@@ -115,6 +130,29 @@ impl ProviderClient for OllamaClient {
                 size_bytes: m.size,
             })
             .collect())
+    }
+
+    /// Ollama applies `num_ctx` per request, so there is no "currently
+    /// allocated" value to report — only the model's trained maximum.
+    async fn model_limits(&self, model: &str) -> Result<ModelLimits, ProviderError> {
+        let resp = self
+            .client
+            .post(format!("{}/api/show", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
+            .json(&serde_json::json!({ "model": model }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Ok(ModelLimits::default());
+        }
+        let parsed: ShowResponse = resp
+            .json()
+            .await
+            .map_err(|e| ProviderError::ParseError(e.to_string()))?;
+        Ok(ModelLimits {
+            max_context: parsed.model_info.as_ref().and_then(context_length_from_model_info),
+            current_context: None,
+        })
     }
 
     async fn pull_model(
@@ -200,6 +238,12 @@ impl ProviderClient for OllamaClient {
         if let Some(ctx) = context_length {
             options.insert("num_ctx".to_string(), serde_json::json!(ctx));
         }
+        // Ollama's `num_predict` defaults to unlimited, same runaway risk the
+        // OpenAI-compatible path caps with `max_tokens`.
+        options.insert(
+            "num_predict".to_string(),
+            serde_json::json!(super::answer_token_budget(context_length)),
+        );
         if let Some(offload) = gpu_offload {
             // num_gpu counts layers: 0 keeps everything on the CPU, a large
             // number means "as many as fit".

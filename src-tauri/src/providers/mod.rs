@@ -10,9 +10,41 @@ use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
 /// Every provider lives on localhost, so an unreachable one should fail fast
-/// instead of holding the Conexões screen for the client-wide 5s. Applied
-/// per-request rather than on the client, which also serves model downloads.
+/// instead of holding the Conexões screen. Applied per-request rather than on
+/// the client, which also serves streaming answers and model downloads.
 pub const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Hard ceiling on a single answer. Without one, generation is unlimited and
+/// a model that misses its stop token keeps going until the whole context
+/// window is full — seen live: 6000+ tokens of runaway text after a malformed
+/// prompt. Long answers are truncated visibly, which beats a hung chat.
+pub const MAX_ANSWER_TOKENS: u32 = 2048;
+
+/// The answer also has to leave room for the prompt inside the configured
+/// window, so a small window shrinks the cap instead of overflowing it.
+pub fn answer_token_budget(context_length: Option<u32>) -> u32 {
+    match context_length {
+        Some(ctx) => MAX_ANSWER_TOKENS.min((ctx / 2).max(256)),
+        None => MAX_ANSWER_TOKENS,
+    }
+}
+
+/// For calls that must answer promptly (listing models, applying config) —
+/// generous enough for a runtime that is busy loading a model.
+pub const SHORT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Shared by every provider client. There is deliberately **no** overall
+/// timeout: `reqwest`'s applies to the whole request including the response
+/// body, so a total timeout also caps how long an answer may stream and how
+/// long a model pull may take — a 5s one killed generation mid-sentence
+/// (`llama-server` logged `stop: cancel task` five seconds in). Connecting
+/// still fails fast, and short calls set their own per-request timeout.
+pub fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()
+        .expect("failed to build reqwest client")
+}
 
 #[derive(Debug, Serialize, Clone)]
 pub struct InstalledModel {
@@ -86,6 +118,19 @@ impl<'de> Deserialize<'de> for GpuOffload {
     }
 }
 
+/// What the provider says about a model's context window. `max_context` is
+/// the length the model was trained for — the ceiling for the config field —
+/// and `current_context` is what the runtime has allocated right now, which
+/// can be smaller (llama.cpp sizes the KV cache to fit memory).
+///
+/// Both are optional: a plain OpenAI-compatible server reports neither, and a
+/// number invented for it would be a lie the UI would enforce.
+#[derive(Debug, Serialize, Clone, Default)]
+pub struct ModelLimits {
+    pub max_context: Option<u32>,
+    pub current_context: Option<u32>,
+}
+
 /// Reports which fields the provider actually accepted (CONN-13 AC3) —
 /// e.g. LM Studio only applies context/GPU config on model (re)load,
 /// Ollama applies num_ctx/num_gpu per chat request without a reload.
@@ -150,6 +195,20 @@ impl ChatMessage {
 
 /// One incremental piece of the answer. `done` arrives on its own at the end,
 /// which is what lets the caller persist the accumulated message exactly once.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_is_always_capped_and_never_exceeds_half_the_window() {
+        assert_eq!(answer_token_budget(None), MAX_ANSWER_TOKENS);
+        assert_eq!(answer_token_budget(Some(131072)), MAX_ANSWER_TOKENS);
+        assert_eq!(answer_token_budget(Some(2048)), 1024);
+        // A tiny window still leaves room for a usable answer.
+        assert_eq!(answer_token_budget(Some(512)), 256);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatToken {
     pub delta: String,
@@ -175,6 +234,12 @@ pub trait ProviderClient: Send + Sync {
         context_length: Option<u32>,
         gpu_offload: Option<GpuOffload>,
     ) -> Result<ConfigApplied, ProviderError>;
+
+    /// Defaults to "unknown" so a provider that has no way to report it stays
+    /// honest instead of inheriting someone else's numbers.
+    async fn model_limits(&self, _model: &str) -> Result<ModelLimits, ProviderError> {
+        Ok(ModelLimits::default())
+    }
 
     async fn stream_chat(
         &self,

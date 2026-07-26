@@ -1,6 +1,6 @@
 use super::openai_stream;
-use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, 
-    ConfigApplied, GpuOffload, InstalledModel, ProviderClient, ProviderError, PullProgress,
+use super::{ChatMessage, ChatStream, HEALTH_CHECK_TIMEOUT, SHORT_REQUEST_TIMEOUT, 
+    ConfigApplied, GpuOffload, InstalledModel, ModelLimits, ProviderClient, ProviderError, PullProgress,
     PullStatus,
 };
 use async_trait::async_trait;
@@ -15,10 +15,7 @@ pub struct LmStudioClient {
 
 impl LmStudioClient {
     pub fn new(base_url: String) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("failed to build reqwest client");
+        let client = super::http_client();
         LmStudioClient { base_url, client }
     }
 }
@@ -32,6 +29,12 @@ struct ModelsResponse {
 struct ModelEntry {
     key: String,
     size_bytes: Option<u64>,
+    /// Documented for the models listing (`max_context_length` in LM Studio's
+    /// REST docs, checked 2026-07-25) but **not** verified against a running
+    /// LM Studio — none was installed here. Optional on purpose: if the field
+    /// is absent or renamed, the UI falls back to a free number field instead
+    /// of enforcing a wrong ceiling.
+    max_context_length: Option<u32>,
 }
 
 // SPEC_DEVIATION: design.md guessed camelCase `contextLength`/`gpuOffload` as
@@ -73,6 +76,7 @@ impl ProviderClient for LmStudioClient {
         let resp = self
             .client
             .get(format!("{}/api/v1/models", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
             .send()
             .await?;
         let parsed: ModelsResponse = resp
@@ -87,6 +91,28 @@ impl ProviderClient for LmStudioClient {
                 size_bytes: m.size_bytes,
             })
             .collect())
+    }
+
+    async fn model_limits(&self, model: &str) -> Result<ModelLimits, ProviderError> {
+        let resp = self
+            .client
+            .get(format!("{}/api/v1/models", self.base_url))
+            .timeout(SHORT_REQUEST_TIMEOUT)
+            .send()
+            .await?;
+        let parsed: ModelsResponse = resp
+            .json()
+            .await
+            .map_err(|e| ProviderError::ParseError(e.to_string()))?;
+        Ok(parsed
+            .models
+            .iter()
+            .find(|m| m.key == model)
+            .map(|m| ModelLimits {
+                max_context: m.max_context_length,
+                current_context: None,
+            })
+            .unwrap_or_default())
     }
 
     async fn pull_model(

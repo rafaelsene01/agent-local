@@ -59,6 +59,10 @@ pub async fn download_model_from_url(
 ) -> Result<PathBuf, RuntimeError> {
     let file_name = validate_gguf_url(url)?;
     let dest = models_dir.join(file_name);
+    // Already downloaded is a success, not a reason to pull gigabytes again.
+    if dest.exists() {
+        return Ok(dest);
+    }
     download::download_with_progress(url, &dest, progress).await?;
     Ok(dest)
 }

@@ -72,40 +72,79 @@ fn row_to_record(row: &rusqlite::Row) -> rusqlite::Result<DocumentRecord> {
 const SELECT_DOCUMENT: &str =
     "SELECT id, filename, file_path, size_bytes, status, error_message, created_at, updated_at FROM documents";
 
+/// A file the import refused, with the reason to show next to its name.
+#[derive(Debug, Serialize, Clone)]
+pub struct RejectedImport {
+    pub path: String,
+    pub reason: String,
+}
+
+/// One bad file in a selection must not throw away the good ones (DOC-03):
+/// each is judged on its own and the rejected ones come back named.
+#[derive(Debug, Serialize, Clone)]
+pub struct ImportResult {
+    pub imported: Vec<DocumentRecord>,
+    pub rejected: Vec<RejectedImport>,
+}
+
 #[tauri::command]
 pub fn import_documents(
     app: AppHandle,
     db: State<DbState>,
     paths: Vec<String>,
-) -> Result<Vec<DocumentRecord>, String> {
+) -> Result<ImportResult, String> {
     let dir = documents_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let mut created = Vec::new();
+    let mut rejected = Vec::new();
+    let mut reject = |path: &PathBuf, reason: String| {
+        rejected.push(RejectedImport {
+            path: path.to_string_lossy().to_string(),
+            reason,
+        });
+    };
+
     for raw in paths {
         let source = PathBuf::from(&raw);
         if !parsing::is_supported(&source) {
-            return Err(format!(
-                "formato não suportado: {}. Aceitos: PDF, DOCX, TXT, MD",
-                source.display()
-            ));
+            reject(
+                &source,
+                "formato não suportado. Aceitos: PDF, DOCX, TXT, MD".to_string(),
+            );
+            continue;
         }
-        let metadata = std::fs::metadata(&source).map_err(|e| e.to_string())?;
+        let metadata = match std::fs::metadata(&source) {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                reject(&source, e.to_string());
+                continue;
+            }
+        };
         if metadata.len() > MAX_FILE_BYTES {
-            return Err(format!(
-                "{} tem {:.1} MB e excede o limite de {} MB",
-                source.display(),
-                metadata.len() as f64 / 1e6,
-                MAX_FILE_BYTES / 1024 / 1024
-            ));
+            reject(
+                &source,
+                format!(
+                    "tem {:.1} MB e excede o limite de {} MB",
+                    metadata.len() as f64 / 1e6,
+                    MAX_FILE_BYTES / 1024 / 1024
+                ),
+            );
+            continue;
         }
 
-        let filename = source
+        let Some(filename) = source
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .ok_or_else(|| "caminho de arquivo inválido".to_string())?;
+        else {
+            reject(&source, "caminho de arquivo inválido".to_string());
+            continue;
+        };
         let destination = unique_destination(&dir, &filename);
-        std::fs::copy(&source, &destination).map_err(|e| e.to_string())?;
+        if let Err(e) = std::fs::copy(&source, &destination) {
+            reject(&source, e.to_string());
+            continue;
+        }
 
         let record = DocumentRecord {
             id: Uuid::new_v4().to_string(),
@@ -141,7 +180,10 @@ pub fn import_documents(
         created.push(record);
     }
 
-    Ok(created)
+    Ok(ImportResult {
+        imported: created,
+        rejected,
+    })
 }
 
 /// Each document gets its own task, so importing several keeps the UI

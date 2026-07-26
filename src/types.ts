@@ -3,6 +3,20 @@ export interface Chat {
   title: string;
   created_at: string;
   updated_at: string;
+  /** Whether this chat also searches the global knowledge base (CHAT-14). */
+  use_global_rag: boolean;
+}
+
+/** Terminal states: `injected_whole` (small file put in the prompt verbatim),
+ *  `ready` (indexed for retrieval) and `error`. */
+export type ChatAttachmentStatus = "queued" | "injected_whole" | "ready" | "error";
+
+export interface ChatAttachment {
+  id: string;
+  filename: string;
+  status: ChatAttachmentStatus;
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface Message {
@@ -49,6 +63,18 @@ export interface DocumentRecord {
   updated_at: string;
 }
 
+export interface RejectedImport {
+  path: string;
+  reason: string;
+}
+
+/** A selection can be partly valid: the good files are imported and the bad
+ *  ones come back named, instead of the whole batch failing. */
+export interface ImportResult {
+  imported: DocumentRecord[];
+  rejected: RejectedImport[];
+}
+
 export interface DocumentStatusEvent {
   id: string;
   status: DocumentStatus;
@@ -79,6 +105,8 @@ export interface DownloadableModel {
   params_billions: number;
   default_quant: string;
   estimated_ram_gb: number;
+  /** Exact download size, known for the embedded runtime's GGUF files. */
+  download_bytes: number | null;
   fits_ram: boolean;
 }
 
@@ -100,6 +128,15 @@ export interface ModelDownloadProgressEvent {
   connection_id: string;
   identifier: string;
   progress: PullProgress;
+}
+
+/** What the provider says about a model's context window. Both are null when
+ *  the provider can't report it (a plain OpenAI-compatible server). */
+export interface ModelLimits {
+  /** The window the model was trained for — the ceiling for the config field. */
+  max_context: number | null;
+  /** What the runtime has allocated right now; can be smaller than the max. */
+  current_context: number | null;
 }
 
 export interface ConfigApplied {

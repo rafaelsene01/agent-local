@@ -7,6 +7,7 @@ import type {
   DownloadableModelsResponse,
   EmbeddedRuntimeStatus,
   InstalledModel,
+  ModelLimits,
 } from "../types";
 
 export const connectionsApi = {
@@ -31,6 +32,9 @@ export const connectionsApi = {
   stopEmbeddedRuntime: () => invoke<void>("stop_embedded_runtime"),
   embeddedRuntimeStatus: () => invoke<EmbeddedRuntimeStatus>("embedded_runtime_status"),
   downloadEmbeddedModel: (url: string) => invoke<void>("download_embedded_model", { url }),
+
+  modelLimits: (connectionId: string, modelName: string) =>
+    invoke<ModelLimits>("model_limits", { connectionId, modelName }),
 
   configureModel: (
     connectionId: string,

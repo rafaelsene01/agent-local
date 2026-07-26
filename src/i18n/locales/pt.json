@@ -21,7 +21,7 @@
   "chatPanel": {
     "selectOrCreate": "Selecione um chat ou crie um novo para começar",
     "newChat": "Novo chat",
-    "noMessages": "Sem mensagens ainda. O envio de mensagens chega no próximo milestone (conexão com LM Studio/Ollama).",
+    "noMessages": "Sem mensagens ainda. Pergunte alguma coisa para começar.",
     "placeholder": "Pergunte alguma coisa…",
     "send": "Enviar",
     "cancel": "Parar",
@@ -31,7 +31,9 @@
     "attachmentsSelected": "{{count}} arquivo(s) anexado(s)",
     "clearAttachments": "Limpar",
     "generating": "Gerando…",
-    "fileDialogTitle": "Escolha os arquivos para anexar"
+    "fileDialogTitle": "Escolha os arquivos para anexar",
+    "attachmentFailed": "O anexo \"{{name}}\" não pôde ser processado ({{reason}}) — a resposta foi gerada sem ele.",
+    "attachmentsRejected": "Arquivos não suportados ignorados: {{files}}"
   },
   "documents": {
     "title": "Documentos",
@@ -49,7 +51,8 @@
     "remove": "Remover",
     "retryHint": "Remova e importe de novo.",
     "supportedFormats": "PDF, DOCX, TXT e MD",
-    "fileDialogTitle": "Escolha os documentos"
+    "fileDialogTitle": "Escolha os documentos",
+    "rejected": "Não importado: {{name}} — {{reason}}"
   },
   "connections": {
     "title": "Conexões",
@@ -98,7 +101,6 @@
     "tabModels": "Modelos",
     "installedModels": "Modelos instalados",
     "noAvailableConnections": "Nenhuma conexão disponível para listar modelos.",
-    "connectionUnavailable": "Esta conexão não está respondendo, então os modelos dela não podem ser listados.",
     "noInstalledModels": "Nenhum modelo instalado ainda.",
     "active": "Ativo",
     "useModel": "Usar este modelo",
@@ -109,14 +111,13 @@
     "download": "Baixar",
     "downloaded": "Baixado",
     "downloadError": "Falha no download",
-    "noConnectionForProvider": "Nenhuma conexão disponível suporta este provedor",
     "manualPull": "Baixar por nome ou link",
     "manualPullPlaceholder": "Nome do modelo (Ollama) ou link do Hugging Face (LM Studio)",
     "pull": "Baixar",
     "configureModel": "Configurar {{model}}",
     "close": "Fechar",
     "contextLength": "Tamanho de contexto",
-    "contextLengthPlaceholder": "Padrão do provedor",
+    "contextLengthPlaceholder": "Padrão",
     "gpuOffload": "GPU offload",
     "gpuMode": {
       "default": "Padrão",
@@ -126,7 +127,13 @@
     },
     "save": "Salvar",
     "notApplied": "não aplicado",
-    "requiresReload": "Este provedor só aplica essas configurações no próximo carregamento (reload) do modelo."
+    "requiresReload": "Este provedor só aplica essas configurações no próximo carregamento (reload) do modelo.",
+    "requiresProvider": "Precisa do {{provider}} rodando para baixar — abra ele e atualize a conexão.",
+    "ramEstimate": "~{{gb}} GB de RAM",
+    "contextMax": "máx. {{max}}",
+    "contextMaxUnknown": "este provedor não informa o limite",
+    "contextCurrent": "em uso: {{current}}",
+    "useProviderDefault": "Usar padrão do provedor"
   },
   "settings": {
     "title": "Configurações",

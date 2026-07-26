@@ -27,18 +27,17 @@ pub async fn stream_chat_completions(
     base_url: &str,
     model: &str,
     messages: Vec<ChatMessage>,
-    max_context: Option<u32>,
+    context_length: Option<u32>,
 ) -> Result<ChatStream, ProviderError> {
-    let mut body = json!({
+    // Always sent, not only when a context length was configured: `max_tokens`
+    // is the answer cap, and its absence means "generate until the window is
+    // full" (super::MAX_ANSWER_TOKENS explains what that looked like).
+    let body = json!({
         "model": model,
         "messages": messages,
         "stream": true,
+        "max_tokens": super::answer_token_budget(context_length),
     });
-    if let Some(ctx) = max_context {
-        // Not a context-window setting per se: it caps the answer so a long
-        // reply can't run past the window the user configured.
-        body["max_tokens"] = json!(ctx);
-    }
 
     let response = client
         .post(format!("{base_url}/v1/chat/completions"))
@@ -162,6 +161,52 @@ mod tests {
 
         assert_eq!(text, "Olá, mundo");
         assert!(saw_done, "[DONE] must surface as a done token");
+    }
+
+    /// Regression: the shared client used to carry a 5s overall timeout, which
+    /// `reqwest` applies to the response body too — any answer longer than
+    /// that was cut off mid-sentence (`llama-server` logged `stop: cancel
+    /// task`). The gap below is deliberately longer than that old limit.
+    #[tokio::test]
+    async fn a_slow_answer_is_not_cut_off_by_a_client_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            use std::io::Read;
+            let _ = socket.read(&mut [0u8; 2048]);
+            let _ = socket.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            );
+            let _ = socket.flush();
+            // A real model can take much longer than this to produce its
+            // first token while it processes the prompt.
+            std::thread::sleep(std::time::Duration::from_secs(7));
+            let _ = socket.write_all(
+                b"data: {\"choices\":[{\"delta\":{\"content\":\"demorou\"}}]}\n\ndata: [DONE]\n\n",
+            );
+            let _ = socket.flush();
+        });
+
+        let mut stream = stream_chat_completions(
+            &crate::providers::http_client(),
+            &format!("http://127.0.0.1:{port}"),
+            "slow-model",
+            vec![ChatMessage::user("oi")],
+            None,
+        )
+        .await
+        .expect("request failed");
+
+        let mut text = String::new();
+        while let Some(item) = stream.next().await {
+            let token = item.expect("the stream must survive a long pause");
+            text.push_str(&token.delta);
+            if token.done {
+                break;
+            }
+        }
+        assert_eq!(text, "demorou");
     }
 
     #[tokio::test]

@@ -111,6 +111,13 @@ pub async fn ingest(app: &AppHandle, chat_id: &str, paths: &[String]) -> Result<
             continue;
         }
 
+        if let Err(e) = crate::rag::pdfium::ensure_for(app, &destination).await {
+            let _ = record_attachment(
+                app, &id, chat_id, &filename, &path_str, size, "error", None, Some(&e),
+            );
+            continue;
+        }
+
         match parsing::extract_text(&destination) {
             Ok(text) if text.len() <= WHOLE_INJECTION_MAX_CHARS => {
                 record_attachment(
