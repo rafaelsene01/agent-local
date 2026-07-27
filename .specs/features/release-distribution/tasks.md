@@ -2,7 +2,11 @@
 
 **Design**: `.specs/features/release-distribution/design.md`
 **Spec**: `.specs/features/release-distribution/spec.md`
-**Status**: In Progress — **23/24 implementadas**; T2 concluída pelo mantenedor em 2026-07-26, **só a T24 continua aberta**
+**Status**: In Progress — **23/24 implementadas**; T2 concluída pelo mantenedor em 2026-07-26.
+**A T24 deixou de estar bloqueada em 2026-07-27**: duas releases foram publicadas de verdade
+(`v0.1.1` e `v0.2.0`) e o pipeline rodou inteiro. Sobra a metade "atualizar" — nada foi instalado
+e nenhum update foi aplicado. A publicação também expôs um defeito real, já corrigido (URL de
+rascunho no `latest.json`).
 
 > **T2 exigiu ação humana** (gerar o par de chaves e cadastrar os secrets no GitHub) e foi feita. A T24 depende de uma release publicada de verdade.
 
@@ -32,7 +36,7 @@
 | T18 | ✅ | 5 comandos registrados; `cleanup_after_update()` no `setup` |
 | T19–T22 | ✅ | `npm run build` limpo (tsc + Vite, 1859 módulos) |
 | T23 | ⚠️ Parcial | `[profile.release]` com `strip`, `codegen-units = 1`, `lto = "thin"`. **Desvios do plano:** `lto = true` (fat) virou `"thin"` — fat LTO sobre arrow/lancedb/onnx joga o build do CI para dezenas de minutos; e `panic = "abort"` ficou **de fora**, porque remove unwinding de que os stacks SQLite/Arrow podem depender. **Medição pendente** (exige build de release completo) |
-| T24 | ⛔ **Bloqueada** | Exige publicar release de verdade (depende de T2) e instalar/atualizar em conta sem administrador |
+| T24 | ⏳ Parcial | **Deixou de ser bloqueada: duas releases foram publicadas de verdade** — `v0.1.1` (2026-07-26) e `v0.2.0` (2026-07-27), esta última num run de **58m11s** com os 11 assets no lugar. Isso fechou a metade "publicar"; **a metade "atualizar" continua aberta** e revelou um defeito real, corrigido em 2026-07-27 (ver "A primeira release publicada", abaixo) |
 
 **Totais medidos (atualizados em 2026-07-26 após a AD-036):** `cargo test` → **123 passando, 0 falhas, 4 ignorados** (112 antes, 74 antes do M8). `npm run test:scripts` → **27 passando** (eram 25). `npm run build` limpo.
 
@@ -696,8 +700,8 @@ Fase 7 — Verificação real
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Release `v0.2.0` (ou equivalente) publicada por disparo manual, com os 5 artefatos, os `.sig` e o `latest.json` com as 4 chaves de plataforma
-- [ ] Confirmado que nenhum push em `master` durante o trabalho publicou release alguma (REL-02)
+- [x] Release `v0.2.0` (ou equivalente) publicada por disparo manual, com os 5 artefatos, os `.sig` e o `latest.json` com as 4 chaves de plataforma — **feito**, ver abaixo
+- [x] Confirmado que nenhum push em `master` durante o trabalho publicou release alguma (REL-02) — **verificado**: `gh run list --workflow=release.yml` devolve **três** execuções, todas `workflow_dispatch`, nenhuma `push`
 - [ ] `-setup.exe` instalado numa conta **sem** direitos de administrador, **sem nenhum prompt de UAC** (REL-09)
 - [ ] Zip portátil descompactado numa pasta do usuário, app aberto, wizard completado, e **confirmado que nada foi escrito em `%APPDATA%`/`%LOCALAPPDATA%`** (REL-13)
 - [ ] Segunda release publicada; app **instalado** avisa sozinho, atualiza e reabre na versão nova (REL-15→REL-19)
@@ -710,6 +714,50 @@ Fase 7 — Verificação real
 **Gate**: full
 **Verify**: as evidências acima, coletadas de verdade. Nada aqui pode ser marcado por dedução ou por "compilou"
 **Commit**: `chore(release): verify end-to-end release and update flow`
+
+### A primeira release publicada, e o defeito que ela expôs (2026-07-27)
+
+O pipeline rodou inteiro, sem intervenção: `v0.1.1` em 2026-07-26 (54m46s) e `v0.2.0` em
+2026-07-27 (58m11s). A `v0.2.0` tem os **11 assets** esperados — `.msi`, `-setup.exe`, `.deb`,
+`.AppImage`, `-portable.zip`, os cinco `.sig` e o `latest.json` —, saiu de rascunho
+(`isDraft: false`) e o manifesto traz **7** chaves de plataforma, cobrindo as 4 exigidas.
+
+**O defeito: o update portátil apontava para um link morto.** No `latest.json` publicado,
+
+```
+windows-x86_64-portable -> .../releases/download/untagged-1d4dbf70f0443ab3b6c9/LocalMind_0.2.0_x64-portable.zip
+```
+
+Medido: essa URL responde **HTTP 404**; a mesma com a tag responde **200**. As outras seis chaves
+estão corretas, porque quem as escreve é o `tauri-action`, que parte da tag.
+
+**Causa, lida no log do run e não deduzida:** o passo `finalize` roda
+`gh release view "$TAG" --json assets` enquanto a release **ainda é rascunho** — e um rascunho não
+tem ref de tag, então o GitHub serve seus assets por um caminho efêmero `untagged-<hash>` que
+deixa de existir quando a release é publicada. O `patch-latest-json.mjs` gravava essa URL no
+manifesto, e só depois o `--draft=false` acontecia.
+
+**Correção:** `retagDownloadUrl(url, tag)` no `patch-latest-json.mjs`, com `--tag` obrigatório no
+workflow. O asset continua sendo **lido** da release — é isso que prova que ele existe —, e só o
+segmento da ref é corrigido.
+
+> Publicar antes de corrigir o manifesto também resolveria, e foi recusado: abriria mão do
+> invariante em que este workflow foi desenhado — *a release fica em rascunho até todo artefato
+> estar no lugar* — e faria o job `cleanup` passar a apagar uma release **já pública** quando o
+> `finalize` falhasse.
+
+**Verificado de verdade:** o script corrigido, alimentado com o `assets.json` exato do run real,
+produz uma URL que responde **HTTP 200**, preserva a assinatura e não altera nenhuma das outras
+seis chaves. `npm run test:scripts` foi de **44** para **49** — os 5 novos cobrem a URL de rascunho
+real da v0.2.0, a URL já correta (idempotência), a preservação de nomes com locale (`_en-US.msi`),
+a recusa de URL fora do formato e a recusa de tag com `/`.
+
+**O que continua aberto na T24, e é a maior parte dela:** nada foi **instalado**. Não houve
+instalação sem administrador, nenhum update foi aplicado nos dois modos, "Pular esta versão" não
+foi exercitado e a ausência de rede com o toggle desligado não foi medida.
+
+⚠️ **A v0.2.0 publicada não serve para testar o update**, por um motivo independente deste defeito:
+a tag foi cortada de um commit anterior ao M9 (ver a nota na `self-contained-runtime/tasks.md`).
 
 ---
 

@@ -202,20 +202,20 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 
 ## Requirement Traceability
 
-| Requirement ID | Story | Fase | Status (2026-07-26) |
+| Requirement ID | Story | Fase | Status (2026-07-27) |
 | --- | --- | --- | --- |
-| REL-01 | P1: Release só por `workflow_dispatch` com select de bump | Implemented | Escrito, **não executado** |
-| REL-02 | P1: Push em `master` nunca publica release | Implemented | Verificado por inspeção (o arquivo não tem outro gatilho) |
+| REL-01 | P1: Release só por `workflow_dispatch` com select de bump | **Verified** | **Executado 3× no GitHub**, todas `workflow_dispatch`; `v0.1.1` e `v0.2.0` publicadas |
+| REL-02 | P1: Push em `master` nunca publica release | **Verified** | Antes: só inspeção do arquivo. Agora **medido**: o histórico de execuções do `release.yml` não tem nenhum evento `push`, apesar de vários pushes em `master` no período |
 | REL-03 | P1: Versão calculada da última tag + bump, gravada nos arquivos que a duplicam | Implemented | Verificado (unit + dry-run real). Revisão de 2026-07-26: 4 arquivos, não 5 — `tauri.conf.json` passou a derivar de `"../package.json"`, comportamento confirmado por experimento (um caminho inválido falha o build com "`tauri.conf.json > version` must be a semver string") |
 | REL-04 | P1: Sem tag anterior, versão do `package.json` é a base | Implemented | Verificado (dry-run sem `--base` leu `0.1.0`) |
 | REL-05 | P1: CHANGELOG gerado dos Conventional Commits desde a última tag | Implemented | Verificado (git-cliff rodado no histórico real) |
-| REL-06 | P1: Commit `chore(release)`, tag `vX.Y.Z` e GitHub Release na mesma execução | Implemented | Escrito, **não executado** |
+| REL-06 | P1: Commit `chore(release)`, tag `vX.Y.Z` e GitHub Release na mesma execução | **Verified** | `chore(release): v0.2.0` no histórico, tag `v0.2.0` e a release, todos do mesmo run (58m11s) |
 | REL-07 | P1: Disparo fora de `master` ou tag já existente falha antes do build | Implemented | Escrito, **não executado** |
-| REL-08 | P1: `.msi` + `-setup.exe` + `.deb` + `.AppImage` anexados a toda release | Implemented | **Metade provada em 2026-07-26**: o job Linux compilou e bundlou `LocalMind_0.1.1_amd64.deb` e `.AppImage` antes de a execução ser cancelada. O Windows nunca terminou; nada foi anexado a release nenhuma |
+| REL-08 | P1: `.msi` + `-setup.exe` + `.deb` + `.AppImage` anexados a toda release | **Verified** | Os **4 estão na v0.2.0**: `.msi` 54.415.360 B, `-setup.exe` 34.526.071 B, `.deb` 53.543.986 B, `.AppImage` 126.958.072 B |
 | REL-09 | P1: NSIS em `currentUser`, sem UAC | Implemented | Config explícita; **UAC não testado** |
-| REL-10 | P1: Artefatos de update assinados + `latest.json` por formato | Implemented | Escrito; **depende da chave (T2)** |
-| REL-11 | P1: Falha de build mantém a release em draft | Implemented | Escrito, **não executado** |
-| REL-12 | P1: `.zip` portátil de Windows anexado e assinado com a mesma chave | Implemented | Script testado; **zip real não gerado** |
+| REL-10 | P1: Artefatos de update assinados + `latest.json` por formato | ⚠️ Implemented | **5 `.sig` publicados** e `latest.json` com 7 chaves de plataforma. Mas a entrada portátil saiu com URL de rascunho que responde **404** — corrigido em 2026-07-27, **e a correção ainda não passou por uma release de verdade** |
+| REL-11 | P1: Falha de build mantém a release em draft | **Verified** | O run cancelado de 2026-07-26 (29m37s) não deixou release publicada; o `cleanup` apagou tag e rascunho, e a `v0.1.1` seguinte reusou o mesmo número |
+| REL-12 | P1: `.zip` portátil de Windows anexado e assinado com a mesma chave | ⚠️ Implemented | Zip real gerado pelo CI e anexado com `.sig` (54.046.767 B). **Mas o da v0.2.0 tem 3 arquivos e nenhum recurso** — a tag é anterior ao M9 (ver `self-contained-runtime/tasks.md`); a assinatura não foi verificada contra a chave pública |
 | REL-13 | P1: Modo portátil grava config e dados ao lado do executável | Implemented | Verificado por unit test; **não exercitado num zip real** |
 | REL-14 | P1: Modo instalado mantém o comportamento de armazenamento atual | Implemented | Verificado por unit test |
 | REL-15 | P1: Verificação silenciosa no boot, sem bloquear a UI | Implemented | Compila; **não clicado** |

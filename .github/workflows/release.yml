@@ -264,9 +264,13 @@ jobs:
           # Tauri's artifact naming varies between versions and locales.
           gh release view "$TAG" --json assets --jq '.assets' > assets.json
 
+          # `--tag` is what makes the URL usable: the release is still a draft
+          # here, so the asset URL read above points at the ephemeral
+          # `untagged-<hash>` path that dies when the release is published.
           node scripts/patch-latest-json.mjs \
             --manifest latest.json \
             --key windows-x86_64-portable \
+            --tag "$TAG" \
             --assets assets.json \
             --name "$ZIP_NAME" \
             --signature-file "${ZIP_NAME}.sig"

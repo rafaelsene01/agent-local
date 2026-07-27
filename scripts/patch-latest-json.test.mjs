@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { addPlatform, pickAssetUrl, pickAssetUrlByName } from "./patch-latest-json.mjs";
+import { addPlatform, pickAssetUrl, pickAssetUrlByName, retagDownloadUrl } from "./patch-latest-json.mjs";
 
 const manifest = () => ({
   version: "1.0.0",
@@ -103,4 +103,42 @@ test("pickAssetUrlByName is not confused by the .sig sharing the archive name", 
 test("pickAssetUrlByName fails on an unknown name", () => {
   assert.throws(() => pickAssetUrlByName([{ name: "a.exe", url: "u" }], "b.exe"), /no release asset named/);
   assert.throws(() => pickAssetUrlByName(null, "a"), /must be an array/);
+});
+
+test("retagDownloadUrl replaces the draft ref that shipped the broken v0.2.0 link", () => {
+  // The real URL taken from the v0.2.0 run log. Fetching it returns 404;
+  // the tagged form returns 200. This is the regression, verbatim.
+  const draft =
+    "https://github.com/rafaelsene01/local-mind/releases/download/untagged-1d4dbf70f0443ab3b6c9/LocalMind_0.2.0_x64-portable.zip";
+  assert.equal(
+    retagDownloadUrl(draft, "v0.2.0"),
+    "https://github.com/rafaelsene01/local-mind/releases/download/v0.2.0/LocalMind_0.2.0_x64-portable.zip",
+  );
+});
+
+test("retagDownloadUrl leaves an already tagged URL alone", () => {
+  const tagged = "https://github.com/o/r/releases/download/v1.2.3/LocalMind_1.2.3_x64-portable.zip";
+  assert.equal(retagDownloadUrl(tagged, "v1.2.3"), tagged);
+});
+
+test("retagDownloadUrl preserves the filename exactly", () => {
+  // Tauri's locale-tagged names are the reason the URL is never rebuilt from
+  // scratch — only the ref segment is touched.
+  assert.equal(
+    retagDownloadUrl("https://github.com/o/r/releases/download/untagged-abc/LocalMind_1.2.3_x64_en-US.msi", "v1.2.3"),
+    "https://github.com/o/r/releases/download/v1.2.3/LocalMind_1.2.3_x64_en-US.msi",
+  );
+});
+
+test("retagDownloadUrl refuses anything that is not a release download URL", () => {
+  assert.throws(() => retagDownloadUrl("https://api.github.com/repos/o/r/releases/assets/1", "v1"), /not a GitHub/);
+  assert.throws(() => retagDownloadUrl("https://example/portable.zip", "v1"), /not a GitHub/);
+  assert.throws(() => retagDownloadUrl(null, "v1"), /not a GitHub/);
+});
+
+test("retagDownloadUrl refuses a tag that would forge a different path", () => {
+  const url = "https://github.com/o/r/releases/download/untagged-abc/app.zip";
+  assert.throws(() => retagDownloadUrl(url, "v1/../v2"), /invalid tag/);
+  assert.throws(() => retagDownloadUrl(url, ""), /invalid tag/);
+  assert.throws(() => retagDownloadUrl(url, undefined), /invalid tag/);
 });

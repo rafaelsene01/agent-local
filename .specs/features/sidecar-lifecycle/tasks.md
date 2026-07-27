@@ -2,7 +2,14 @@
 
 **Spec**: `.specs/features/sidecar-lifecycle/spec.md`
 **Design**: `.specs/features/sidecar-lifecycle/design.md`
-**Status**: Em execução (2026-07-26) — **T1–T6 e T8 feitas, T7 aberta**. O app chegou a subir na sessão, mas encerrou antes de o sidecar iniciar (motivo não determinado — não houve panic no log), então nem a ausência de janela nem o `taskkill` foram observados. **Enquanto a T7 não fechar, esta feature não está provada.**
+**Status**: **Complete (2026-07-27) — 8/8.** A T7 fechou contra o app de verdade: o
+`llama-server` subiu como filho do `tauri-app`, **nenhuma janela de console apareceu**, e um
+`taskkill /F` no app levou o sidecar junto. Ver o Execution Log de 2026-07-27.
+
+> Status anterior (2026-07-26): T1–T6 e T8 feitas, T7 aberta — o app tinha subido mas o sidecar
+> não iniciava, porque nenhuma conexão estava ativa (ver "Por que o app não serviu para o teste",
+> abaixo). O M9 removeu o conceito de conexão ativa, e com o runtime embutido o autostart passou a
+> ter o que iniciar — foi isso que destravou a medição.
 
 ---
 
@@ -16,10 +23,55 @@
 | T4 | ✅ | **A Open Question #1 do design foi respondida com o binário real:** `probe_devices` com `CREATE_NO_WINDOW` devolveu `GpuAvailable("NVIDIA GeForce RTX 3060")`. A flag esconde a janela, **não** a captura de stdout — o fallback silencioso para CPU não acontece |
 | T5 | ✅ | `base_path` propagado em `start_sidecar_from_row` (cobre setup, autostart e reinício por troca de modelo) |
 | T6 | ✅ | `JobState` criado no `setup` e gerenciado como estado, antes de qualquer spawn |
-| T7 | ⏳ Quase | **Fechada por teste de integração contra o binário e o modelo reais** (`sidecar_real`), que não precisa de conexão ativa nem toca na configuração do usuário: job criado, `llama-server` respondeu ao health check, **1131 bytes de log capturados**, e ao fechar o job o **kernel encerrou o processo**. Falta só a observação visual da barra de tarefas — ver a nota de método |
+| T7 | ✅ | **Fechada em 2026-07-27 contra o app real** — ver o Execution Log abaixo. Antes disso estava em "⏳ Quase", fechada só pelo teste de integração `sidecar_real` (job criado, health check respondido, 1131 bytes de log, kernel encerrando o processo ao fechar o job), com a observação da janela pendente |
 | T8 | ✅ | `cargo tree --depth 1` por alvo: no **Windows** o `windows-sys v0.61.2` aparece como dependência direta; no **Linux**, nenhuma `windows-*` direta (ele só existe lá transitivamente, via `dirs`, como já era antes). `cargo test` verde |
 
-### O que fechou a T7, e o que sobrou
+## Execution Log (2026-07-27) — a T7 fechou
+
+O que faltava era a única coisa que nenhum teste tinha conseguido produzir: **o sidecar rodando
+como filho do app**, que é o pai sem console em que o bug reproduz. Com o M9 o autostart passou a
+ter um modelo ativo para iniciar, e o `npm run tauri dev` entregou exatamente esse cenário —
+`tauri-app` PID 21876, `llama-server` PID 23476 subindo 1 s depois, Phi-3.5 carregado e escutando
+em `127.0.0.1:53773`.
+
+**Medição 1 — nenhuma janela de console (SIDE-01, SIDE-02).** Enumerando **todas** as janelas
+top-level visíveis do desktop pela `EnumWindows` e cruzando cada uma com o processo dono:
+
+```
+janelas visíveis de conhost / llama-server / tauri-app:
+  PID 21876  tauri-app   <- a única
+
+conhost.exe filho do llama-server: pid=19404, MainWindowHandle=0
+total de janelas visíveis com título no desktop: 12
+```
+
+O detalhe que torna isso conclusivo é o `conhost` **existir**: o `CREATE_NO_WINDOW` aloca o host de
+console e não lhe dá janela. Sem a flag, um app de console iniciado por um pai gráfico ganha uma
+janela visível — e é ela que apareceria nesta enumeração. A nota de método de 2026-07-26 continua
+valendo (medir `MainWindowHandle` do próprio sidecar não prova nada); o que mudou é que agora a
+medida é a janela do **conhost**, e ela foi tirada com o app de verdade como pai.
+
+**Medição 2 — o sidecar morre com o app, pelo caminho em que o nosso código não roda (SIDE-04,
+SIDE-05).** `taskkill /F` no app, sem tocar no sidecar:
+
+```
+ANTES:   llama-server pid=23476   tauri-app pid=21876
+taskkill /F /PID 21876  ->  ÊXITO
+DEPOIS (3 s):  nem tauri-app nem llama-server no tasklist
+               llama-server pid 23476 ainda existe? False
+```
+
+`taskkill /F` não dá ao processo chance de rodar `Drop` nem o handler de `ExitRequested`. Quem
+encerrou o `llama-server` foi o kernel, ao fechar o último handle do Job Object — que é exatamente
+a garantia que o M7.1 existe para dar, agora observada no produto e não só no teste.
+
+**Não medido:** Linux (fora do escopo declarado da feature — não há console parasita lá) e o
+comportamento sob crash do app em vez de kill externo. O `taskkill /F` é o caso mais severo dos
+dois, então isto é uma lacuna de cobertura, não uma dúvida sobre a garantia.
+
+---
+
+### O que fechou a T7 em 2026-07-26, e o que tinha sobrado
 
 **Fechado por `runtime::process::sidecar_real`** — teste `#[ignore]` contra o `llama-server.exe` e o Phi-3.5 instalados nesta máquina, tomando os caminhos por variável de ambiente:
 

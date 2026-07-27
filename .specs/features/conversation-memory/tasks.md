@@ -2,7 +2,9 @@
 
 **Design:** `.specs/features/conversation-memory/design.md`
 **Spec:** `.specs/features/conversation-memory/spec.md`
-**Status:** **T1–T8 concluídas; a T9 rodou e reprovou o código, que foi corrigido (2026-07-27).**
+**Status:** **T1–T8 concluídas; a T9 rodou, reprovou o código, e o código corrigido passou
+(2026-07-27).** A conversa lembrou do primeiro turno depois de 16 turnos. Sobram dois itens da T9
+que exigem clique: o backfill numa conversa real e o efeito de desligar o toggle.
 A conversa aconteceu no app e a memória **não recuperava nada** — duas causas, ambas registradas na
 AD-047: a busca pedia exatamente um candidato e o filtro de duplicata rodava depois do corte
 (`MEMORY_CANDIDATES = 8` e o filtro antes do `take`), e o histórico podia consumir todo o orçamento
@@ -28,7 +30,7 @@ parar de se prender ao que já respondeu"* — desligar foi verificado só do la
 | T6 | ✅ | `index_chat_history` + evento `memory-backfill-progress`. **Escrito na T2 junto do módulo** — ver o desvio abaixo |
 | T7 | ✅ | `use_memory` no `Chat` dos dois lados, segundo interruptor, botão de indexar com progresso, 5 chaves novas em cada idioma (**147/147**) |
 | T8 | ✅ | ROADMAP, STATE (AD-044), a rastreabilidade acima, e o prefixo `MEM` na regra `spec-driven-changes.md`, que listava dez e não incluía este |
-| T9 | ⬜ | **Aberta.** Exige conversar com o app — nenhum agente fecha isso sozinho |
+| T9 | ⏳ Quase | **A pergunta central foi respondida em conversa real (2026-07-27):** numa conversa de **16 turnos completos / 35.220 caracteres**, a pergunta sobre o **primeiro** turno foi respondida **inteira** — codinome *e* valor. As cinco tentativas anteriores da mesma pergunta tinham sido recusadas. Falta o backfill e o efeito de desligar o toggle, que exigem clicar |
 
 ### O que foi verificado contra um recurso real, e não deduzido
 
@@ -319,13 +321,53 @@ i18n nos dois idiomas.
 
 **Done when:**
 
-- [ ] Numa conversa com mais turnos do que o orçamento comporta, uma pergunta sobre o primeiro turno
-      é respondida corretamente — **com o número de turnos e o orçamento registrados**
+- [x] Numa conversa com mais turnos do que o orçamento comporta, uma pergunta sobre o primeiro turno
+      é respondida corretamente — **com o número de turnos e o orçamento registrados**.
+      **Feito em 2026-07-27** — ver "A recuperação em conversa real", abaixo
 - [ ] O backfill roda numa conversa real e a pergunta sobre o turno mais antigo é respondida
 - [ ] Desligar o toggle faz o modelo parar de se prender ao que já respondeu
-- [ ] O custo de armazenamento é **medido** contra o `vectors/` real (Open Question #3 do design)
-- [ ] A Open Question #1 (o turno rotulado é bom material de embedding?) recebe uma resposta medida
-- [ ] Gate check passa: `cargo test`, `npm run build`, `npm run test:scripts`
+- [x] O custo de armazenamento é **medido** contra o `vectors/` real (Open Question #3 do design) —
+      **~9,5 KB por turno** (AD-047); o `vectors/` da máquina está em **5,7 MB**
+- [x] A Open Question #1 (o turno rotulado é bom material de embedding?) recebe uma resposta medida —
+      **sim**, e os rótulos ajudam (1,37× com eles contra 1,33× sem). Rodado de novo em 2026-07-27
+- [x] Gate check passa: `cargo test` **174 / 0 falhas / 13 ignorados**, `npm run build` limpo,
+      `npm run test:scripts` **49**
+
+### A recuperação em conversa real (2026-07-27)
+
+O gate desta feature era "a conversa lembrou?", e a resposta agora é **sim**, lida do banco e não
+inferida. A conversa `7e0ec8bc` tem **16 turnos completos** e **35.220 caracteres** de histórico —
+o orçamento do prompt é 78.848 caracteres com `n_ctx_slot = 21760`, então o histórico **cabia**, e
+a memória estava sendo exercitada pelo motivo certo (relevância), não por transbordo.
+
+O primeiro turno plantou o dado:
+
+> *"Guarde este dado: o codinome do meu projeto e Pantera Cinzenta e o valor liberado foi 47 mil
+> reais."*
+
+A mesma pergunta foi feita **seis vezes**. As cinco primeiras (16:14 → 16:42) foram recusadas — a
+falha que a AD-047 diagnosticou. A sexta, às **16:51:52**:
+
+> *"Com base nas informações que você forneceu anteriormente em nossa conversa, você batizou o seu
+> projeto com o apelido "Pantera Cinzenta" e mencionou que 47 mil reais foram liberados."*
+
+**Os dois fatos, corretos.** Isso é o desfecho; o mecanismo por trás dele foi medido à parte, pelo
+`a_rephrased_question_still_reaches_the_turn_it_is_asking_about` contra o modelo real:
+
+```
+#0 0.3032  Usuário: voltando ao início: com que apelido eu batizei o projeto? <- isca (já citada verbatim)
+#1 0.3158  Usuário: vou te dar um codinome pra esse projeto: chama ele de Albatroz daqui pra frente <- plantado
+posição do plantado: #1 · da isca: #0 · MEMORY_CANDIDATES = 8, MEMORY_TOP_K = 1
+```
+
+A isca fica em **#0**. Com o funil antigo — `search` pedindo exatamente `MEMORY_TOP_K = 1` e o
+filtro de verbatim rodando **depois** do corte — ela consumia a única vaga e era descartada,
+sobrando zero. É a razão pela qual reformular a pergunta de forma natural *piorava* a recuperação.
+
+**O que continua aberto, e não é detalhe:** o backfill nunca rodou numa conversa de verdade, e o
+efeito de **desligar** o toggle sobre a resposta não foi observado. Os dois exigem cliques na UI.
+O `MEMORY_TOP_K = 1` também segue sem justificativa medida — uma conversa em que dois turnos
+antigos importam ao mesmo tempo continua sem ter sido testada.
 
 **Tests:** none (UAT) · **Gate:** full
 **Commit:** —

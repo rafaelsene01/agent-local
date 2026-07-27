@@ -1,9 +1,13 @@
 # Roadmap
 
-**Current Milestone:** M6 — Memória de conversa. **8 das 9 tasks implementadas (2026-07-27); falta a T9, que é conversar com o app e ver se ele lembra** (ver AD-044).
+**Current Milestone:** M6 — Memória de conversa. **8 das 9 tasks implementadas; a T9 rodou e a conversa lembrou** (2026-07-27, ver AD-047 e AD-048). Sobram dois itens da T9 que exigem clique: o backfill e o efeito de desligar o toggle.
 **Status:** In Progress — M3.1, M7, M7.1, M5 e M4 concluídos; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos); **M9 implementado em 2026-07-27** (21 das 22; falta a T22, a verificação numa máquina sem rede). **Todo milestone tem spec agora** — o M6 era o último sem, e ganhou a sua em 2026-07-27.
 
-> **As três pendências restantes têm a mesma natureza e nenhuma é código:** T24 (publicar release), T22 (instalar sem rede) e T9 (conversar e ver se lembra). Todas exigem uma pessoa executando o app.
+> **Atualizado em 2026-07-27 (AD-048).** Das quatro pendências de UAT, **duas fecharam**: a T7 do M7.1 (janela e `taskkill`, medidos no app real) e o item central da T9 (a conversa lembrou do primeiro turno depois de 16 turnos). E a T24 deixou de estar bloqueada: **`v0.1.1` e `v0.2.0` foram publicadas de verdade**.
+>
+> ⚠️ **Mas a `v0.2.0` marcada como "Latest" não serve.** A tag é anterior ao M9 e carrega o estado quebrado em runtime da AD-042 — frontend chamando comandos que o backend já não registra. **Uma release nova a partir de `master` é o que resolve**, e disparar release é do mantenedor.
+>
+> **O que continua exigindo uma pessoa:** instalar sem administrador e aplicar um update de verdade (T24), instalar com a rede desligada e conversar (T22), e clicar no backfill e no toggle de memória (T9).
 
 > **Mudança de rumo aplicada (2026-07-27):** o M9 removeu Ollama, LM Studio e a URL manual, e passou a embutir os componentes binários no instalador. O PROJECT.md foi atualizado junto (T21) — ele não promete mais detectar runtimes externos.
 
@@ -156,7 +160,7 @@ flowchart TB
 
 ---
 
-## M7.1 — Sidecar sem console e com ciclo de vida garantido — ✅ COMPLETE (2026-07-26, ver AD-041)
+## M7.1 — Sidecar sem console e com ciclo de vida garantido — ✅ COMPLETE (2026-07-26; **T7 verificada no app real em 2026-07-27**, ver AD-041 e AD-048)
 
 **Goal:** Fechar as três pontas soltas que o M7 deixou entre o sidecar e o sistema operacional.
 **Target:** Abrir o app mostra **uma** janela; matar o app à força não deixa `llama-server` órfão; a saída do sidecar continua legível, em arquivo.
@@ -225,9 +229,9 @@ flowchart TB
 
 ---
 
-## M6 — Memória de conversa (RAG híbrido) — ⚙️ IMPLEMENTADO, NÃO VERIFICADO CONVERSANDO (2026-07-27)
+## M6 — Memória de conversa (RAG híbrido) — ⚙️ IMPLEMENTADO E VERIFICADO CONVERSANDO, COM DUAS PONTAS SOLTAS (2026-07-27)
 
-> **Leia isto antes de confiar no "implementado".** As 8 tasks de código estão escritas e passam nos gates (169 testes Rust, `npm run build` limpo). O que **não** aconteceu: ninguém conversou com o app para ver se ele de fato lembra. O gate desta feature é a T9, e ela continua aberta.
+> **Leia isto antes de confiar no "implementado".** A conversa **lembrou**: 16 turnos, 35.220 caracteres, e a pergunta sobre o primeiro turno respondida inteira — depois de a primeira tentativa ter falhado e o código ter sido corrigido (AD-047, confirmada por medição na AD-048). O que **ainda não** aconteceu: o backfill nunca rodou numa conversa real, e ninguém observou o efeito de **desligar** o toggle. Gates: 174 testes Rust, `npm run build` limpo.
 
 **Goal:** Serializar a conversa e usá-la como memória via RAG híbrido, junto das outras camadas.
 **Target:** Chat lembra de coisas ditas muito antes (além da janela de contexto) recuperando turnos relevantes.
@@ -236,7 +240,7 @@ flowchart TB
 
 ### Features
 
-**Memória de sessão** — CÓDIGO PRONTO, NUNCA EXERCITADO NUMA CONVERSA (MEM-01…MEM-13)
+**Memória de sessão** — VERIFICADO NUMA CONVERSA REAL (MEM-01…MEM-13)
 
 - Cada turno **completo** (o par pergunta+resposta) é embeddado num namespace próprio da conversa, `memory:<chat_id>`, depois de a resposta ser persistida e fora do caminho da requisição
 - Geração cancelada ou com erro não vira memória: um turno pela metade recuperado depois seria uma frase truncada com autoridade de resposta completa
@@ -250,7 +254,7 @@ flowchart TB
 - Namespace exclusivo, disjunto do de anexos (`chat:<id>`) e do global — restrição explícita do usuário, verificada contra um LanceDB real
 - Excluir o chat apaga os dois namespaces
 
-**Toggle e backfill** — CÓDIGO PRONTO, NENHUM CLIQUE (MEM-14…MEM-20)
+**Toggle e backfill** — CÓDIGO PRONTO, NENHUM CLIQUE (MEM-14…MEM-20) — a gravação foi provada ligando/desligando o toggle (AD-047), mas o **backfill** e o efeito de desligar sobre a **resposta** seguem sem observação
 
 - Interruptor por conversa, ligado por padrão (migração **8**); desligado para de recuperar **e** de gravar
 - Indexação do histórico existente **sob demanda**, por conversa, com progresso — a varredura automática no boot foi recusada no planejamento: numa base grande é CPU de embedding logo depois de um update, o que se parece com travamento
@@ -263,9 +267,9 @@ flowchart TB
 
 ---
 
-## M8 — Empacotamento & Distribuição — ⚙️ IMPLEMENTADO, NÃO PUBLICADO (2026-07-26)
+## M8 — Empacotamento & Distribuição — ⚙️ PUBLICADO, ATUALIZAÇÃO NÃO EXERCITADA (2026-07-26; publicado em 2026-07-27)
 
-> **Leia isto antes de confiar no "implementado".** Código, workflows, scripts e UI estão todos escritos, com 123 testes Rust e 27 de script verdes. O que **não** aconteceu: nenhuma release foi publicada, nenhum instalador foi gerado, nenhum update foi aplicado. O gate desta feature é a T24, e ela continua aberta.
+> **Atualizado em 2026-07-27 (AD-048).** O pipeline **rodou de verdade**: `v0.1.1` e `v0.2.0` publicadas por `workflow_dispatch`, 11 assets na última, release fora de rascunho. Isso fecha REL-01, REL-02, REL-06, REL-08 e REL-11 com evidência de execução. O que **não** aconteceu: nada foi instalado e nenhum update foi aplicado — a T24 segue parcial. E a publicação expôs um defeito real: o `latest.json` apontava o update portátil para uma URL de rascunho que responde **404**, corrigido na mesma sessão e **ainda não provado numa release**.
 
 **Goal:** Gerar os instaladores finais multiplataforma, publicá-los por disparo manual com versão semântica, e fazer o app se atualizar sozinho — inclusive sem direitos de administrador.
 **Target:** Um "Run workflow" + escolher `major`/`minor`/`patch` produz versão, CHANGELOG, tag e uma release com `.msi`, `-setup.exe`, `.deb`, `.AppImage` e `.zip` portátil, todos assinados. O app instalado **e** o portátil detectam a versão nova, perguntam e se atualizam.
@@ -302,6 +306,8 @@ flowchart TB
 ## M9 — Runtime autossuficiente — ⚙️ IMPLEMENTADO, COM UMA REGRESSÃO CORRIGIDA NA PRIMEIRA EXECUÇÃO (2026-07-27)
 
 > **Leia isto antes de confiar no "implementado".** As 21 primeiras tasks passam nos gates automatizados, mas **na primeira vez que o app foi aberto o runtime empacotado não executou**: a poda do vendoring apagava `llama-server-impl.dll` e `llama-common.dll`, e o `llama-server.exe` que sobrava é um lançador de 9 KB (AD-046). Corrigido, e o binário empacotado agora responde `Vulkan0: NVIDIA GeForce RTX 3060`. **Os instaladores medidos na AD-045 foram gerados com a árvore quebrada e não servem** — precisam ser refeitos, e os tamanhos daquele registro não valem mais. A T22 segue parcial: nada foi instalado, nada foi testado com a rede desligada.
+>
+> **Atualizado em 2026-07-27 (AD-048):** o app foi aberto de novo depois da correção e **o runtime empacotado subiu** — Phi-3.5 carregado da árvore vendorizada, `n_ctx_slot = 21760`, escutando em `127.0.0.1:53773`. Isso desfaz a dúvida da AD-046 em ambiente de desenvolvimento. **Mas nada deste milestone está publicado:** a tag `v0.2.0` é anterior ao vendoring (sem `vendor.json`, sem `bundle.resources`, sem `runtime/bundled.rs`, frontend ainda em `components/Connections`), e por isso o zip portátil publicado tem 3 arquivos e nenhum recurso.
 
 **Goal:** Um runtime só, embutido, e nada para baixar além do modelo. O app deixa de conversar com programas externos e deixa de buscar componentes na internet.
 **Target:** Numa máquina **sem rede**, com um `.gguf` já na pasta de modelos: instalar → abrir → escolher o modelo → conversar. Importar um PDF offline chega a `ready`.

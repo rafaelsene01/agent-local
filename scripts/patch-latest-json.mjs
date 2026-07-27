@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPEC: release-distribution (REL-10, REL-12)
+//
 // Adds the portable entry to the updater manifest that tauri-action published.
 //
 // tauri-action only knows about the formats it bundles (nsis/msi/appimage), so
@@ -9,6 +11,7 @@
 //   node scripts/patch-latest-json.mjs \
 //     --manifest latest.json \
 //     --key windows-x86_64-portable \
+//     --tag v1.0.0 \
 //     --signature-file LocalMind_1.0.0_x64-portable.zip.sig \
 //     (--url <url> | --assets assets.json --match portable.zip)
 
@@ -46,6 +49,36 @@ export function pickAssetUrlByName(assets, name) {
   return url;
 }
 
+/** `https://github.com/<owner>/<repo>/releases/download/<ref>/<file>` split so
+ *  the ref can be replaced without touching owner, repo or filename. */
+const DOWNLOAD_URL = /^(https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/)([^/]+)(\/[^/]+)$/;
+
+/**
+ * Rewrites the release ref of a GitHub download URL to `tag`.
+ *
+ * The portable zip is uploaded while the release is still a draft, and a draft
+ * has no tag ref: GitHub serves its assets from an ephemeral
+ * `/releases/download/untagged-<hash>/` path that stops existing the moment the
+ * release is published. Reading that URL and writing it straight into
+ * `latest.json` is what shipped v0.2.0 with a portable update pointing at a
+ * dead link — measured against the published release: the untagged URL answers
+ * HTTP 404, the tagged one 200.
+ *
+ * Publishing before patching would fix it too, but it would give up the
+ * invariant this workflow is built on — the release stays a draft until every
+ * artifact is in place. So the asset is still *read* from the release, which is
+ * what proves it exists; only the ref segment is corrected.
+ */
+export function retagDownloadUrl(url, tag) {
+  const ref = String(tag ?? "");
+  if (!ref || ref.includes("/")) throw new Error(`invalid tag: ${JSON.stringify(tag)}`);
+
+  const parts = DOWNLOAD_URL.exec(String(url ?? ""));
+  if (!parts) throw new Error(`not a GitHub release download URL: ${JSON.stringify(url)}`);
+
+  return `${parts[1]}${ref}${parts[3]}`;
+}
+
 export function addPlatform(manifest, key, entry) {
   if (!manifest || typeof manifest !== "object") throw new Error("manifest must be an object");
   if (!manifest.platforms || typeof manifest.platforms !== "object") {
@@ -78,6 +111,8 @@ function main(argv) {
   if (!flags["signature-file"]) throw new Error("--signature-file is required");
   const signature = readFileSync(flags["signature-file"], "utf8").trim();
 
+  if (!flags.tag) throw new Error("--tag is required");
+
   let url = flags.url;
   if (!url) {
     if (!flags.assets || !(flags.name || flags.match)) {
@@ -86,6 +121,9 @@ function main(argv) {
     const assets = JSON.parse(readFileSync(flags.assets, "utf8"));
     url = flags.name ? pickAssetUrlByName(assets, flags.name) : pickAssetUrl(assets, flags.match);
   }
+  // Applies to `--url` too: one normalisation path means the guarantee cannot
+  // be lost by picking the other input.
+  url = retagDownloadUrl(url, flags.tag);
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const patched = addPlatform(manifest, key, { url, signature });

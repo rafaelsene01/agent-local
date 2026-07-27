@@ -8,9 +8,29 @@ medidos, e desta vez o `llama-server.exe` foi **executado a partir do zip
 portátil extraído** — a conferência que faltava. Ver as medições abaixo. O que
 continua aberto na T22 é o que exige uma pessoa: instalar sem rede, conversar,
 importar um PDF offline e abrir o portátil como app. Gates atuais:
-`cargo test` **174 passando / 0 falhas / 12 ignorados**,
-`npm run test:scripts` **44**, `npm run build` limpo. **O app foi aberto uma vez
-(AD-046) e falhou; depois da correção ninguém abriu de novo.**
+`cargo test` **174 passando / 0 falhas / 13 ignorados**,
+`npm run test:scripts` **49**, `npm run build` limpo.
+
+**Atualização de 2026-07-27 — o app foi aberto de novo, e desta vez o runtime
+subiu.** Depois da correção da AD-046, o `npm run tauri dev` levou o autostart a
+iniciar o sidecar sozinho: Phi-3.5 carregado a partir da árvore vendorizada,
+`n_ctx_slot = 21760`, escutando em `127.0.0.1:53773`. Isso fecha, em ambiente de
+desenvolvimento, a dúvida que a AD-046 tinha aberto — o `llama-server`
+empacotado não só executa, como serve o modelo. **Continua sem ter sido testado
+a partir de um app instalado, e sem a rede desligada.**
+
+⚠️ **A release `v0.2.0` publicada não contém nada deste milestone.** A tag foi
+cortada de um commit anterior ao vendoring: `git ls-tree v0.2.0 scripts/` não
+tem `vendor-runtime.mjs` nem `vendor.json`, o `tauri.conf.json` da tag não tem
+`bundle.resources`, `runtime/bundled.rs` não existe e o frontend ainda é
+`src/components/Connections`. É por isso que o zip portátil publicado tem
+**3 arquivos** (`.portable`, `LocalMind.exe`, `README.txt`) e nenhum recurso — o
+que é coerente com o código daquela tag, não um defeito do empacotador. Pior:
+naquela tag o backend já tinha perdido `list_connections`/`get_active_pair`/
+`pull_model` (Fase 1, AD-042) enquanto o frontend ainda os chamava, então
+**a release publicada é o estado quebrado em runtime que a AD-042 descreve**.
+Uma release nova, a partir de `master`, é o que resolve — e disparar release é
+decisão do mantenedor.
 
 ---
 
