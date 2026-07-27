@@ -1,93 +1,72 @@
 # LocalMind
 
-Chat de IA 100% local com RAG sobre documentos, conectando a runtimes locais (Ollama, LM Studio) e empacotado como instalador único para Windows e Linux.
+Um chat de IA que roda inteiro na sua máquina, com os seus documentos como base de conhecimento.
 
-Ver planejamento completo em [`.specs/`](.specs/project/PROJECT.md) (visão, roadmap, decisões) e [`.specs/features/app-shell/spec.md`](.specs/features/app-shell/spec.md) (spec desta primeira fase).
+Sem conta, sem servidor, sem assinatura. As conversas ficam num banco SQLite na pasta que você escolher, os documentos são indexados localmente, e o modelo de linguagem roda como um processo filho do próprio app.
 
-## Pré-requisitos
+---
 
-| Ferramenta | Necessário para | Instalação |
-| --- | --- | --- |
-| **Node.js 18+** | Frontend (Vite/React) | já instalado nesta máquina |
-| **Rust (rustup/cargo)** | Backend Tauri — **obrigatório**, ainda não instalado nesta máquina | https://www.rust-lang.org/tools/install |
-| **Windows: "Desktop development with C++"** | Linker MSVC exigido pelo Rust no Windows | Visual Studio Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
-| **Linux: libwebkit2gtk, build-essential, etc.** | Webview e build no Linux | ver checklist oficial: https://tauri.app/start/prerequisites/ |
-| **WebView2 Runtime (Windows)** | Renderização da UI | normalmente já vem no Windows 11 |
-| **protoc (Protocol Buffers)** | Exigido pelo `lance-encoding`, dependência do `lancedb`. **Sem ele o `cargo build` falha** com *"Could not find `protoc`"* | Windows: `winget install Google.Protobuf` · Linux: `apt install protobuf-compiler` |
+## O problema
 
-O **ONNX Runtime não** é pré-requisito de build: o app baixa a biblioteca na
-primeira indexação de documento, assim como faz com o binário do llama.cpp e com
-o pdfium.
+Conversar com uma IA sobre documentos próprios hoje custa uma de duas coisas: mandar os arquivos para a nuvem, ou montar um pipeline de RAG na mão — servidor de modelo, banco vetorial, extrator de PDF, gerador de embeddings, cada um com sua instalação e sua versão.
 
-Checklist oficial e completo por SO: https://tauri.app/start/prerequisites/
+O LocalMind entrega isso pronto num instalador. Você abre, escolhe onde guardar seus dados, e conversa.
 
-Depois de instalar o Rust, feche e reabra o terminal e confirme:
+## O que ele faz
 
-```bash
-rustc --version
-cargo --version
-```
+**Conversa com streaming.** A resposta aparece token a token e pode ser cancelada no meio. O que já apareceu na tela fica salvo — cancelar não apaga.
 
-## Instalar dependências do projeto
+**Base de conhecimento.** Importe PDF, DOCX, TXT ou MD. Cada arquivo passa por extração, divisão em trechos e geração de embeddings, com o progresso visível; só entra na busca depois de pronto. Nas respostas, os trechos usados vêm citados pelo nome do arquivo, para você poder conferir.
 
-```bash
-npm install
-```
+**Anexos por conversa.** Arquivos enviados dentro de um chat valem só para aquele chat — outra conversa não os enxerga. Arquivos pequenos entram inteiros no contexto; grandes são indexados. Apagar o chat apaga os arquivos e os vetores junto.
 
-## Rodar em desenvolvimento
+**Modelo rodando localmente.** O app baixa o `llama.cpp` e o modelo que você escolher, e cuida do processo: inicia junto com o app, encerra junto, e usa a GPU quando existe uma — Vulkan cobre NVIDIA, AMD e Intel sem instalar toolkit nenhum. O catálogo mostra o tamanho real de cada download e avisa o que não cabe na sua memória.
 
-Abre a janela nativa do app com hot-reload do frontend e do backend Rust:
+**Ajuste fino.** Tamanho de contexto com o teto real do modelo (lido do arquivo, não chutado) e escolha entre CPU e GPU.
 
-```bash
-npm run tauri dev
-```
+**Seus dados, na sua pasta.** Você define onde ficam banco, modelos, documentos e vetores — inclusive num drive externo. Há uma versão portátil que guarda tudo ao lado do executável e não escreve nada em `%APPDATA%` nem no registro do Windows.
 
-> `npm run dev` sozinho só sobe o Vite no navegador (`http://localhost:1420`) — útil para iterar rápido na UI, mas **sem** acesso aos comandos Tauri/SQLite (invoke falha fora da janela nativa). Para testar o fluxo completo (criar/listar/renomear/excluir chats), use sempre `npm run tauri dev`.
+**Interface em dois idiomas** (português e inglês) e quatro temas.
 
-## Gerar o instalador final (build)
+**Atualização automática**, que avisa quando há versão nova e pode ser desligada.
 
-```bash
-npm run tauri build
-```
+## Sobre privacidade, sem exagero
 
-Gera o instalador **para o sistema operacional em que o comando é executado** (Tauri não faz cross-compile de bundle nativo por padrão):
+Conversas e documentos nunca saem da máquina. Nenhum texto seu é enviado para lugar nenhum — o modelo responde localmente.
 
-- **Rodando no Windows** → `.msi` e `.exe` (NSIS) em `src-tauri/target/release/bundle/{msi,nsis}/`
-- **Rodando no Linux** → `.AppImage` e `.deb` em `src-tauri/target/release/bundle/{appimage,deb}/`
+O que **usa rede**, para ser justo com você:
 
-Como esta máquina é Windows, `npm run tauri build` aqui produz apenas os instaladores Windows. Os artefatos das duas plataformas saem juntos pelo CI.
+- o download inicial do runtime, do modelo e das bibliotecas de extração e embeddings;
+- a verificação de atualização, que roda depois do primeiro uso e tem um botão para desligar.
 
-## Publicar uma release
+Feito isso, o app funciona sem internet.
 
-Releases são **manuais**: nenhum push publica nada. Vá em **Actions → Release →
-Run workflow** e escolha `patch`, `minor` ou `major`; a execução cuida de versão,
-CHANGELOG, tag, instaladores (`.msi`, `-setup.exe`, `.deb`, `.AppImage`), bundle
-portátil e do manifesto de auto-update.
+## Baixar
 
-O passo-a-passo, o setup da chave de assinatura e o que fazer quando o workflow
-falha no meio estão em **[docs/RELEASING.md](docs/RELEASING.md)**.
+Na [página de Releases](https://github.com/rafaelsene01/local-mind/releases) há uma opção para cada caso:
 
-Build só do frontend (sem empacotar o app nativo), útil para checar erros de TypeScript/Vite:
+| Arquivo | Para quem |
+| --- | --- |
+| `-setup.exe` | Windows. Instala na sua conta de usuário — **sem pedir administrador** |
+| `_x64_en-US.msi` | Windows, para instalação gerenciada |
+| `-portable.zip` | Windows sem permissão de instalar nada. Extraia e execute; roda de pendrive |
+| `.AppImage` | Linux. Dê permissão de execução e rode, sem instalar |
+| `.deb` | Debian, Ubuntu e derivados |
 
-```bash
-npm run build
-```
+Todos os pacotes são assinados, e o app verifica a assinatura antes de aplicar qualquer atualização.
 
-## Estrutura
+> O executável ainda não tem certificado de assinatura de código, então o SmartScreen do Windows avisa na primeira execução. É esperado.
 
-```
-src/                    Frontend React + TypeScript + Tailwind
-  components/Sidebar/    Sidebar de 3 zonas: Chats · Documentos · Conexões
-  components/Chat/        Painel de chat
-  store/                  Estado (Zustand)
-  lib/                    Wrappers tipados dos comandos Tauri (invoke)
-src-tauri/              Backend Rust
-  src/db.rs               Conexão SQLite + migrações
-  src/models.rs            Structs Chat/Message
-  src/commands.rs          Comandos expostos ao frontend (create_chat, list_chats, ...)
-.specs/                 Planejamento (spec-driven): visão, roadmap, specs de feature, decisões
-```
+## Estado do projeto
 
-## Status
+Primeira versão publicada: **v0.1.1**. O que está pronto e em uso: chat com streaming, base de conhecimento com RAG e citações, anexos por conversa, runtime local com GPU, temas e idiomas, pacotes para Windows e Linux, e atualização automática.
 
-**M1 — Fundação & Shell**: implementado (sidebar de 3 zonas, CRUD de chats persistido em SQLite). Ainda não verificado em execução real nesta máquina por falta do toolchain Rust — ver `.specs/project/STATE.md` (bloqueador B-001).
+Em andamento: a arquitetura está sendo simplificada para **um único runtime embutido**. As versões iniciais também se conectavam a Ollama e LM Studio; esse suporte está sendo removido em favor de um caminho só, que é o que dispensa qualquer instalação prévia. Enquanto essa mudança não termina, o código no branch principal fica no meio do caminho — prefira uma versão publicada.
+
+Ainda não existe: memória de conversas longas (recuperar automaticamente trechos ditos muito antes) e macOS.
+
+## Para quem quiser olhar por dentro
+
+O projeto é desenvolvido por specs: cada funcionalidade tem requisitos rastreáveis, decisões registradas com o motivo, e o que foi verificado de verdade separado do que só compilou. Tudo isso está em [`.specs/`](.specs/project/PROJECT.md) — começando pela visão e pelo [roadmap](.specs/project/ROADMAP.md), com o histórico de decisões em [STATE.md](.specs/project/STATE.md).
+
+O processo de publicação de uma versão está em [docs/RELEASING.md](docs/RELEASING.md).
