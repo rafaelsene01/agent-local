@@ -1,9 +1,28 @@
+use super::job::JobState;
 use super::RuntimeError;
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
+
+/// `CREATE_NO_WINDOW`. `llama-server.exe` is a console application, so without
+/// this Windows hands it a console window of its own — which is the black
+/// terminal that appeared next to the app. Documented as ignored for
+/// non-console executables, which is why it is harmless to apply blindly.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// The only place that knows about console windows. Keeping it here is what
+/// keeps `#[cfg]` out of the spawn flow itself (SIDE-03).
+#[cfg(windows)]
+pub fn configure_command(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub fn configure_command(_cmd: &mut Command) {}
 
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -19,6 +38,9 @@ pub struct SidecarConfig {
     pub context_length: Option<u32>,
     /// -1 offloads every layer to the GPU, 0 keeps everything on the CPU.
     pub gpu_layers: i32,
+    /// The user's base folder, when there is one. The sidecar's output is
+    /// written under it; without a folder there is simply no log.
+    pub base_path: Option<PathBuf>,
 }
 
 pub struct RunningSidecar {
@@ -88,11 +110,32 @@ pub fn build_args(cfg: &SidecarConfig) -> Vec<String> {
     args
 }
 
-pub async fn spawn(cfg: SidecarConfig) -> Result<RunningSidecar, RuntimeError> {
-    let child = Command::new(&cfg.binary)
-        .args(build_args(&cfg))
+pub async fn spawn(cfg: SidecarConfig, job: &JobState) -> Result<RunningSidecar, RuntimeError> {
+    let mut command = Command::new(&cfg.binary);
+    command.args(build_args(&cfg));
+    configure_command(&mut command);
+
+    // With no console there is nowhere for the output to go, so it goes to a
+    // file — or to nowhere, if the folder will not cooperate (SIDE-11).
+    match cfg.base_path.as_deref().and_then(super::log::open_rotating) {
+        Some(file) => {
+            let errors = file
+                .try_clone()
+                .map_err(|e| RuntimeError::Io(format!("erro de arquivo: {e}")))?;
+            command.stdout(Stdio::from(file)).stderr(Stdio::from(errors));
+        }
+        None => {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    }
+
+    let child = command
         .spawn()
         .map_err(|e| RuntimeError::Io(format!("não foi possível iniciar o llama-server: {e}")))?;
+
+    // Right after spawn and before the health check: the earlier it joins the
+    // job, the smaller the window in which a forced kill could orphan it.
+    job.assign(&child);
 
     let mut sidecar = RunningSidecar {
         child,
@@ -152,6 +195,7 @@ mod tests {
             port: 1234,
             context_length,
             gpu_layers,
+            base_path: None,
         }
     }
 
@@ -187,5 +231,72 @@ mod tests {
         assert_eq!(args.windows(2).find(|w| w[0] == "-m").unwrap()[1], "/models/phi.gguf");
         assert_eq!(args.windows(2).find(|w| w[0] == "--host").unwrap()[1], "127.0.0.1");
         assert_eq!(args.windows(2).find(|w| w[0] == "--port").unwrap()[1], "1234");
+    }
+}
+
+/// The whole sidecar path against the real binary and the real model: hidden
+/// console, output captured to the rotating log, and the process joined to a
+/// job that takes it down when the handle closes.
+///
+/// This is the closest a test can get to T7 without a human looking at a screen
+/// — and unlike the app, it needs no connection to be active and touches no
+/// configuration.
+///
+/// Run with:
+///   set LOCALMIND_LLAMA_SERVER=... && set LOCALMIND_GGUF=... && set LOCALMIND_BASE=...
+///   cargo test sidecar_real -- --ignored --nocapture
+#[cfg(test)]
+mod sidecar_real {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "starts a real llama-server and loads a real model"]
+    async fn the_real_sidecar_is_hidden_logged_and_dies_with_the_job() {
+        let binary = std::env::var("LOCALMIND_LLAMA_SERVER").expect("set LOCALMIND_LLAMA_SERVER");
+        let model = std::env::var("LOCALMIND_GGUF").expect("set LOCALMIND_GGUF");
+        let base = PathBuf::from(std::env::var("LOCALMIND_BASE").expect("set LOCALMIND_BASE"));
+
+        let job = JobState::create();
+        println!("job criado: {}", job.0.is_some());
+
+        let cfg = SidecarConfig {
+            binary: PathBuf::from(&binary),
+            model: PathBuf::from(&model),
+            port: free_port().unwrap(),
+            context_length: Some(2048),
+            gpu_layers: -1,
+            base_path: Some(base.clone()),
+        };
+        let port = cfg.port;
+
+        let mut sidecar = spawn(cfg, &job).await.expect("the sidecar should start");
+        println!("sidecar respondeu ao health check em 127.0.0.1:{port}");
+
+        // The output has to be somewhere now that there is no console.
+        let log = super::super::log::log_path(&base);
+        let contents = std::fs::read_to_string(&log).expect("the log must exist");
+        assert!(
+            !contents.trim().is_empty(),
+            "the log is empty — the output went nowhere"
+        );
+        println!("log com {} bytes em {}", contents.len(), log.display());
+
+        let pid = sidecar.child.id();
+        drop(job);
+
+        // Closing the job is what a forced kill of the app does to its handles.
+        let mut gone = false;
+        for _ in 0..100 {
+            if sidecar.child.try_wait().expect("try_wait").is_some() {
+                gone = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if !gone {
+            sidecar.kill();
+        }
+        assert!(gone, "llama-server pid {pid} survived the job closing");
+        println!("llama-server pid {pid} encerrado pelo kernel ao fechar o job");
     }
 }

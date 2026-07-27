@@ -117,12 +117,12 @@ Consome diretamente:
 | CHAT-03 | P1: Persistir mensagens da conversa | Implemented | Implemented |
 | CHAT-04 | P1: Cancelar geração em andamento | Implemented | Implemented |
 | CHAT-05 | P1: Tratar erro de chamada ao modelo | Implemented | Implemented |
-| CHAT-06 | P1: Anexar arquivo → serializar em tmp/ | Implemented | Implemented |
+| CHAT-06 | P1: Anexar arquivo → serializar em tmp/ | Implemented | Implemented — o arquivo em disco passou a ser prefixado pelo id do anexo em 2026-07-26 (AD-040); antes, dois arquivos de mesmo nome no mesmo chat se sobrescreviam |
 | CHAT-07 | P1: Processar anexo (pipeline reusado de DOC-04) | Implemented | Implemented |
 | CHAT-08 | P1: Usar trechos do anexo no contexto da resposta | Implemented | Implemented |
 | CHAT-09 | P1: Injetar anexo pequeno inteiro (sem RAG) | Implemented | Implemented |
 | CHAT-10 | P1: Falha de anexo não bloqueia envio da mensagem | Implemented | Implemented |
-| CHAT-11 | P1: Isolamento de namespace por chat_id | Implemented | Implemented |
+| CHAT-11 | P1: Isolamento de namespace por chat_id | Implemented | Implemented — **estava furado até 2026-07-26** (AD-040): a linha temporária que um anexo grande cria em `documents` era reprocessada no boot com o namespace **global** se o app morresse durante a indexação. Fechado pela migração 6 (coluna `namespace`) |
 | CHAT-12 | P1: Apagar tmp/ e embeddings ao excluir chat | Implemented | Implemented |
 | CHAT-13 | P2: Combinar RAG global + RAG do chat | Implemented | Implemented |
 | CHAT-14 | P2: Toggle de uso da base global por chat | Implemented | Implemented |

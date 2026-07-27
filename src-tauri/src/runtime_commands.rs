@@ -1,5 +1,4 @@
 use crate::config;
-use crate::connections::{ConnectionManager, EmbeddedContext};
 use crate::db::{require_conn, DbState};
 use crate::providers::{PullProgress, PullStatus};
 use crate::runtime::detect::{probe_devices, DeviceProbe};
@@ -264,9 +263,17 @@ pub async fn start_sidecar_from_row(
         port: free_port().map_err(|e| e.to_string())?,
         context_length: row.context_length,
         gpu_layers: row.gpu_layers.unwrap_or(0),
+        // Before onboarding there is no folder to write into, and the sidecar
+        // starts without a log rather than not at all.
+        base_path: crate::config::load_config(app)
+            .ok()
+            .flatten()
+            .map(|cfg| cfg.base_path_buf()),
     };
     let port = cfg.port;
-    let sidecar = spawn(cfg).await.map_err(|e| e.to_string())?;
+    let sidecar = spawn(cfg, &app.state::<crate::runtime::job::JobState>())
+        .await
+        .map_err(|e| e.to_string())?;
 
     let state = app.state::<SidecarState>();
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
@@ -364,14 +371,15 @@ pub async fn apply_active_model(
     Ok(())
 }
 
-/// Every command that talks to a provider builds its manager through here, so
-/// the embedded connection resolves to the port the sidecar actually picked
-/// instead of a placeholder URL.
-pub fn manager(app: &AppHandle) -> ConnectionManager {
-    ConnectionManager::with_embedded(EmbeddedContext {
-        port: running_port(app),
-        models_dir: models_dir(app).unwrap_or_default(),
-    })
+/// Every caller that talks to the sidecar builds its client through here, so
+/// it always resolves to the port the process actually picked instead of a
+/// placeholder URL. A stopped runtime yields a client whose calls report
+/// `Unavailable` — which is a state, not an error to handle here.
+pub fn client(app: &AppHandle) -> crate::providers::llama_server::LlamaServerClient {
+    crate::providers::llama_server::LlamaServerClient::new(
+        running_port(app),
+        models_dir(app).unwrap_or_default(),
+    )
 }
 
 pub fn running_port(app: &AppHandle) -> Option<u16> {
@@ -443,4 +451,104 @@ pub async fn download_embedded_model(app: AppHandle, url: String) -> Result<(), 
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Model surface (SELF-01/SELF-02)
+//
+// These replace `model_commands.rs`. Every one of them lost its
+// `connection_id`: there is one runtime, so there is nothing to disambiguate.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Serialize, Clone)]
+pub struct DownloadableModel {
+    #[serde(flatten)]
+    pub info: crate::models::catalog::CuratedModelInfo,
+    pub fits_ram: bool,
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+pub struct DownloadableModelsResponse {
+    pub ram_detected_gb: Option<f32>,
+    pub models: Vec<DownloadableModel>,
+}
+
+/// RAM detection failing (sysinfo returning 0 — rare/exotic environments) never
+/// hides everything silently: every model is marked as fitting and
+/// `ram_detected_gb` comes back `None` so the UI can warn instead.
+#[tauri::command]
+pub fn list_downloadable_models() -> DownloadableModelsResponse {
+    use crate::models::catalog::{curated_models, CuratedModelInfo};
+
+    let ram = crate::system_info::total_ram_gb();
+    let ram_known = ram > 0.0;
+    let models = curated_models()
+        .iter()
+        .map(|m| {
+            let info = CuratedModelInfo::from(m);
+            let fits_ram = !ram_known || info.estimated_ram_gb <= ram;
+            DownloadableModel { info, fits_ram }
+        })
+        .collect();
+    DownloadableModelsResponse {
+        ram_detected_gb: if ram_known { Some(ram) } else { None },
+        models,
+    }
+}
+
+/// The GGUF files on disk, which is also the list of what can be made active.
+#[tauri::command]
+pub fn list_installed_models(app: AppHandle) -> Vec<crate::providers::InstalledModel> {
+    client(&app).list_installed_models()
+}
+
+#[tauri::command]
+pub async fn model_limits(
+    app: AppHandle,
+    model: String,
+) -> Result<crate::providers::ModelLimits, String> {
+    client(&app)
+        .model_limits(&model)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// What the chat will use. `None` means "nothing chosen, or the file is gone" —
+/// the two cases the user resolves the same way.
+#[tauri::command]
+pub fn get_active_model(db: State<DbState>) -> Result<Option<store::ActiveModel>, String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = crate::db::require_conn(&guard)?;
+    store::active_model(sql)
+}
+
+/// Points the runtime at another file and restarts it, *then* records the
+/// choice. The order matters: a failure to restart must not leave a model
+/// marked active that the runtime is not actually serving.
+#[tauri::command]
+pub async fn set_active_model(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    model_name: String,
+) -> Result<(), String> {
+    apply_active_model(&app, &db, &model_name).await
+}
+
+/// Context length and GPU offload are start-up flags, so applying them restarts
+/// the sidecar — `requires_reload` in the old API said so, and the behaviour is
+/// unchanged (EMBED-12).
+#[tauri::command]
+pub async fn configure_model(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    context_length: Option<u32>,
+    gpu_offload: Option<String>,
+) -> Result<(), String> {
+    let gpu_layers = match gpu_offload.as_deref() {
+        Some(raw) => Some(crate::providers::gpu_layers_for(
+            &crate::providers::GpuOffload::parse(raw)?,
+        )),
+        None => None,
+    };
+    apply_runtime_config(&app, &db, context_length, gpu_layers).await
 }

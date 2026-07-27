@@ -69,8 +69,28 @@ fn row_to_record(row: &rusqlite::Row) -> rusqlite::Result<DocumentRecord> {
     })
 }
 
+/// Only the global knowledge base. Chat attachments borrow this table for the
+/// duration of their indexing (see `chat::attachments`), and those rows are not
+/// documents the user imported — showing them would put a phantom file in the
+/// Documentos tab, pointing inside a chat's temp folder.
 const SELECT_DOCUMENT: &str =
-    "SELECT id, filename, file_path, size_bytes, status, error_message, created_at, updated_at FROM documents";
+    "SELECT id, filename, file_path, size_bytes, status, error_message, created_at, updated_at
+     FROM documents WHERE namespace = 'global'";
+
+/// Documents whose processing can be resumed at boot. The `namespace` filter is
+/// the whole point: without it, a chat attachment's borrowed row comes back as
+/// a global document.
+const SELECT_RESUMABLE: &str =
+    "SELECT id, file_path FROM documents
+     WHERE status IN ('queued','parsing','chunking','embedding') AND namespace = 'global'";
+
+const FAIL_INTERRUPTED_ATTACHMENTS: &str =
+    "UPDATE chat_attachments SET status = 'error',
+            error_message = 'a indexação foi interrompida quando o app fechou; envie o arquivo de novo'
+     WHERE id IN (SELECT id FROM documents WHERE namespace <> 'global')
+       AND status NOT IN ('ready', 'injected_whole', 'error')";
+
+const DELETE_BORROWED_ROWS: &str = "DELETE FROM documents WHERE namespace <> 'global'";
 
 /// A file the import refused, with the reason to show next to its name.
 #[derive(Debug, Serialize, Clone)]
@@ -255,13 +275,16 @@ pub async fn delete_document(
 /// non-terminal status. They are re-run from the start at boot — cheap
 /// enough that checkpointing mid-pipeline isn't worth the complexity.
 pub fn requeue_unfinished_documents(app: &AppHandle) {
+    // Only the global base is resumable. A row from another namespace is the
+    // leftover of a chat attachment whose indexing was interrupted, and
+    // re-running it here would index a private file into the global base — the
+    // namespace is not even carried over, so it would land under 'global'
+    // and become visible to every chat (CHAT-11).
     let pending: Vec<(String, String)> = {
         let db = app.state::<DbState>();
         let Ok(guard) = db.0.lock() else { return };
         let Some(sql) = guard.as_ref() else { return };
-        let Ok(mut stmt) = sql.prepare(
-            "SELECT id, file_path FROM documents WHERE status IN ('queued','parsing','chunking','embedding')",
-        ) else {
+        let Ok(mut stmt) = sql.prepare(SELECT_RESUMABLE) else {
             return;
         };
         let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)));
@@ -273,5 +296,154 @@ pub fn requeue_unfinished_documents(app: &AppHandle) {
 
     for (id, path) in pending {
         spawn_processing(app, &id, &path);
+    }
+
+    discard_interrupted_attachments(app);
+}
+
+/// Clears the temporary rows a chat attachment leaves in `documents` when the
+/// app dies mid-indexing, and marks the attachment itself as failed.
+///
+/// Silence would be worse than an error here: the attachment is already
+/// recorded as `queued` in `chat_attachments` and the chat would show it as
+/// accepted forever, while nothing was ever indexed.
+fn discard_interrupted_attachments(app: &AppHandle) {
+    let db = app.state::<DbState>();
+    let Ok(guard) = db.0.lock() else { return };
+    let Some(sql) = guard.as_ref() else { return };
+
+    let _ = sql.execute(FAIL_INTERRUPTED_ATTACHMENTS, []);
+    let _ = sql.execute(DELETE_BORROWED_ROWS, []);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn migrated() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::apply_migrations(&mut conn).unwrap();
+        conn
+    }
+
+    fn insert_document(conn: &Connection, id: &str, status: &str, namespace: &str) {
+        conn.execute(
+            "INSERT INTO documents (id, filename, file_path, size_bytes, status, error_message, created_at, updated_at, namespace)
+             VALUES (?1, 'f.pdf', '/tmp/f.pdf', 1, ?2, NULL, 'now', 'now', ?3)",
+            params![id, status, namespace],
+        )
+        .unwrap();
+    }
+
+    fn resumable_ids(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn.prepare(SELECT_RESUMABLE).unwrap();
+        let ids = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        ids
+    }
+
+    #[test]
+    fn a_chat_attachment_is_never_resumed_as_a_global_document() {
+        // The regression this exists for: the app killed while indexing a large
+        // attachment left a 'queued' row behind, and the boot-time requeue
+        // re-indexed that private file into the global base (CHAT-11).
+        let conn = migrated();
+        insert_document(&conn, "doc-global", "queued", "global");
+        insert_document(&conn, "att-chat", "embedding", "chat:abc");
+
+        assert_eq!(resumable_ids(&conn), vec!["doc-global".to_string()]);
+    }
+
+    #[test]
+    fn finished_documents_are_not_resumed() {
+        let conn = migrated();
+        insert_document(&conn, "ready", "ready", "global");
+        insert_document(&conn, "failed", "error", "global");
+        insert_document(&conn, "midway", "chunking", "global");
+
+        assert_eq!(resumable_ids(&conn), vec!["midway".to_string()]);
+    }
+
+    #[test]
+    fn interrupted_attachments_are_reported_and_their_borrowed_rows_removed() {
+        let conn = migrated();
+        conn.execute(
+            "INSERT INTO chats (id, title, created_at, updated_at) VALUES ('c1', 't', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+        insert_document(&conn, "att-1", "embedding", "chat:c1");
+        conn.execute(
+            "INSERT INTO chat_attachments (id, chat_id, filename, file_path, size_bytes, status, created_at)
+             VALUES ('att-1', 'c1', 'grande.pdf', '/tmp/grande.pdf', 99, 'queued', 'now')",
+            [],
+        )
+        .unwrap();
+
+        conn.execute(FAIL_INTERRUPTED_ATTACHMENTS, []).unwrap();
+        conn.execute(DELETE_BORROWED_ROWS, []).unwrap();
+
+        let (status, error): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, error_message FROM chat_attachments WHERE id = 'att-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "error", "a silent 'queued' forever would be worse");
+        assert!(error.unwrap().contains("interrompida"));
+
+        let leftover: i64 = conn
+            .query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(leftover, 0);
+    }
+
+    #[test]
+    fn an_attachment_that_finished_is_left_alone() {
+        let conn = migrated();
+        conn.execute(
+            "INSERT INTO chats (id, title, created_at, updated_at) VALUES ('c1', 't', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+        insert_document(&conn, "att-ok", "ready", "chat:c1");
+        conn.execute(
+            "INSERT INTO chat_attachments (id, chat_id, filename, file_path, size_bytes, status, created_at)
+             VALUES ('att-ok', 'c1', 'ok.pdf', '/tmp/ok.pdf', 10, 'ready', 'now')",
+            [],
+        )
+        .unwrap();
+
+        conn.execute(FAIL_INTERRUPTED_ATTACHMENTS, []).unwrap();
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM chat_attachments WHERE id = 'att-ok'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "ready");
+    }
+
+    #[test]
+    fn the_documents_list_shows_only_the_global_base() {
+        let conn = migrated();
+        insert_document(&conn, "doc-global", "ready", "global");
+        insert_document(&conn, "att-chat", "ready", "chat:abc");
+
+        let mut stmt = conn.prepare(SELECT_DOCUMENT).unwrap();
+        let ids = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(ids, vec!["doc-global".to_string()]);
     }
 }

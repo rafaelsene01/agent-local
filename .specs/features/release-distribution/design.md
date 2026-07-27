@@ -186,7 +186,7 @@ Monta a árvore acima a partir de `src-tauri/target/release/LocalMind.exe`, comp
   "plugins": {
     "updater": {
       "pubkey": "<chave pública minisign>",
-      "endpoints": ["https://github.com/rafaelsene01/agent-local/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/rafaelsene01/local-mind/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     }
   }

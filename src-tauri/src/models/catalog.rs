@@ -10,10 +10,9 @@ pub struct CuratedModel {
     pub params_billions: f32,
     pub default_quant: &'static str,
     quant: Quant,
-    /// Exact download size, known only for the embedded runtime's GGUF files
-    /// (each URL was checked and its `content-length` recorded). Ollama pulls
-    /// have no size until the pull starts, so they carry `None` and fall back
-    /// to the RAM estimate.
+    /// Exact download size: every URL was checked and its `content-length`
+    /// recorded, so the card shows the real download rather than the RAM
+    /// estimate.
     download_bytes: Option<u64>,
 }
 
@@ -47,86 +46,6 @@ impl From<&CuratedModel> for CuratedModelInfo {
 }
 
 const CURATED_MODELS: &[CuratedModel] = &[
-    CuratedModel {
-        id: "llama3.1-8b",
-        display_name: "Llama 3.1 8B",
-        provider: "ollama",
-        pull_identifier: "llama3.1:8b",
-        params_billions: 8.03,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "llama3.2-3b",
-        display_name: "Llama 3.2 3B",
-        provider: "ollama",
-        pull_identifier: "llama3.2:3b",
-        params_billions: 3.21,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "qwen2.5-7b",
-        display_name: "Qwen2.5 7B",
-        provider: "ollama",
-        pull_identifier: "qwen2.5:7b",
-        params_billions: 7.62,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "qwen2.5-14b",
-        display_name: "Qwen2.5 14B",
-        provider: "ollama",
-        pull_identifier: "qwen2.5:14b",
-        params_billions: 14.77,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "phi3-mini",
-        display_name: "Phi-3 Mini",
-        provider: "ollama",
-        pull_identifier: "phi3:mini",
-        params_billions: 3.8,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "mistral-7b",
-        display_name: "Mistral 7B",
-        provider: "ollama",
-        pull_identifier: "mistral:7b",
-        params_billions: 7.25,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "gemma2-9b",
-        display_name: "Gemma 2 9B",
-        provider: "ollama",
-        pull_identifier: "gemma2:9b",
-        params_billions: 9.24,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
-    CuratedModel {
-        id: "deepseek-r1-7b",
-        display_name: "DeepSeek-R1 7B (distill)",
-        provider: "ollama",
-        pull_identifier: "deepseek-r1:7b",
-        params_billions: 7.0,
-        default_quant: "Q4_K_M",
-        quant: Quant::Q4,
-        download_bytes: None,
-    },
     // Embedded runtime: `pull_identifier` is the direct `.gguf` URL the
     // sidecar downloads (EMBED-13) — there is no registry to pull by name.
     // Every URL below was checked with `HEAD` on 2026-07-25 and answered 200;

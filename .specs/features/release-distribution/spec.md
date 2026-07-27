@@ -45,7 +45,7 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 
 ### Fatos do repositório verificados nesta sessão
 
-- `.github/` **não existe**; remote é `git@github.com:rafaelsene01/agent-local.git`; única branch `master`; **nenhuma tag**.
+- `.github/` **não existe**; remote é `git@github.com:rafaelsene01/agent-local.git` (**renomeado para `local-mind` em 2026-07-26** — o endpoint do updater acompanhou); única branch `master`; **nenhuma tag**.
 - O binário compilado hoje se chama **`tauri-app.exe`** (nome do pacote Cargo), não `LocalMind.exe` — o `productName` é `LocalMind` mas `mainBinaryName` não está configurado. Isso afeta diretamente o nome do executável dentro do zip portátil.
 - `src-tauri/target/release/tauri-app.exe` tem **226 MB**. O zip portátil e os instaladores vão herdar essa ordem de grandeza.
 - `tauri.conf.json` **não tem** `plugins.updater`, **não tem** `bundle.createUpdaterArtifacts` e usa `bundle.targets: "all"`.

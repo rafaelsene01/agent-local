@@ -35,10 +35,7 @@ fn record_attachment(
     let sql = crate::db::require_conn(&guard)?;
     sql.execute(
         "INSERT INTO chat_attachments (id, chat_id, message_id, filename, file_path, size_bytes, status, extracted_text, error_message, created_at)
-         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-         ON CONFLICT(id) DO UPDATE SET status = excluded.status,
-                                       extracted_text = excluded.extracted_text,
-                                       error_message = excluded.error_message",
+         VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             id,
             chat_id,
@@ -75,7 +72,11 @@ pub async fn ingest(app: &AppHandle, chat_id: &str, paths: &[String]) -> Result<
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "anexo".to_string());
         let id = Uuid::new_v4().to_string();
-        let destination = dir.join(&filename);
+        // Prefixed with the attachment id: two files with the same name in one
+        // chat used to land on the same path, so the second silently replaced
+        // the first while both rows kept pointing at it. `filename` stays the
+        // clean name — it is what the user sees and what gets cited.
+        let destination = dir.join(format!("{id}-{filename}"));
 
         let size = match std::fs::copy(&source, &destination) {
             Ok(size) => size,
@@ -172,14 +173,20 @@ async fn index_large_attachment(
         let db = app.state::<DbState>();
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = crate::db::require_conn(&guard)?;
+        // The namespace is what keeps this borrowed row from being mistaken for
+        // an imported document: the boot-time requeue only resumes `global`
+        // ones, and the Documentos tab only lists those. Without it, an app
+        // killed during this indexing would come back and push a private
+        // attachment into the global knowledge base.
         sql.execute(
-            "INSERT INTO documents (id, filename, file_path, size_bytes, status, error_message, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 0, 'queued', NULL, ?4, ?4)",
+            "INSERT INTO documents (id, filename, file_path, size_bytes, status, error_message, created_at, updated_at, namespace)
+             VALUES (?1, ?2, ?3, 0, 'queued', NULL, ?4, ?4, ?5)",
             params![
                 attachment_id,
                 path.file_name().map(|n| n.to_string_lossy().to_string()),
                 path.to_string_lossy(),
-                Utc::now().to_rfc3339()
+                Utc::now().to_rfc3339(),
+                chat_namespace(chat_id)
             ],
         )
         .map_err(|e| e.to_string())?;

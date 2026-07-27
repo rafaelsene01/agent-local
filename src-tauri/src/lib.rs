@@ -3,12 +3,9 @@ mod chat_commands;
 mod commands;
 mod config;
 mod config_commands;
-mod connection_commands;
-mod connections;
 mod db;
 mod document_commands;
-mod embedded_commands;
-mod model_commands;
+mod runtime_commands;
 mod models;
 mod providers;
 mod rag;
@@ -22,32 +19,29 @@ use runtime::process::SidecarState;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, RunEvent};
 
-/// Starts the sidecar at boot when it was already set up and its connection
-/// is the active one, so the user doesn't have to re-click anything after a
+/// Starts the sidecar at boot when it was already set up, so the user doesn't have to re-click anything after a
 /// restart (EMBED-06). Any failure here is logged and ignored: the app must
 /// still open, with the connection simply reporting unavailable.
 fn autostart_sidecar(app: &tauri::AppHandle) {
-    let (row, is_active) = {
+    let row = {
         let db = app.state::<DbState>();
         let Ok(guard) = db.0.lock() else { return };
         let Some(sql) = guard.as_ref() else { return };
         let Ok(row) = runtime::store::load(sql) else {
             return;
         };
-        let is_active = connections::active_connection(sql)
-            .ok()
-            .flatten()
-            .is_some_and(|c| c.provider == "embedded");
-        (row, is_active)
+        row
     };
 
-    if !is_active || !row.is_ready() {
+    // There is no connection to be active any more: the question is simply
+    // whether the runtime was installed and a model chosen (SELF-05).
+    if !row.is_ready() {
         return;
     }
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        match embedded_commands::start_sidecar_from_row(&handle, &row).await {
+        match runtime_commands::start_sidecar_from_row(&handle, &row).await {
             Ok(port) => {
                 println!("embedded runtime listening on 127.0.0.1:{port}");
                 // The UI checked every connection while this was still loading
@@ -87,6 +81,11 @@ pub fn run() {
             };
             app.manage(DbState(Mutex::new(existing_conn)));
             app.manage(SidecarState::empty());
+            // One job for the whole process, created before anything can be
+            // spawned into it. Its handle closing — which happens however this
+            // process ends, including a forced kill — is what makes the kernel
+            // take the sidecar down with us.
+            app.manage(runtime::job::JobState::create());
             app.manage(chat::cancellation::CancellationRegistry::new());
 
             if let Ok(Some(cfg)) = config::load_config(app.handle()) {
@@ -118,23 +117,17 @@ pub fn run() {
             config_commands::update_theme,
             config_commands::update_language,
             config_commands::update_base_path,
-            connection_commands::list_connections,
-            connection_commands::add_connection,
-            connection_commands::set_active_connection,
-            connection_commands::clear_active_connection,
-            connection_commands::refresh_connection_status,
-            model_commands::list_downloadable_models,
-            model_commands::list_installed_models,
-            model_commands::pull_model,
-            model_commands::set_active_model,
-            model_commands::get_active_pair,
-            model_commands::configure_model,
-            model_commands::model_limits,
-            embedded_commands::setup_embedded_runtime,
-            embedded_commands::start_embedded_runtime,
-            embedded_commands::stop_embedded_runtime,
-            embedded_commands::embedded_runtime_status,
-            embedded_commands::download_embedded_model,
+            runtime_commands::setup_embedded_runtime,
+            runtime_commands::start_embedded_runtime,
+            runtime_commands::stop_embedded_runtime,
+            runtime_commands::embedded_runtime_status,
+            runtime_commands::download_embedded_model,
+            runtime_commands::list_downloadable_models,
+            runtime_commands::list_installed_models,
+            runtime_commands::model_limits,
+            runtime_commands::get_active_model,
+            runtime_commands::set_active_model,
+            runtime_commands::configure_model,
             document_commands::import_documents,
             document_commands::list_documents,
             document_commands::delete_document,

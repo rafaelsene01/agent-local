@@ -1,5 +1,7 @@
 pub mod detect;
 pub mod download;
+pub mod job;
+pub mod log;
 pub mod model;
 pub mod process;
 pub mod release;

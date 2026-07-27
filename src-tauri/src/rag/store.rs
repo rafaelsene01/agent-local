@@ -321,6 +321,73 @@ mod tests {
         }
     }
 
+    fn indexed_chunk(id: &str, text: &str, index: i32) -> EmbeddedChunk {
+        EmbeddedChunk {
+            id: id.to_string(),
+            text: text.to_string(),
+            vector: vec![0.1; EMBEDDING_DIM],
+            chunk_index: index,
+        }
+    }
+
+    /// `chunk_at` is the one query that runs **without** `nearest_to`, so it
+    /// exercises a different LanceDB code path than `search` — and it is what
+    /// neighbour expansion depends on to find the passage that continues a hit.
+    #[tokio::test]
+    #[ignore = "writes a real LanceDB table to a temp folder"]
+    async fn chunk_at_fetches_the_neighbour_by_position() {
+        let dir = std::env::temp_dir().join(format!("localmind-neighbour-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = VectorStore::open(&dir).await.unwrap();
+
+        store
+            .upsert(
+                "global",
+                "doc-a",
+                vec![
+                    indexed_chunk("1", "primeiro trecho", 0),
+                    indexed_chunk("2", "continuação do trecho", 1),
+                ],
+            )
+            .await
+            .unwrap();
+        // Same position, different document: the filter must not cross over.
+        store
+            .upsert("global", "doc-b", vec![indexed_chunk("3", "outro documento", 1)])
+            .await
+            .unwrap();
+
+        let next = store.chunk_at("global", "doc-a", 1).await.unwrap();
+        assert_eq!(next.map(|c| c.text), Some("continuação do trecho".to_string()));
+
+        // Past the end of the document, and the right position in the wrong
+        // namespace, both mean "no neighbour" rather than an error.
+        assert!(store.chunk_at("global", "doc-a", 2).await.unwrap().is_none());
+        assert!(store
+            .chunk_at(&chat_namespace("chat-1"), "doc-a", 1)
+            .await
+            .unwrap()
+            .is_none());
+
+        // No vector search ran, so there is no score to report.
+        let unscored = store.chunk_at("global", "doc-a", 0).await.unwrap().unwrap();
+        assert!(unscored.distance.is_nan(), "a filtered read has no distance");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An empty store must not make neighbour expansion fail the whole answer.
+    #[tokio::test]
+    #[ignore = "touches the filesystem"]
+    async fn chunk_at_on_an_empty_store_is_none() {
+        let dir = std::env::temp_dir().join(format!("localmind-neighbour-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = VectorStore::open(&dir).await.unwrap();
+
+        assert!(store.chunk_at("global", "doc-a", 1).await.unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Hits a real LanceDB on disk, so it is excluded from the default run.
     /// Run with: `cargo test store -- --ignored --nocapture`
     #[tokio::test]

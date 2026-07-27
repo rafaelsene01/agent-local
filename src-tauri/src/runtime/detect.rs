@@ -18,7 +18,13 @@ pub enum DeviceProbe {
 /// can use, which a GPU crate could not answer (it would report "Vulkan
 /// exists", not "llama.cpp can use it") — AD-022.
 pub fn probe_devices(binary: &Path) -> DeviceProbe {
-    let output = Command::new(binary).arg("--list-devices").output();
+    let mut command = Command::new(binary);
+    command.arg("--list-devices");
+    // Suppresses the console that used to flash for an instant on Windows.
+    // `CREATE_NO_WINDOW` hides the window, not the pipes — `output()` still
+    // captures stdout, which is where the device list comes from.
+    super::process::configure_command(&mut command);
+    let output = command.output();
 
     match output {
         Ok(out) => classify_output(
@@ -99,5 +105,39 @@ mod tests {
         let probe = probe_devices(Path::new("./definitely-not-a-real-llama-server"));
 
         assert!(matches!(probe, DeviceProbe::BinaryFailed(_)));
+    }
+}
+
+/// Runs the real binary, with the real flags, to answer the one question no
+/// unit test can: does suppressing the console also suppress the output we
+/// parse? If it did, GPU detection would return nothing and the app would fall
+/// back to CPU **silently** — the worst possible outcome of hiding the window.
+///
+/// Run with:
+///   set LOCALMIND_LLAMA_SERVER=<path to llama-server.exe> && cargo test detect_real -- --ignored --nocapture
+#[cfg(test)]
+mod detect_real {
+    use super::*;
+
+    #[test]
+    #[ignore = "needs LOCALMIND_LLAMA_SERVER pointing at a real binary"]
+    fn hiding_the_console_does_not_hide_the_device_list() {
+        let Ok(path) = std::env::var("LOCALMIND_LLAMA_SERVER") else {
+            panic!("set LOCALMIND_LLAMA_SERVER to a real llama-server binary");
+        };
+
+        let probe = probe_devices(Path::new(&path));
+        println!("probe: {probe:?}");
+
+        match probe {
+            DeviceProbe::GpuAvailable(name) => {
+                assert!(!name.is_empty(), "a device was found but came back nameless");
+                println!("GPU detectada com o console suprimido: {name}");
+            }
+            DeviceProbe::CpuOnly => {
+                panic!("no device listed — this is the silent CPU fallback the flag must not cause")
+            }
+            DeviceProbe::BinaryFailed(reason) => panic!("the binary could not run: {reason}"),
+        }
     }
 }

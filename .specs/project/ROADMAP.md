@@ -1,7 +1,9 @@
 # Roadmap
 
-**Current Milestone:** M6 — Memória de conversa (RAG híbrido). **É o único milestone sem nada feito e sem spec.**
-**Status:** In Progress — M3.1, M7, M5 e M4 concluídos em 2026-07-25; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos).
+**Current Milestone:** M9 — Runtime autossuficiente. **Planejado por inteiro em 2026-07-26, nada implementado** (ver AD-039).
+**Status:** In Progress — M3.1, M7, M5 e M4 concluídos em 2026-07-25; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos). **M6 segue sendo o único milestone sem spec e sem código.**
+
+> **Mudança de rumo (2026-07-26):** o M9 remove Ollama e LM Studio e embute os componentes binários no instalador. Isso **revoga parte do PROJECT.md** (a promessa de detectar runtimes externos) — a atualização daquele documento é a T21 do M9, não um esquecimento.
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
 
@@ -152,6 +154,33 @@ flowchart TB
 
 ---
 
+## M7.1 — Sidecar sem console e com ciclo de vida garantido — 📋 PLANEJADO (2026-07-26)
+
+**Goal:** Fechar as três pontas soltas que o M7 deixou entre o sidecar e o sistema operacional.
+**Target:** Abrir o app mostra **uma** janela; matar o app à força não deixa `llama-server` órfão; a saída do sidecar continua legível, em arquivo.
+
+**Spec:** `.specs/features/sidecar-lifecycle/` — `spec.md` (11 requisitos SIDE-01…SIDE-11) + `design.md` + `tasks.md` (8 tasks).
+
+### Features
+
+**Nenhuma janela de console** — PLANNED (SIDE-01…SIDE-03)
+
+- `CREATE_NO_WINDOW` no spawn do sidecar e na detecção de GPU, via `std`, sem dependência nova
+- Fora do Windows, nada muda
+
+**Ciclo de vida atado ao app** — PLANNED (SIDE-04…SIDE-08)
+
+- Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: quem mata o filho é o kernel, então a garantia vale mesmo quando o nosso código não roda (crash, `taskkill /F`)
+- Fortalece o EMBED-07, que hoje só cobre o fechamento normal
+- Falha ao criar o job degrada para o comportamento atual — nunca impede o app de funcionar
+
+**Log em arquivo** — PLANNED (SIDE-09…SIDE-11)
+
+- `<pasta-base>/runtime/llama-server.log`, com uma geração de rotação
+- Sem isso, esconder a janela trocaria um incômodo visual por cegueira de diagnóstico — foi lendo esse log que a AD-028 achou o bug do timeout de 5 s
+
+---
+
 ## M4 — Chat: envio, streaming & anexos — ✅ COMPLETE (2026-07-25)
 
 **Goal:** Conversar de verdade: enviar mensagem, receber streaming e anexar arquivos como RAG do chat.
@@ -246,6 +275,38 @@ flowchart TB
 - Config inicial segue no wizard de 1º uso, não no instalador (AD-010)
 
 **Fora do escopo:** code signing (SmartScreen vai avisar), macOS, canal beta, delta updates.
+
+---
+
+## M9 — Runtime autossuficiente — 📋 PLANEJADO (2026-07-26)
+
+**Goal:** Um runtime só, embutido, e nada para baixar além do modelo. O app deixa de conversar com programas externos e deixa de buscar componentes na internet.
+**Target:** Numa máquina **sem rede**, com um `.gguf` já na pasta de modelos: instalar → abrir → escolher o modelo → conversar. Importar um PDF offline chega a `ready`.
+
+**Spec:** `.specs/features/self-contained-runtime/` — `context.md` + `spec.md` (19 requisitos SELF-01…SELF-19) + `design.md` + `tasks.md` (22 tasks). Ver AD-039.
+
+### Features
+
+**Ollama, LM Studio e URL manual saem** — PLANNED (SELF-01…SELF-08)
+
+- Os quatro `ProviderClient` viram **um cliente concreto**; some o trait, o `Box<dyn>`, o `ConnectionManager` e o `match` de provedor
+- Migração 6 derruba `connections` e `model_configs`; `embedded_runtime` fica como única fonte de "qual modelo responde, com qual contexto e qual GPU" — que é o lugar onde o EMBED-12 nasceu por duplicação
+- A tela de Conexões vira a tela de Runtime; a sidebar acompanha
+
+**Componentes dentro do instalador** — PLANNED (SELF-09…SELF-17)
+
+- `llama-server` **Vulkan e CPU**, ONNX Runtime e pdfium passam a viajar como recursos do bundle, com versões fixadas num `vendor.json` e trazidas por `beforeBuildCommand` (mesmo caminho em CI e na máquina local)
+- A escolha de backend vira um `probe` local, sem download nenhum
+- O bit de execução no Linux é garantido **pelo código**, não confiado ao empacotador — a pergunta "o `.deb` preserva +x?" não tem resposta documentada e o design foi feito para não depender dela
+- O zip portátil passa a levar os recursos; `move_tree` já é recursivo, então a atualização portátil não muda
+
+**Faxina** — PLANNED (SELF-18)
+
+- Os ~150 MB que a versão anterior baixava em `<base>/runtime/{vulkan,cpu,onnxruntime,pdfium}` são apagados no boot
+
+**Fora do escopo:** embutir um modelo GGUF (o usuário escolhe o que cabe na máquina), CUDA/ROCm, macOS, e voltar Ollama atrás de flag.
+
+> **Interação com o M7.1:** os dois mexem em `runtime/`. O M7.1 muda **como** o sidecar é iniciado (sem console, dentro de um Job Object, com log em arquivo); o M9 muda **de onde vem o binário** e quem pergunta por ele. São eixos independentes e podem ser executados em qualquer ordem — só não em paralelo por dois agentes, porque `runtime/process.rs` e `runtime/detect.rs` são tocados pelos dois. A faxina do M9 apaga apenas os quatro subdiretórios listados, nunca `<base>/runtime/` inteiro, justamente para não levar junto o `llama-server.log` do M7.1.
 
 ---
 

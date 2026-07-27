@@ -63,6 +63,18 @@ Riscos observados no código real (com caminho/arquivo como evidência), prioriz
 **Risco (o que sobrou):** estilo mantido só por disciplina manual. O build quebrado agora é pego pelo CI; o estilo divergente não.
 **Fix sugerido:** `cargo clippy -D warnings` e `cargo fmt --check` foram deixados **de fora do M8 de propósito** (AD-034): o código atual não passa, e introduzi-los junto com o CI viraria uma refatoração disfarçada. Entram depois de pagar as dívidas — o `cargo check` de hoje ainda emite 5 warnings de dead code, incluindo o C-11.
 
+### C-13: ~~Chaves estrangeiras declaradas mas nunca aplicadas~~ — RESOLVIDO (2026-07-26)
+
+**Evidência (era):** `db::open` não executava `PRAGMA foreign_keys = ON`, e o SQLite deixa isso desligado por conexão. O `ON DELETE CASCADE` de `model_configs.connection_id` e a referência de `messages.chat_id` eram decorativos.
+**Risco (era):** apagar um chat durante uma geração inseria a resposta num chat inexistente, como linha órfã silenciosa; e a primeira funcionalidade de apagar conexão herdaria `model_configs` órfãos confiando numa declaração que não valia.
+**Resolução:** pragma ligado no `open`, com três testes — que o pragma está ativo, que o CASCADE dispara, e que uma mensagem órfã é recusada. Ver AD-040.
+
+### C-14: `delete_chat` não cancela a geração em andamento
+
+**Evidência:** `commands.rs::delete_chat` apaga mensagens, anexos e o chat, mas não toca no `CancellationRegistry`.
+**Risco:** apagar um chat que está gerando deixa o `send_message` rodando até o fim, gastando GPU/CPU para um resultado que agora é recusado pelo banco (desde a C-13). Desperdício visível como lentidão, não como erro.
+**Fix sugerido:** chamar o cancelamento antes da transação, do mesmo jeito que `cancel_generation` faz.
+
 ### C-10: Semeadura de conexão casa por `provider`, não por URL
 
 **Evidência:** `connection_commands::list_connections` — `existing.iter().any(|c| c.provider == candidate.provider)`.

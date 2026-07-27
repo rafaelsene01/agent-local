@@ -1,11 +1,166 @@
 # State
 
 **Last Updated:** 2026-07-26
-**Current Work:** **Auditoria spec-a-código de 2026-07-26 (ver AD-036).** A revisão achou uma coisa não implementada, quatro dívidas conhecidas e não pagas, um arquivo de diagnóstico esquecido no repositório, e — o mais enganoso — documentação defasada: ROADMAP e o cabeçalho desta STATE ainda diziam "M8 nada implementado" depois da AD-035, e a AD-035 dizia que a T2 estava bloqueada depois de o mantenedor tê-la concluído. Tudo corrigido. **Situação real agora:** M1, M2, M3, M3.1, M4, M5 e M7 completos; **M8 com 23 das 24 tasks** (falta a T24 — publicar release de verdade e atualizar nos dois modos); **M6 é o único milestone sem spec e sem código**. 123 testes Rust verdes, 27 de script Node, `npm run build` limpo. Contexto anterior: **M8 planejado em 2026-07-26** (ver AD-034): `.specs/features/release-distribution/` com `context.md` + `spec.md` (27 requisitos) + `design.md` + `tasks.md` (24 tasks), pronto para Execute e sem dependência do M6. Cobre as três coisas que o usuário pediu numa tacada: CI de release semântica com disparo **manual** (select `major`/`minor`/`patch`, e a execução faz versão + CHANGELOG + tag + release sozinha), artefatos de instalação em toda release (`.msi`, `-setup.exe`, `.deb`, `.AppImage`) **mais** um `.zip` portátil, e auto-update no app que funciona nos dois modos **sem pedir administrador**. Nada implementado ainda — é planejamento. Contexto anterior: RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Current Work:** **M9 planejado em 2026-07-26 (ver AD-039)** — `.specs/features/self-contained-runtime/` com `context.md` + `spec.md` (19 requisitos SELF-01…SELF-19) + `design.md` + `tasks.md` (22 tasks), pronto para Execute. Remove Ollama, LM Studio **e** a URL manual, colapsa os 4 `ProviderClient` num cliente concreto, derruba as tabelas `connections` e `model_configs`, e embute `llama-server` (Vulkan + CPU), ONNX Runtime e pdfium no instalador. O modelo GGUF continua sendo baixado — a spec afirma isso em vez de vender "100% offline". **Nada implementado.** Há dois planejamentos abertos e eles se tocam em `runtime/`: **M7.1** (AD-037, 8 tasks) e **M9** (22 tasks) — executáveis em qualquer ordem, mas não em paralelo. Contexto anterior: **Auditoria spec-a-código de 2026-07-26 (ver AD-036).** A revisão achou uma coisa não implementada, quatro dívidas conhecidas e não pagas, um arquivo de diagnóstico esquecido no repositório, e — o mais enganoso — documentação defasada: ROADMAP e o cabeçalho desta STATE ainda diziam "M8 nada implementado" depois da AD-035, e a AD-035 dizia que a T2 estava bloqueada depois de o mantenedor tê-la concluído. Tudo corrigido. **Situação real agora:** M1, M2, M3, M3.1, M4, M5 e M7 completos; **M8 com 23 das 24 tasks** (falta a T24 — publicar release de verdade e atualizar nos dois modos); **M6 é o único milestone sem spec e sem código**. 123 testes Rust verdes, 27 de script Node, `npm run build` limpo. Contexto anterior: **M8 planejado em 2026-07-26** (ver AD-034): `.specs/features/release-distribution/` com `context.md` + `spec.md` (27 requisitos) + `design.md` + `tasks.md` (24 tasks), pronto para Execute e sem dependência do M6. Cobre as três coisas que o usuário pediu numa tacada: CI de release semântica com disparo **manual** (select `major`/`minor`/`patch`, e a execução faz versão + CHANGELOG + tag + release sozinha), artefatos de instalação em toda release (`.msi`, `-setup.exe`, `.deb`, `.AppImage`) **mais** um `.zip` portátil, e auto-update no app que funciona nos dois modos **sem pedir administrador**. Nada implementado ainda — é planejamento. Contexto anterior: RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-042: M9 Fase 1 — o backend colapsou para um runtime só; o app está no meio da migração (2026-07-27)
+
+**Decision:** Executadas T1–T6 de `self-contained-runtime`. Um `LlamaServerClient` concreto substituiu o trait `ProviderClient` e seus quatro implementadores; `embedded_runtime` virou a única fonte do modelo ativo; o chat parou de resolver "par ativo"; `embedded_commands.rs` virou `runtime_commands.rs` com a superfície sem `connection_id`; sete arquivos foram apagados; e a migração derrubou `connections` e `model_configs`.
+
+**Reason:** O usuário respondeu "continue" pela terceira vez depois de eu ter sinalizado, duas vezes, que o M9 é destrutivo e merecia um "sim" explícito. Repetir a instrução é a decisão; segui com ela.
+
+**Estado honesto:** **o app não funciona por inteiro agora.** O backend fala a língua nova, o frontend ainda chama `list_connections`, `pull_model`, `get_active_pair` e companhia — comandos que não existem mais. Como o `invoke` do Tauri recebe o nome como string, o `npm run build` **passa** e a quebra só aparece em runtime, nas telas de Conexões e Modelos. Isso é consequência da ordem do plano (backend inteiro antes do frontend), não um acidente; a Fase 2 (T7–T11) é o que fecha.
+
+**Numeração:** a migração é a **7**, não a 6 que o `tasks.md` previa — o número 6 foi gasto no dia anterior pela coluna `documents.namespace` (AD-040). `DROP` de `model_configs` antes de `connections`, porque desde a AD-040 as chaves estrangeiras são aplicadas de verdade e a ordem inversa falharia.
+
+**Verificado de verdade:**
+- **A migração destrutiva foi ensaiada contra uma cópia do banco real:** `user_version` 6 → 7, `chats` 2, `messages` 6, `documents` 1, `chat_attachments` 0 — todas preservadas; `connections` deixou de existir. O original não foi tocado.
+- **`cargo test`: 146 passando, 0 falhas.** Eram 148 antes da T6.
+- **Os 2 testes a menos estão justificados um a um** (o gate da T5 exige isso): `fresh_database_uses_is_active_column` e `deleting_a_connection_now_takes_its_model_configs_with_it` perderam o assunto junto com as tabelas. Outros quatro foram **reescritos**, não apagados — continuam afirmando algo verdadeiro sobre o estado novo, como "as tabelas de conexão não sobrevivem a uma migração limpa".
+- `grep -ri "ollama\|lmstudio"` no backend só encontra comentários que explicam a remoção.
+
+**Trade-off/Notas:**
+- **O catálogo perdeu 8 modelos.** Eram entradas `provider: "ollama"`, baixáveis só pelo `pull` do Ollama — sem ele, oferecê-las seria oferecer um download que não acontece. Sobraram os 6 GGUF com `content-length` verificado (AD-028).
+- **`ConfigApplied` foi removido junto com o trait.** Ele existia para relatar *quais campos* cada provedor aceitou, uma pergunta que só fazia sentido com quatro provedores diferentes.
+- **`git mv` no rename** de `embedded_commands.rs`, para o histórico do arquivo sobreviver.
+- **`configure_model` continua reiniciando o sidecar** — contexto e GPU são flags de inicialização, e isso não mudou (EMBED-12).
+- **Removi o módulo de inspeção temporário que eu mesmo tinha criado** para ler o banco. Deixá-lo seria repetir exatamente o `rag/diag.rs` da AD-036.
+
+**Não feito:** T7–T22, ou seja, todo o frontend (Fase 2), o vendoring dos binários no instalador (Fase 3) e a verificação offline de ponta a ponta (Fase 4). **Nada do M9 foi exercitado clicando.**
+
+### AD-041: M7.1 implementado — 8/8 tasks, verificado contra o sidecar real; falta só olhar a tela (2026-07-26)
+
+**Decision:** Executadas T1–T6 de `sidecar-lifecycle`. Três mudanças, todas em `runtime/`: `CREATE_NO_WINDOW` no spawn do sidecar e na detecção de GPU; Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` criado uma vez no `setup` e herdado por todo sidecar; e `stdout`/`stderr` para `<pasta-base>/runtime/llama-server.log`, com uma geração de rotação.
+
+**Reason:** Pedido do usuário (o terminal preto ao abrir o app), planejado na AD-037.
+
+**A evidência que apareceu sozinha:** ao preparar a verificação, a máquina **já tinha um `llama-server` órfão** — PID 24580, **6,9 horas** de vida, **488 MB** de memória, e um pai (PID 24156) que não existia mais. Não era o cenário hipotético da spec; era o SIDE-05 acontecendo, invisível, na máquina do usuário. Encerrado para a medição começar limpa.
+
+**Verificado de verdade:**
+- **A Open Question #1 do design foi respondida contra o binário real, não no papel:** era o risco de o `CREATE_NO_WINDOW` suprimir também a captura de stdout, o que faria a detecção de GPU falhar e o app cair para CPU **em silêncio**. Rodando `probe_devices` com a flag contra o `llama-server.exe` instalado: `GpuAvailable("NVIDIA GeForce RTX 3060")`. A flag esconde a janela, não os pipes.
+- **`cargo test`: 141 passando, 0 falhas, 7 ignorados** (eram 135 — 5 de `runtime::log`, 1 de `runtime::job`).
+- A rotação do log foi testada em três execuções seguidas: sobram `.log` e `.log.1`, e só.
+
+**A T7 foi fechada por um caminho que o plano não previa.** Rodar o app não serviu: ele subiu, mas o sidecar não iniciou — e não por causa das mudanças. Inspecionando uma **cópia** do banco, as três conexões estão com `is_active = 0`, então o autostart não tinha o que iniciar. Ativar uma conexão pelo banco seria mexer na configuração do usuário sem ele pedir.
+
+A saída foi um teste de integração (`runtime::process::sidecar_real`) contra o **binário e o modelo reais**, tomando os caminhos por variável de ambiente e sem tocar em nada do usuário:
+
+```
+job criado: true
+sidecar respondeu ao health check em 127.0.0.1:59214
+log com 1131 bytes em .../runtime/llama-server.log
+llama-server pid 11572 encerrado pelo kernel ao fechar o job
+```
+
+Fechar o handle do job é exatamente o que acontece com os handles de um processo morto à força — é a mesma via do `taskkill /F`, sem precisar matar o app. Isso fecha SIDE-04, SIDE-05 e SIDE-09 com evidência de verdade.
+
+**O que sobrou:** olhar a barra de tarefas. E aqui houve uma **segunda** correção de método, no mesmo tema: a primeira versão do teste de console afirmava "não existe `conhost.exe` filho" e **falhou** — porque `CREATE_NO_WINDOW` ainda aloca um console host, só sem janela visível. Corrigido para olhar o `MainWindowHandle` do conhost. Mas mesmo assim o teste imprime **INCONCLUSIVO** quando roda de um terminal: o processo sem a flag empresta o console do runner em vez de criar um visível, então os dois lados dão `false` e a comparação não prova nada. O bug só reproduz a partir de um pai **sem** console — que é o app. O teste guarda contra a flag ser removida; não demonstra a correção.
+
+**Nota de método (que evitou uma afirmação falsa):** cheguei a medir `MainWindowHandle = 0` no sidecar e quase registrei isso como "não tem console". Não prova nada: a janela de um app de console pertence ao `conhost.exe`, não ao processo. Procurar um `conhost` filho também não fechou a questão — o órfão criado pelo **código antigo** também não tinha nenhum. Ausência de janela continua sendo verificação visual.
+
+**Trade-off/Notas:**
+- **`windows-sys` entrou explícito** em `[target.'cfg(windows)'.dependencies]`, embora já estivesse no `Cargo.lock` via Tauri. Depender da dependência de outro crate quebra na próxima atualização dele.
+- **O Job Object não substituiu o `kill` do fechamento normal** — é rede de segurança, e o caminho já verificado na AD-028 continua igual.
+- **Falha ao criar ou associar o job não impede o sidecar de subir**, só registra o motivo: trocar um vazamento de processo por um app sem motor de IA seria pior.
+- **A escolha de executar o M7.1 antes do M9 foi minha, não do usuário.** Ele disse "execute" com os dois planejados; o M7.1 é o bug que ele mesmo relatou, é pequeno, e seu código sobrevive ao M9 — enquanto o M9 derruba tabelas e remove funcionalidade, o tipo de mudança que merece um "sim" explícito antes de começar.
+
+### AD-040: Revisão de qualidade — cinco defeitos, um deles vazando anexo privado para a base global (2026-07-26)
+
+**Decision:** Uma revisão de **qualidade** (não de cobertura) a pedido do usuário — *"ver se está tudo implementado, e se foi bem implementado"* — leu a fundo `update/portable.rs`, `db.rs`, `commands.rs`, `chat/attachments.rs`, `rag/pipeline.rs`, `rag/store.rs` e `runtime/process.rs`. Cinco defeitos achados, todos corrigidos.
+
+**A — Anexo de chat vazava para a base global (violação de CHAT-11).** `index_large_attachment` cria uma linha temporária em `documents` para reusar o pipeline (AD-017), roda a indexação e só então apaga. Se o app morresse nessa janela, a linha ficava com status `queued` — e no boot seguinte o `requeue_unfinished_documents` a reprocessava com `GLOBAL_NAMESPACE`, **sempre**, porque o `spawn_processing` não tinha de onde tirar o namespace. Resultado: um arquivo privado de um chat entrando na base global, recuperável por todos os chats, mais um documento fantasma de tamanho 0 na aba Documentos apontando para `chats/<id>/tmp/`.
+
+Corrigido com a **migração 6**: `documents` ganhou a coluna `namespace` (default `'global'`, que é o que toda linha existente é). O requeue só retoma `global`; as linhas emprestadas por anexos são apagadas no boot e o anexo correspondente vira `error` com mensagem — ficar `queued` para sempre seria pior que falhar. `list_documents` também passou a filtrar por `global`.
+
+**B — O update portátil podia apagar o próprio executável.** `swap()` renomeava o `.exe` em execução para `.old` e **só depois** movia os arquivos novos, sem nunca verificar que o pacote continha um executável com aquele nome. Um zip sem ele fazia o `move_tree` "dar certo" movendo nada de útil, o `swap` retornar `Ok`, e o usuário ficar sem app — e sem próximo boot em que notar. Entra uma verificação antes de qualquer rename. O comentário do rollback também foi corrigido: ele restaura o executável (o app volta a abrir), não desfaz os arquivos já movidos.
+
+**C — `PRAGMA foreign_keys` nunca era ligado.** O SQLite deixa chaves estrangeiras desligadas por conexão, então o `ON DELETE CASCADE` de `model_configs` era decorativo e `messages.chat_id` não era validado. Consequência concreta: apagar um chat durante uma geração inseria a resposta num chat inexistente — linha órfã, silenciosa. Ligado no `db::open`.
+
+**D — Dois anexos de mesmo nome se sobrescreviam.** `dir.join(&filename)` fazia o segundo `notas.txt` substituir o arquivo do primeiro, com as duas linhas apontando para o mesmo caminho. O arquivo em disco passou a ser prefixado pelo id; o `filename` guardado continua limpo, que é o que aparece na UI e nas citações.
+
+**E — Menores:** o `ON CONFLICT(id)` do `record_attachment` era código morto (o id é UUID novo a cada chamada) e saiu; `cleanup_old_files` apagava **qualquer** `*.old` na pasta do app — que é uma pasta do usuário, onde ele pode guardar coisas — e passou a apagar só o executável aposentado.
+
+**Verificado de verdade (não é "compilou"):**
+- **A migração 6 foi ensaiada contra uma cópia do banco real do usuário**, não só contra bancos de teste: `user_version` 5 → 6, `chats` 2, `messages` 6, `documents` 1 e `chat_attachments` 0 linhas todas preservadas, e nenhum documento marcado como não-global (ou seja, a varredura de anexos interrompidos não encosta no que já existe). O original não foi tocado — o teste é `#[ignore]`, exige a variável `LOCALMIND_REAL_DB` e nunca adivinha um caminho.
+- **A ordem "liga FK, depois migra" foi testada em arquivo**, não só em memória: é a combinação (renomear coluna com constraint ativa) que poderia falhar só no disco de um usuário.
+- **`cargo test`: 135 passando, 0 falhas, 7 ignorados** (eram 123 — 12 testes novos: 5 do namespace/requeue, 5 do banco, 2 do swap).
+- **O `chunk_at` da AD-036 finalmente rodou contra um LanceDB real** (2 testes `#[ignore]` novos): ele usa um caminho **sem** `nearest_to`, diferente do `search`, e até aqui só tinha sido compilado. Busca o vizinho certo, não cruza documento nem namespace, devolve `None` além do fim.
+- `npm run build` limpo.
+
+**Trade-off/Notas:**
+- **Ligar as FKs muda erro silencioso em erro visível.** Inserir a resposta num chat apagado agora falha em vez de criar órfão. O `send_message` já ignorava o retorno dessa inserção (`let _ =`), então o efeito prático é a linha órfã deixar de existir. `delete_chat` continua **não** cancelando a geração em curso — está registrado, não corrigido.
+- **O que a revisão elogia, para não parecer que só achou defeito:** os `still_exists` em cada estágio do `rag/pipeline.rs`, com limpeza de chunks órfãos depois da escrita, são cuidadosos de verdade; o `delete_chat` usa transação para o banco e limpeza fora dela pelo motivo certo; e o `portable.rs` trata traversal de zip e rollback com seriedade.
+
+**Não revisado (e por isso não afirmado como bom):** `providers/*`, `model_commands.rs`, `connections.rs`, `embedded_commands.rs` e o frontend inteiro. Não foi uma auditoria completa.
+
+### AD-039: M9 planejado — um runtime só, embutido no instalador; Ollama, LM Studio e URL manual saem (2026-07-26)
+
+**Decision:** Planejamento completo do M9 em `.specs/features/self-contained-runtime/` (context + spec + design + tasks). Três escolhas fecharam o desenho, todas confirmadas pelo usuário por pergunta direta:
+
+1. **A conexão "custom" sai junto com Ollama e LM Studio.** Não sobra provedor externo nenhum. Isso vai além de apagar dois arquivos: sem nada para escolher entre, a tabela `connections`, a tabela `model_configs`, o trait `ProviderClient` com `Box<dyn>`, o `ConnectionManager` e o `match` de provedor perdem a razão de existir. Um cliente concreto (`LlamaServerClient`) e uma linha de banco (`embedded_runtime`) substituem tudo.
+2. **Os componentes binários passam a viajar dentro do instalador** — `llama-server` Vulkan **e** CPU, ONNX Runtime e pdfium. Zero download de componente, inclusive numa máquina sem rede.
+3. **O modelo LLM continua sendo baixado** do catálogo, escolhido pelo usuário. Ou seja: autossuficiente em *programas* e em *componentes*, mas ainda precisa de internet **uma vez** para trazer um modelo — a spec afirma isso sem maquiagem em vez de vender "100% offline".
+
+**Reason:** Pedido literal do usuário — *"acho que pode remover a integração com ollama e lmstudio, runtime embutido creio que deve ser o suficiente, quero que o programa seja auto suficiente, não precisando de outros programa para rodar"*.
+
+**Pesquisa cumprida (verificada ao vivo, não deduzida):**
+- Release corrente do llama.cpp: `b10142`. Assets medidos: win vulkan **33,5 MB**, win cpu **18,3 MB**, ubuntu vulkan **32,3 MB**, ubuntu cpu **16,4 MB**. São esses os números que justificam embutir os dois backends em vez de só o Vulkan.
+- `bundle.resources` do Tauri 2: forma de array preserva a estrutura sob `$RESOURCE`; `"pasta/"` copia recursivamente. Resolução em Rust por `app.path().resolve(..., BaseDirectory::Resource)`.
+- `resource_dir` documentado por plataforma — Windows: diretório do executável; AppImage: `${APPDIR}/usr/lib/${exe_name}`; instalação Linux: `/usr/lib/${exe_name}`; dev: `${exe_dir}/../lib/${exe_name}`.
+- Em `tauri dev` os recursos são copiados para `target/debug/<pasta>`, **mas** só quando um recurso conhecido muda ou o build script reexecuta — arquivo novo é ignorado. O contorno documentado (`cargo:rerun-if-changed`) virou item da task de configuração.
+
+**Declarado incerto, e o design foi feito para não depender da resposta:** **não achei documentação conclusiva sobre o `.deb`/`.AppImage` preservar o bit de execução dos recursos.** Em vez de apostar, o `ensure_executable` garante o bit por conta própria e, se o `chmod` falhar (`/usr/lib` é do root), copia a pasta do backend para a pasta-base com `0o755`. A resposta empírica vira uma task com gate real (`dpkg -c` sobre o pacote gerado), e o resultado será registrado no design. Mesma postura para "o `tauri build` copia recursos para `target/release/`?", de que o `make-portable.mjs` depende.
+
+**Trade-offs registrados:**
+- **Perde-se o escape hatch** de apontar para um servidor OpenAI-compatible existente (vLLM, TGI, um Ollama que a pessoa já tem). Foi escolha explícita do usuário; se voltar, volta como feature nova, não como resíduo de arquitetura.
+- **A versão do llama.cpp passa a ser de build.** Deixa de ser "o app pega o último release" e passa a exigir uma release do LocalMind — em troca, a versão vira reprodutível e revisável (`vendor.json`).
+- **O instalador cresce** (~120–200 MB por SO). O número exato é **para medir**, não para estimar: é a saída obrigatória da task de verificação, junto com o delta de update.
+- **`connections` e `model_configs` são derrubadas por migração.** Chats, mensagens, documentos e anexos ficam intactos. Quem tinha Ollama ativo abre o app com o runtime embutido como única opção — é a consequência direta da decisão, não um efeito colateral.
+- **A ordem das tasks é "criar → migrar chamadores → apagar"**, nunca "apagar e consertar". Foi exatamente o atropelo que forçou T3+T4 num commit só na AD-023, e aqui a superfície removida é muito maior: 7 arquivos e 2 tabelas.
+
+**Interação com o M7.1 (AD-037):** os dois mexem em `runtime/`, em eixos independentes — o M7.1 muda *como* o sidecar sobe (sem console, Job Object, log em arquivo), o M9 muda *de onde vem o binário*. Podem ser executados em qualquer ordem, mas **não em paralelo por dois agentes**, porque `runtime/process.rs` e `runtime/detect.rs` são tocados pelos dois. A faxina do M9 apaga só os quatro subdiretórios de download, nunca `<base>/runtime/` inteiro, para não levar junto o `llama-server.log` do M7.1.
+
+**Impact:** M9 entra no ROADMAP como planejado. Resolve o C-05 do CONCERNS.md **por remoção** (os dois providers nunca exercitados contra um servidor real são justamente os que saem) e melhora o C-03 por subtração de tipos duplicados. **Nada implementado** — é planejamento. O gate desta feature não é "compila": é instalar numa máquina sem rede e conversar (T22).
+
+### AD-038: Repositório renomeado para `local-mind` — o endpoint do updater ia junto (2026-07-26)
+
+**Decision:** `git@github.com:rafaelsene01/agent-local.git` → `local-mind`. Remote local atualizado e, o que importa de verdade, **`plugins.updater.endpoints` no `tauri.conf.json`**, que apontava para `.../agent-local/releases/latest/download/latest.json`.
+
+**Reason:** Renomeação feita pelo usuário no GitHub.
+
+**Por que o endpoint não é detalhe:** o GitHub redireciona o nome antigo, então nada quebraria hoje — mas o redirecionamento morre no instante em que **qualquer pessoa** criar um repositório chamado `agent-local` nessa conta ou o nome for liberado. A partir daí o app instalado buscaria o manifesto de update num repositório que não é o nosso. A verificação de assinatura minisign recusaria o pacote (é essa a razão de ela existir), então o pior caso é o update parar de funcionar, não um pacote hostil ser instalado — mas depender de redirecionamento de nome para a integridade da cadeia de atualização seria construir sobre areia. Nova URL confirmada ao vivo (HTTP 200) antes da troca.
+
+**Impact:** `src-tauri/tauri.conf.json`, `release-distribution/design.md` e `spec.md`. Nenhuma release publicada ainda usa o endpoint antigo — não há cliente instalado para migrar.
+
+### AD-037: M7.1 planejado — sidecar sem janela de console e com morte garantida junto do app (2026-07-26)
+
+**Decision:** Planejamento completo em `.specs/features/sidecar-lifecycle/` (spec com 11 requisitos + design + 8 tasks). Três mudanças, todas em `runtime/`, nenhuma cruzando para o frontend.
+
+**Reason:** Relato do usuário — *"quando abri vi que ele abriu um terminal, seria bom esse terminal ficar oculto e controlado pelo LocalMind, sendo assim se fechar o programa, terminal que foi aberto por ele deve fechar"*.
+
+**Causa confirmada no código, não suposta:** `runtime/process.rs:92` faz `Command::new(...).spawn()` sem nenhuma flag de criação. O `llama-server.exe` é aplicação de console, então o Windows lhe dá um console próprio. O mesmo vale, por um instante, para o `--list-devices` do `runtime/detect.rs:21`.
+
+**Pesquisa obrigatória cumprida (verificada em fonte primária):**
+- **`CREATE_NO_WINDOW` = `0x08000000`**, aplicável por `std::os::windows::process::CommandExt::creation_flags` — está na biblioteca padrão, **sem crate novo**. A doc da Microsoft registra que a flag é ignorada quando o executável não é de console, o que explica por que o relaunch do próprio LocalMind (`update_commands.rs`) não precisa dela.
+- **Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`** é o padrão da plataforma para "matar os filhos quando o pai morre": fechar o último handle do job faz **o kernel** terminar tudo dentro dele. É a mesma técnica que o **Cargo** usa (`cargo/util/job.rs`) para não deixar processos órfãos. Sem polling, sem watchdog, sem processo auxiliar — e é justamente por ser do kernel que ela vale quando o nosso código **não tem chance de rodar**.
+- `windows-sys` já está no `Cargo.lock` transitivamente (0.45 a 0.61.2, via Tauri), mas entra **explícito** e sob `[target.'cfg(windows)'.dependencies]`.
+
+**A parte não óbvia do problema:** esconder a janela sozinho **piora** a situação. Hoje o console órfão é feio, mas é visível e fechável; escondido, um `llama-server` sobrevivente vira um processo invisível segurando vários GB. Por isso o "ficar oculto" e o "morrer junto" são o mesmo P1, não duas features — e por isso o log em arquivo (P2) não é enfeite: sem ele, apagar o console apaga a única fonte de diagnóstico do sidecar, que foi o que permitiu achar o bug da AD-028.
+
+**Trade-off/Notas:**
+- **O Job Object não substitui o `kill` atual.** No fechamento normal, matar explicitamente segue melhor: é síncrono e observável, e já foi verificado. O job é rede de segurança.
+- **Falha ao criar/associar o job degrada em vez de bloquear.** Recusar-se a subir o motor de IA porque uma garantia secundária falhou trocaria um vazamento de processo por um app inútil.
+- **Um job por processo do app**, não um por sidecar — senão cada troca de modelo vaza um handle.
+- **Linux fora de escopo:** não há console parasita, e o `Drop`/`ExitRequested` já cobre o encerramento normal. O `prctl(PR_SET_PDEATHSIG)` fica como ideia adiada.
+- **Matar órfãos de execuções anteriores ficou fora**: varrer processos por nome e matar pode acertar um `llama-server` que o usuário rodou por conta própria.
+
+**Riscos registrados como Open Questions do design (não resolvidos no papel):** se o `CREATE_NO_WINDOW` atrapalha a leitura do stdout no `--list-devices` — se atrapalhar, a detecção de GPU falha e o app cai para CPU **em silêncio**, o pior desfecho possível desta feature; se redirecionar stdout/stderr para arquivo convive com o `try_wait()` do health check; e o que acontece na rotação do log quando o processo anterior ainda o tem aberto.
+
+**Impact:** M7.1 novo no ROADMAP, entre o M7 e o M4. **Nada implementado.** O gate não é `cargo test` — é uma janela a menos na barra de tarefas e um `tasklist` vazio depois de `taskkill /F` (T7).
 
 ### AD-036: Auditoria spec-a-código — o que faltava, e o que a documentação estava contando errado (2026-07-26)
 

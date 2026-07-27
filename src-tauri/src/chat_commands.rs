@@ -1,14 +1,12 @@
 use crate::chat::attachments;
 use crate::chat::cancellation::CancellationRegistry;
 use crate::chat::context_assembler;
-use crate::connections;
 use crate::db::{require_conn, DbState};
-use crate::embedded_commands;
+use crate::runtime_commands;
 use crate::models::Message;
-use crate::providers::GpuOffload;
 use chrono::Utc;
 use futures_util::StreamExt;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
@@ -134,60 +132,35 @@ pub fn list_chat_attachments(
     Ok(rows)
 }
 
-struct ActiveTarget {
-    connection: connections::Connection,
-    model_name: String,
-    context_length: Option<u32>,
-    gpu_offload: Option<GpuOffload>,
-}
-
-/// The single active pair is the only source of truth for who answers
-/// (AD-021). Missing either half is a clear error before any network call
-/// (CHAT-02).
-fn active_target(app: &AppHandle) -> Result<ActiveTarget, String> {
+/// There is one runtime, so "who answers" is no longer a pair to resolve — it
+/// is whatever model the runtime is configured to run (SELF-04). The error
+/// names the screen that fixes it, which is the only thing the user can do
+/// about it (CHAT-02).
+fn active_model(app: &AppHandle) -> Result<crate::runtime::store::ActiveModel, String> {
     let db = app.state::<DbState>();
     let guard = db.0.lock().map_err(|e| e.to_string())?;
     let sql = require_conn(&guard)?;
 
-    let connection = connections::active_connection(sql)?
-        .ok_or_else(|| "Nenhuma conexão ativa — escolha uma em Conexões".to_string())?;
-
-    let row: Option<(String, Option<u32>, Option<String>)> = sql
-        .query_row(
-            "SELECT model_name, context_length, gpu_offload FROM model_configs WHERE is_active = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-
-    let (model_name, context_length, gpu_offload) =
-        row.ok_or_else(|| "Nenhum modelo ativo — escolha um em Conexões".to_string())?;
-
-    Ok(ActiveTarget {
-        connection,
-        model_name,
-        context_length,
-        gpu_offload: gpu_offload.as_deref().map(GpuOffload::parse).transpose()?,
-    })
+    crate::runtime::store::active_model(sql)?
+        .ok_or_else(|| "Nenhum modelo ativo — escolha um em Runtime".to_string())
 }
 
 /// The window to budget the prompt against. A missing `context_length` used to
-/// mean "assume 4096", which cost the embedded runtime four fifths of its real
-/// window — the sidecar reports `n_ctx_slot = 21760` for Phi-3.5, and the
-/// document context was being truncated to fit a limit that did not exist.
+/// mean "assume 4096", which cost the runtime four fifths of its real window —
+/// the sidecar reports `n_ctx_slot = 21760` for Phi-3.5, and the document
+/// context was being truncated to fit a limit that did not exist (AD-033).
 ///
-/// Best-effort on purpose: a provider that cannot answer falls back to the old
+/// Best-effort on purpose: a runtime that cannot answer falls back to the old
 /// assumption instead of failing the message.
 async fn budget_context(
-    client: &dyn crate::providers::ProviderClient,
-    target: &ActiveTarget,
+    client: &crate::providers::llama_server::LlamaServerClient,
+    model: &crate::runtime::store::ActiveModel,
 ) -> Option<u32> {
-    if target.context_length.is_some() {
-        return target.context_length;
+    if model.context_length.is_some() {
+        return model.context_length;
     }
     client
-        .model_limits(&target.model_name)
+        .model_limits(&model.name)
         .await
         .ok()
         .and_then(|limits| limits.current_context)
@@ -217,14 +190,13 @@ pub async fn send_message(
     content: String,
     attachment_paths: Vec<String>,
 ) -> Result<String, String> {
-    let target = active_target(&app)?;
+    let model = active_model(&app)?;
     let user_message = insert_message(&app, &chat_id, "user", &content)?;
 
     // Attachment failures are recorded per file and never block the message.
     attachments::ingest(&app, &chat_id, &attachment_paths).await?;
 
-    let manager = embedded_commands::manager(&app);
-    let client = manager.provider_for(&target.connection);
+    let client = runtime_commands::client(&app);
 
     let assembled = context_assembler::assemble(
         &app,
@@ -232,7 +204,7 @@ pub async fn send_message(
         &content,
         &user_message.id,
         use_global_rag(&app, &chat_id)?,
-        budget_context(client.as_ref(), &target).await,
+        budget_context(&client, &model).await,
     )
     .await?;
 
@@ -255,12 +227,7 @@ pub async fn send_message(
     let assistant_message_id = Uuid::new_v4().to_string();
 
     let mut stream = match client
-        .stream_chat(
-            &target.model_name,
-            assembled.messages,
-            target.context_length,
-            target.gpu_offload,
-        )
+        .stream_chat(&model.name, assembled.messages, model.context_length)
         .await
     {
         Ok(stream) => stream,

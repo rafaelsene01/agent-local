@@ -1,13 +1,8 @@
-pub mod custom;
-pub mod embedded;
-pub mod lmstudio;
+pub mod llama_server;
 pub mod openai_stream;
-pub mod ollama;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tokio::sync::mpsc::Sender;
 
 /// Every provider lives on localhost, so an unreachable one should fail fast
 /// instead of holding the Conexões screen. Applied per-request rather than on
@@ -69,8 +64,8 @@ pub struct PullProgress {
     pub message: Option<String>,
 }
 
-/// Mirrors the string values persisted in `model_configs.gpu_offload`
-/// ('off' | 'max' | a fraction like '0.5').
+/// How much of the model to put on the GPU. Persisted in
+/// `embedded_runtime.gpu_layers` after being reduced to a layer count.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GpuOffload {
     Off,
@@ -131,17 +126,6 @@ pub struct ModelLimits {
     pub current_context: Option<u32>,
 }
 
-/// Reports which fields the provider actually accepted (CONN-13 AC3) —
-/// e.g. LM Studio only applies context/GPU config on model (re)load,
-/// Ollama applies num_ctx/num_gpu per chat request without a reload.
-#[derive(Debug, Serialize, Clone)]
-pub struct ConfigApplied {
-    pub context_length_applied: Option<u32>,
-    pub gpu_offload_applied: Option<String>,
-    pub requires_reload: bool,
-    pub note: Option<String>,
-}
-
 #[derive(Debug, Clone)]
 pub enum ProviderError {
     Unavailable,
@@ -195,6 +179,29 @@ impl ChatMessage {
 
 /// One incremental piece of the answer. `done` arrives on its own at the end,
 /// which is what lets the caller persist the accumulated message exactly once.
+#[derive(Debug, Clone)]
+pub struct ChatToken {
+    pub delta: String,
+    pub done: bool,
+}
+
+pub type ChatStream = std::pin::Pin<
+    Box<dyn futures_util::Stream<Item = Result<ChatToken, ProviderError>> + Send>,
+>;
+
+/// `-ngl` takes a layer count, and the number of layers in a GGUF is not known
+/// without reading the model, so offload is all-or-nothing: a fraction cannot
+/// be honored honestly and is treated as off rather than silently becoming
+/// max.
+pub fn gpu_layers_for(offload: &GpuOffload) -> i32 {
+    match offload {
+        GpuOffload::Max => -1,
+        GpuOffload::Off => 0,
+        GpuOffload::Fraction(f) if *f >= 1.0 => -1,
+        GpuOffload::Fraction(_) => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,45 +214,21 @@ mod tests {
         // A tiny window still leaves room for a usable answer.
         assert_eq!(answer_token_budget(Some(512)), 256);
     }
-}
 
-#[derive(Debug, Clone)]
-pub struct ChatToken {
-    pub delta: String,
-    pub done: bool,
-}
-
-pub type ChatStream = std::pin::Pin<
-    Box<dyn futures_util::Stream<Item = Result<ChatToken, ProviderError>> + Send>,
->;
-
-#[async_trait]
-pub trait ProviderClient: Send + Sync {
-    async fn health_check(&self) -> Result<(), ProviderError>;
-    async fn list_installed_models(&self) -> Result<Vec<InstalledModel>, ProviderError>;
-    async fn pull_model(
-        &self,
-        identifier: &str,
-        progress: Sender<PullProgress>,
-    ) -> Result<(), ProviderError>;
-    async fn configure_model(
-        &self,
-        model: &str,
-        context_length: Option<u32>,
-        gpu_offload: Option<GpuOffload>,
-    ) -> Result<ConfigApplied, ProviderError>;
-
-    /// Defaults to "unknown" so a provider that has no way to report it stays
-    /// honest instead of inheriting someone else's numbers.
-    async fn model_limits(&self, _model: &str) -> Result<ModelLimits, ProviderError> {
-        Ok(ModelLimits::default())
+    #[test]
+    fn gpu_offload_maps_to_all_or_nothing_layers() {
+        assert_eq!(gpu_layers_for(&GpuOffload::Max), -1);
+        assert_eq!(gpu_layers_for(&GpuOffload::Off), 0);
+        assert_eq!(gpu_layers_for(&GpuOffload::Fraction(1.0)), -1);
+        assert_eq!(gpu_layers_for(&GpuOffload::Fraction(0.5)), 0);
     }
 
-    async fn stream_chat(
-        &self,
-        model: &str,
-        messages: Vec<ChatMessage>,
-        context_length: Option<u32>,
-        gpu_offload: Option<GpuOffload>,
-    ) -> Result<ChatStream, ProviderError>;
+    #[test]
+    fn gpu_offload_round_trips_through_its_persisted_string() {
+        for value in [GpuOffload::Off, GpuOffload::Max, GpuOffload::Fraction(0.5)] {
+            let text = value.to_value_string();
+            assert_eq!(GpuOffload::parse(&text).unwrap(), value);
+        }
+        assert!(GpuOffload::parse("metade").is_err());
+    }
 }

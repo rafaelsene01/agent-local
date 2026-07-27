@@ -47,6 +47,67 @@ pub fn load(sql: &SqlConnection) -> Result<EmbeddedRuntimeRow, String> {
     .map(Option::unwrap_or_default)
 }
 
+/// The active model, as the chat needs to see it (SELF-07).
+///
+/// There is no `model_configs` table any more, and no "active pair": there is
+/// one runtime, so the model it is configured to start with **is** the active
+/// model. The name is the file name, which is what the user picked and what
+/// the citations and the model list show.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ActiveModel {
+    pub name: String,
+    pub path: String,
+    pub context_length: Option<u32>,
+    pub gpu_layers: Option<i32>,
+}
+
+/// `None` covers both "never chose one" and "the file is gone".
+///
+/// The second case matters: a model deleted from the folder used to leave a
+/// configured path pointing at nothing, and the failure surfaced much later as
+/// a sidecar that would not start. Reporting it as "no active model" sends the
+/// user to the one screen that can fix it.
+pub fn active_model(sql: &SqlConnection) -> Result<Option<ActiveModel>, String> {
+    let row = load(sql)?;
+    let Some(path) = row.model_path else {
+        return Ok(None);
+    };
+    let as_path = std::path::Path::new(&path);
+    if !as_path.exists() {
+        return Ok(None);
+    }
+    let name = as_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.clone());
+
+    Ok(Some(ActiveModel {
+        name,
+        path,
+        context_length: row.context_length,
+        gpu_layers: row.gpu_layers,
+    }))
+}
+
+/// Choosing a model must not silently reset the context/GPU the user tuned, so
+/// this writes one field of the singleton row rather than replacing it.
+pub fn set_active_model(sql: &SqlConnection, model_path: &str) -> Result<(), String> {
+    let mut row = load(sql)?;
+    row.model_path = Some(model_path.to_string());
+    save(sql, &row)
+}
+
+pub fn set_config(
+    sql: &SqlConnection,
+    context_length: Option<u32>,
+    gpu_layers: Option<i32>,
+) -> Result<(), String> {
+    let mut row = load(sql)?;
+    row.context_length = context_length;
+    row.gpu_layers = gpu_layers;
+    save(sql, &row)
+}
+
 pub fn save(sql: &SqlConnection, row: &EmbeddedRuntimeRow) -> Result<(), String> {
     sql.execute(
         "INSERT INTO embedded_runtime (id, release_tag, backend, binary_path, model_path, context_length, gpu_layers)
@@ -116,6 +177,84 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
         assert_eq!(load(&sql).unwrap().backend.unwrap(), "cpu");
+    }
+
+    /// Creates a real file, because `active_model` deliberately checks the disk.
+    fn a_model_file(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("localmind-active-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, b"gguf").unwrap();
+        path
+    }
+
+    #[test]
+    fn no_model_configured_means_no_active_model() {
+        let sql = setup();
+        assert_eq!(active_model(&sql).unwrap(), None);
+    }
+
+    #[test]
+    fn the_active_model_is_read_back_with_its_name_and_config() {
+        let sql = setup();
+        let path = a_model_file("Phi-3.5-mini-instruct-Q4_K_M.gguf");
+        set_active_model(&sql, &path.to_string_lossy()).unwrap();
+        set_config(&sql, Some(8192), Some(-1)).unwrap();
+
+        let active = active_model(&sql).unwrap().expect("a model was chosen");
+        assert_eq!(active.name, "Phi-3.5-mini-instruct-Q4_K_M.gguf");
+        assert_eq!(active.context_length, Some(8192));
+        assert_eq!(active.gpu_layers, Some(-1));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_model_deleted_from_disk_reads_as_none_not_as_a_broken_active() {
+        let sql = setup();
+        let path = a_model_file("gone.gguf");
+        set_active_model(&sql, &path.to_string_lossy()).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        assert_eq!(
+            active_model(&sql).unwrap(),
+            None,
+            "a path pointing at nothing is not an active model"
+        );
+    }
+
+    #[test]
+    fn choosing_a_model_does_not_reset_the_tuning() {
+        let sql = setup();
+        set_config(&sql, Some(4096), Some(0)).unwrap();
+        let path = a_model_file("outro.gguf");
+        set_active_model(&sql, &path.to_string_lossy()).unwrap();
+
+        let active = active_model(&sql).unwrap().unwrap();
+        assert_eq!(active.context_length, Some(4096));
+        assert_eq!(active.gpu_layers, Some(0));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn setting_the_config_does_not_drop_the_installed_paths() {
+        let sql = setup();
+        save(
+            &sql,
+            &EmbeddedRuntimeRow {
+                release_tag: Some("b10107".to_string()),
+                binary_path: Some("/bin/llama-server".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        set_config(&sql, Some(2048), None).unwrap();
+
+        let row = load(&sql).unwrap();
+        assert_eq!(row.binary_path.as_deref(), Some("/bin/llama-server"));
+        assert_eq!(row.release_tag.as_deref(), Some("b10107"));
     }
 
     #[test]

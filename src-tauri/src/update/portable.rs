@@ -68,18 +68,24 @@ pub fn is_safe_relative(path: &str) -> bool {
 
 /// Removes the leftovers of a previous update. Called at boot; every failure is
 /// ignored on purpose — a stale file must never keep the app from starting.
+///
+/// Only the retired executable is removed, not every `*.old` in the folder: the
+/// portable bundle sits in a directory the user chose and may well keep their
+/// own files next to it.
 pub fn cleanup_old_files(app_dir: &Path) {
+    if let Some(exe_name) = current_exe_name() {
+        cleanup_retired(app_dir, &exe_name);
+    }
+}
+
+/// Split from [`cleanup_old_files`] so the deletion can be tested without the
+/// test binary's own name deciding which file gets removed.
+fn cleanup_retired(app_dir: &Path, exe_name: &std::ffi::OsStr) {
     let _ = fs::remove_dir_all(app_dir.join(STAGING_DIR));
 
-    let Ok(entries) = fs::read_dir(app_dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some(&OLD_SUFFIX[1..]) {
-            let _ = fs::remove_file(&path);
-        }
-    }
+    let mut retired = exe_name.to_os_string();
+    retired.push(OLD_SUFFIX);
+    let _ = fs::remove_file(app_dir.join(retired));
 }
 
 /// Downloads, verifies and installs the portable bundle.
@@ -197,11 +203,25 @@ fn current_exe_name() -> Option<std::ffi::OsString> {
         .and_then(|exe| exe.file_name().map(|name| name.to_os_string()))
 }
 
-/// Renames the running executable aside, then moves the new files in. On any
-/// failure the old executable is put back, so the app stays usable on the old
-/// version instead of ending up half-updated.
+/// Renames the running executable aside, then moves the new files in.
+///
+/// If moving the files fails, the old executable is put back. That restores the
+/// part that matters — the app still starts, on the old version — but it is not
+/// a full rollback: files already moved in stay. Today the archive holds three
+/// files, so "already moved in" is nearly always nothing; the guarantee is
+/// "still bootable", not "byte-identical to before".
 fn swap(app_dir: &Path, staging: &Path, exe_name: &std::ffi::OsStr) -> Result<(), String> {
     let live = app_dir.join(exe_name);
+
+    // Checked before anything is renamed. Retiring the running executable and
+    // then discovering the new bundle has none would leave the folder with no
+    // app at all — and no next launch in which to notice.
+    if !staging.join(exe_name).is_file() {
+        return Err(format!(
+            "a atualização não contém '{}' e foi descartada",
+            exe_name.to_string_lossy()
+        ));
+    }
 
     let mut retired = live.clone().into_os_string();
     retired.push(OLD_SUFFIX);
@@ -293,13 +313,17 @@ mod tests {
         fs::write(dir.join("LocalMind.exe"), b"new").unwrap();
         fs::write(dir.join("LocalMind.exe.old"), b"old").unwrap();
         fs::write(dir.join("README.txt"), b"keep").unwrap();
+        // The portable folder belongs to the user, who may keep their own
+        // files in it. Only our retired executable is ours to delete.
+        fs::write(dir.join("notas.old"), b"user file").unwrap();
         fs::create_dir_all(dir.join(STAGING_DIR)).unwrap();
         fs::write(dir.join(STAGING_DIR).join("leftover"), b"x").unwrap();
 
-        cleanup_old_files(&dir);
+        cleanup_retired(&dir, std::ffi::OsStr::new("LocalMind.exe"));
 
         assert!(dir.join("LocalMind.exe").exists());
         assert!(dir.join("README.txt").exists());
+        assert!(dir.join("notas.old").exists(), "someone else's .old is not ours");
         assert!(!dir.join("LocalMind.exe.old").exists());
         assert!(!dir.join(STAGING_DIR).exists());
 
@@ -309,6 +333,59 @@ mod tests {
     #[test]
     fn cleanup_on_a_missing_folder_is_silent() {
         cleanup_old_files(Path::new("/definitely/not/a/real/path"));
+        cleanup_retired(
+            Path::new("/definitely/not/a/real/path"),
+            std::ffi::OsStr::new("LocalMind.exe"),
+        );
+    }
+
+    #[test]
+    fn a_bundle_without_the_executable_is_refused_before_anything_moves() {
+        let root = temp_dir("noexe");
+        let app_dir = root.join("app");
+        let staging = root.join("staging");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(app_dir.join("LocalMind.exe"), b"live").unwrap();
+        // A bundle with everything except the one file that matters.
+        fs::write(staging.join("README.txt"), b"new readme").unwrap();
+
+        let err = swap(&app_dir, &staging, std::ffi::OsStr::new("LocalMind.exe")).unwrap_err();
+
+        assert!(err.contains("não contém"), "unexpected: {err}");
+        // The running executable must still be there, under its own name.
+        assert_eq!(
+            fs::read_to_string(app_dir.join("LocalMind.exe")).unwrap(),
+            "live"
+        );
+        assert!(!app_dir.join("LocalMind.exe.old").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_bundle_with_the_executable_swaps_and_retires_the_old_one() {
+        let root = temp_dir("swap");
+        let app_dir = root.join("app");
+        let staging = root.join("staging");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(app_dir.join("LocalMind.exe"), b"live").unwrap();
+        fs::write(staging.join("LocalMind.exe"), b"updated").unwrap();
+
+        swap(&app_dir, &staging, std::ffi::OsStr::new("LocalMind.exe")).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(app_dir.join("LocalMind.exe")).unwrap(),
+            "updated"
+        );
+        assert_eq!(
+            fs::read_to_string(app_dir.join("LocalMind.exe.old")).unwrap(),
+            "live",
+            "the previous version is kept until the next boot cleans it"
+        );
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

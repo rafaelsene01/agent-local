@@ -58,6 +58,15 @@ docx-rs = "0.4"
 # paths share one trust root. Zero dependencies of its own.
 minisign-verify = "0.2"
 
+# Job objects, for killing the llama.cpp sidecar when this process dies by any
+# means (M7.1). Already in the tree transitively via Tauri, but declared here on
+# purpose: depending on someone else's dependency breaks on their next bump.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+] }
+
 # Every byte here ships in the installers AND in every portable update download,
 # so the release profile is tuned for size. `strip` is the big win: the binary is
 # mostly debug symbols by default.
