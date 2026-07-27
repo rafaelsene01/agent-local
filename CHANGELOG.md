@@ -4,7 +4,18 @@ Todas as mudanças relevantes deste projeto são registradas aqui.
 O formato segue [Conventional Commits](https://www.conventionalcommits.org/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-07-27
+
+### Correções
+
+- **release:** Correct asset URL handling in patch-latest-json script
+- **runtime:** Update .gitignore to properly include resources directory
+
 ## [0.2.0] - 2026-07-27
+
+### Novidades
+
+- **runtime:** Update .gitignore and package.json for vendor management
 
 ### Outros
 
