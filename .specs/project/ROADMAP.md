@@ -1,9 +1,11 @@
 # Roadmap
 
-**Current Milestone:** M9 — Runtime autossuficiente. **Planejado por inteiro em 2026-07-26, nada implementado** (ver AD-039).
-**Status:** In Progress — M3.1, M7, M5 e M4 concluídos em 2026-07-25; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos). **M6 segue sendo o único milestone sem spec e sem código.**
+**Current Milestone:** M6 — Memória de conversa. **8 das 9 tasks implementadas (2026-07-27); falta a T9, que é conversar com o app e ver se ele lembra** (ver AD-044).
+**Status:** In Progress — M3.1, M7, M7.1, M5 e M4 concluídos; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos); **M9 implementado em 2026-07-27** (21 das 22; falta a T22, a verificação numa máquina sem rede). **Todo milestone tem spec agora** — o M6 era o último sem, e ganhou a sua em 2026-07-27.
 
-> **Mudança de rumo (2026-07-26):** o M9 remove Ollama e LM Studio e embute os componentes binários no instalador. Isso **revoga parte do PROJECT.md** (a promessa de detectar runtimes externos) — a atualização daquele documento é a T21 do M9, não um esquecimento.
+> **As três pendências restantes têm a mesma natureza e nenhuma é código:** T24 (publicar release), T22 (instalar sem rede) e T9 (conversar e ver se lembra). Todas exigem uma pessoa executando o app.
+
+> **Mudança de rumo aplicada (2026-07-27):** o M9 removeu Ollama, LM Studio e a URL manual, e passou a embutir os componentes binários no instalador. O PROJECT.md foi atualizado junto (T21) — ele não promete mais detectar runtimes externos.
 
 > **Ordem de execução revisada (2026-07-25):** o usuário puxou o M7 (runtime embutido) para antes de M4/M5, e pediu a regra de "um único ativo" (M3.1). Ordem real agora: **M3.1 → M7 → M5 → M4**.
 
@@ -14,14 +16,14 @@
 ```mermaid
 flowchart TB
     subgraph UI["Frontend — React + TS (Tauri Webview)"]
-        SB["Sidebar<br/>Chats · Documentos · Conexões · Configurações"]
+        SB["Sidebar<br/>Chats · Documentos · Runtime · Configurações"]
         CHAT["Painel de Chat<br/>input · streaming · anexos"]
         WIZ["Wizard de 1º uso<br/>pasta · tema · idioma"]
     end
     subgraph CORE["Backend — Rust (comandos Tauri)"]
         CFG["Config/Storage Manager<br/>pasta-base · settings"]
         CHATSVC["Chat Service<br/>montagem de contexto"]
-        CONN["Connection & Model Manager<br/>detectar · marcar · baixar · CPU/GPU · ctx"]
+        CONN["Runtime & Model Manager<br/>preparar · escolher modelo · CPU/GPU · ctx"]
         RAG["RAG Engine<br/>parse · chunk · embed · retrieve"]
     end
     subgraph STORE["Pasta-base configurável"]
@@ -31,17 +33,15 @@ flowchart TB
         DOCS[("documents/")]
         TMP[("chats/&lt;id&gt;/tmp/<br/>anexos efêmeros")]
     end
-    subgraph LLM["Runtimes locais (OpenAI-compatible)"]
-        OLL["Ollama :11434"]
-        LMS["LM Studio :1234"]
-        LCPP["llama.cpp embutido"]
+    subgraph LLM["Runtime (um só, dentro do instalador)"]
+        LCPP["llama-server<br/>Vulkan ou CPU, escolhido por probe"]
     end
     WIZ --> CFG
     SB --> CFG & CHATSVC
     CHAT --> CHATSVC
     CHATSVC --> CONN & RAG
     CFG --> SQL
-    CONN --> OLL & LMS & LCPP
+    CONN --> LCPP
     RAG --> VEC & DOCS & TMP
     CHATSVC --> SQL
 ```
@@ -49,7 +49,7 @@ flowchart TB
 **RAG em 3 camadas** (montado a cada mensagem):
 1. **Global** — documentos da base de conhecimento (tabela global), buscáveis por qualquer chat.
 2. **Chat/anexos** — arquivos enviados dentro do chat (namespace `chat_id`, arquivos em `tmp/` efêmeros).
-3. **Conversa (memória)** — turnos da própria conversa serializados/embeddados; recuperação híbrida (últimas N verbatim + top-k antigos relevantes). Ver AD-009.
+3. **Conversa (memória)** — turnos da própria conversa serializados/embeddados no namespace `memory:<chat_id>`; recuperação híbrida (últimas N verbatim + top-k antigos relevantes). Ver AD-009 e AD-044. **Implementada no M6, em 2026-07-27** — até então este item descrevia uma camada que não existia.
 
 **Config inicial** por wizard de 1º uso (não no instalador — AD-010). **Storage** numa pasta-base configurável (AD-008). **i18n** EN padrão + PT; temas claro/escuro/extras (AD-007).
 
@@ -88,7 +88,9 @@ flowchart TB
 
 ---
 
-## M3 — Conexões & Modelos — ✅ COMPLETE (2026-07-25)
+## M3 — Conexões & Modelos — ✅ COMPLETE (2026-07-25) · ⛔ **REVOGADO PELO M9 (2026-07-27)**
+
+> O que este milestone entregou — detecção de Ollama e LM Studio, conexão manual por URL, tabela `connections` — **não existe mais no app**. Foi removido inteiro pela AD-039/AD-042. O texto abaixo fica como histórico do que foi construído e por quê; não descreve o produto atual.
 
 **Goal:** Descobrir runtimes locais, escolher quais usar, e gerenciar modelos (usar/baixar) com config de execução.
 **Target:** Usuário vê conexões disponíveis, marca as ativas, vê/baixa modelos compatíveis com sua memória e ajusta contexto e CPU/GPU.
@@ -138,7 +140,7 @@ flowchart TB
 
 > **Puxado para antes de M4/M5** a pedido do usuário (era o último antes do empacotamento).
 
-**Goal:** Funcionar do zero sem Ollama/LM Studio instalados.
+**Goal:** Funcionar do zero sem nenhum programa externo instalado.
 **Target:** Em máquina limpa, o app baixa o runtime + um modelo e conversa sozinho.
 
 ### Features
@@ -150,11 +152,11 @@ flowchart TB
 - Detecção de GPU pelo próprio binário (`--list-devices`), sem lib pesada
 - Modelo padrão: Phi-3.5 Mini Instruct Q4_K_M (MIT, ~2.4GB), escolhido pelo usuário
 - Processo filho com porta livre automática, health check e kill no `RunEvent::ExitRequested`
-- Aparece como mais uma conexão (`provider = "embedded"`), ativável pela mesma regra do M3.1
+- ~~Aparece como mais uma conexão (`provider = "embedded"`), ativável pela mesma regra do M3.1~~ — desde o M9 é o **único** runtime, e não há conexão a ativar
 
 ---
 
-## M7.1 — Sidecar sem console e com ciclo de vida garantido — 📋 PLANEJADO (2026-07-26)
+## M7.1 — Sidecar sem console e com ciclo de vida garantido — ✅ COMPLETE (2026-07-26, ver AD-041)
 
 **Goal:** Fechar as três pontas soltas que o M7 deixou entre o sidecar e o sistema operacional.
 **Target:** Abrir o app mostra **uma** janela; matar o app à força não deixa `llama-server` órfão; a saída do sidecar continua legível, em arquivo.
@@ -163,18 +165,20 @@ flowchart TB
 
 ### Features
 
-**Nenhuma janela de console** — PLANNED (SIDE-01…SIDE-03)
+> **Corrigido em 2026-07-27:** as três features abaixo estavam marcadas `PLANNED` desde o planejamento (AD-037), embora a AD-041 registre o milestone `✅ COMPLETE` desde 2026-07-26. É o mesmo tipo de divergência que a AD-036 já tinha encontrado no M8 — o documento não acompanhou a execução. O que continua aberto é só a observação visual da barra de tarefas (T7), não o código.
+
+**Nenhuma janela de console** — DONE (SIDE-01…SIDE-03)
 
 - `CREATE_NO_WINDOW` no spawn do sidecar e na detecção de GPU, via `std`, sem dependência nova
 - Fora do Windows, nada muda
 
-**Ciclo de vida atado ao app** — PLANNED (SIDE-04…SIDE-08)
+**Ciclo de vida atado ao app** — DONE (SIDE-04…SIDE-08)
 
 - Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: quem mata o filho é o kernel, então a garantia vale mesmo quando o nosso código não roda (crash, `taskkill /F`)
 - Fortalece o EMBED-07, que hoje só cobre o fechamento normal
 - Falha ao criar o job degrada para o comportamento atual — nunca impede o app de funcionar
 
-**Log em arquivo** — PLANNED (SIDE-09…SIDE-11)
+**Log em arquivo** — DONE (SIDE-09…SIDE-11)
 
 - `<pasta-base>/runtime/llama-server.log`, com uma geração de rotação
 - Sem isso, esconder a janela trocaria um incômodo visual por cegueira de diagnóstico — foi lendo esse log que a AD-028 achou o bug do timeout de 5 s
@@ -221,20 +225,37 @@ flowchart TB
 
 ---
 
-## M6 — Memória de conversa (RAG híbrido) — 📭 SEM SPEC, SEM CÓDIGO
+## M6 — Memória de conversa (RAG híbrido) — ⚙️ IMPLEMENTADO, NÃO VERIFICADO CONVERSANDO (2026-07-27)
 
-> **O único milestone que ainda não existe em lugar nenhum.** Não há `.specs/features/` para ele — só a AD-009 (decisão de usar RAG híbrido) e os três bullets abaixo. Nada foi implementado.
+> **Leia isto antes de confiar no "implementado".** As 8 tasks de código estão escritas e passam nos gates (169 testes Rust, `npm run build` limpo). O que **não** aconteceu: ninguém conversou com o app para ver se ele de fato lembra. O gate desta feature é a T9, e ela continua aberta.
 
 **Goal:** Serializar a conversa e usá-la como memória via RAG híbrido, junto das outras camadas.
 **Target:** Chat lembra de coisas ditas muito antes (além da janela de contexto) recuperando turnos relevantes.
 
+**Spec:** `.specs/features/conversation-memory/` — `context.md` + `spec.md` (20 requisitos MEM-01…MEM-20) + `design.md` + `tasks.md` (9 tasks). Ver AD-044.
+
 ### Features
 
-**Memória de sessão** — PLANNED
+**Memória de sessão** — CÓDIGO PRONTO, NUNCA EXERCITADO NUMA CONVERSA (MEM-01…MEM-13)
 
-- Serializar/embeddar cada turno num namespace vetorial da conversa (`chat_id`)
-- Montagem de contexto híbrida: system prompt + últimas N verbatim + top-k turnos antigos + RAG global + RAG anexos
-- Combinação/ordenação e orçamento de tokens entre as 3 camadas
+- Cada turno **completo** (o par pergunta+resposta) é embeddado num namespace próprio da conversa, `memory:<chat_id>`, depois de a resposta ser persistida e fora do caminho da requisição
+- Geração cancelada ou com erro não vira memória: um turno pela metade recuperado depois seria uma frase truncada com autoridade de resposta completa
+- Montagem híbrida: system prompt + últimas N verbatim + **memória** + RAG global + RAG anexos + pergunta
+- **A memória é a última a receber orçamento**, depois dos documentos e do histórico recente — a AD-033 mediu que o que está perto da pergunta é o que o modelo lê, e a camada nova não pode deslocar isso
+- Teto próprio de 2 turnos, separado do `TOP_K` de 4 dos documentos
+- Um turno que já está no prompt verbatim não é recuperado de novo; um que o orçamento derrubou, é
+
+**Confinamento à conversa** — DONE (MEM-07…MEM-09)
+
+- Namespace exclusivo, disjunto do de anexos (`chat:<id>`) e do global — restrição explícita do usuário, verificada contra um LanceDB real
+- Excluir o chat apaga os dois namespaces
+
+**Toggle e backfill** — CÓDIGO PRONTO, NENHUM CLIQUE (MEM-14…MEM-20)
+
+- Interruptor por conversa, ligado por padrão (migração **8**); desligado para de recuperar **e** de gravar
+- Indexação do histórico existente **sob demanda**, por conversa, com progresso — a varredura automática no boot foi recusada no planejamento: numa base grande é CPU de embedding logo depois de um update, o que se parece com travamento
+
+**Fora do escopo:** resumo da conversa pelo LLM, memória entre conversas diferentes, e curadoria turno a turno.
 
 ---
 
@@ -278,7 +299,9 @@ flowchart TB
 
 ---
 
-## M9 — Runtime autossuficiente — 📋 PLANEJADO (2026-07-26)
+## M9 — Runtime autossuficiente — ⚙️ IMPLEMENTADO, COM UMA REGRESSÃO CORRIGIDA NA PRIMEIRA EXECUÇÃO (2026-07-27)
+
+> **Leia isto antes de confiar no "implementado".** As 21 primeiras tasks passam nos gates automatizados, mas **na primeira vez que o app foi aberto o runtime empacotado não executou**: a poda do vendoring apagava `llama-server-impl.dll` e `llama-common.dll`, e o `llama-server.exe` que sobrava é um lançador de 9 KB (AD-046). Corrigido, e o binário empacotado agora responde `Vulkan0: NVIDIA GeForce RTX 3060`. **Os instaladores medidos na AD-045 foram gerados com a árvore quebrada e não servem** — precisam ser refeitos, e os tamanhos daquele registro não valem mais. A T22 segue parcial: nada foi instalado, nada foi testado com a rede desligada.
 
 **Goal:** Um runtime só, embutido, e nada para baixar além do modelo. O app deixa de conversar com programas externos e deixa de buscar componentes na internet.
 **Target:** Numa máquina **sem rede**, com um `.gguf` já na pasta de modelos: instalar → abrir → escolher o modelo → conversar. Importar um PDF offline chega a `ready`.
@@ -287,22 +310,29 @@ flowchart TB
 
 ### Features
 
-**Ollama, LM Studio e URL manual saem** — PLANNED (SELF-01…SELF-08)
+**Ollama, LM Studio e URL manual saem** — DONE (SELF-01…SELF-08)
 
 - Os quatro `ProviderClient` viram **um cliente concreto**; some o trait, o `Box<dyn>`, o `ConnectionManager` e o `match` de provedor
-- Migração 6 derruba `connections` e `model_configs`; `embedded_runtime` fica como única fonte de "qual modelo responde, com qual contexto e qual GPU" — que é o lugar onde o EMBED-12 nasceu por duplicação
+- Migração **7** derruba `connections` e `model_configs` (o número 6 tinha sido gasto pela coluna `documents.namespace`); `embedded_runtime` fica como única fonte de "qual modelo responde, com qual contexto e qual GPU" — que é o lugar onde o EMBED-12 nasceu por duplicação
 - A tela de Conexões vira a tela de Runtime; a sidebar acompanha
 
-**Componentes dentro do instalador** — PLANNED (SELF-09…SELF-17)
+**Componentes dentro do instalador** — CÓDIGO PRONTO, NENHUM INSTALADOR GERADO (SELF-09…SELF-17)
 
 - `llama-server` **Vulkan e CPU**, ONNX Runtime e pdfium passam a viajar como recursos do bundle, com versões fixadas num `vendor.json` e trazidas por `beforeBuildCommand` (mesmo caminho em CI e na máquina local)
 - A escolha de backend vira um `probe` local, sem download nenhum
 - O bit de execução no Linux é garantido **pelo código**, não confiado ao empacotador — a pergunta "o `.deb` preserva +x?" não tem resposta documentada e o design foi feito para não depender dela
 - O zip portátil passa a levar os recursos; `move_tree` já é recursivo, então a atualização portátil não muda
 
-**Faxina** — PLANNED (SELF-18)
+**Faxina** — DONE (SELF-18)
 
 - Os ~150 MB que a versão anterior baixava em `<base>/runtime/{vulkan,cpu,onnxruntime,pdfium}` são apagados no boot
+
+**Medições que a implementação produziu** (a spec pedia número, não estimativa):
+
+- Árvore vendorizada no Windows x64: **120,5 MB** — llama Vulkan 73,8 MB, llama CPU 23,1 MB, ONNX Runtime 16,2 MB, pdfium 7,4 MB
+- O ONNX Runtime extrai **425,9 MB** cru. **408 MB disso é um único `onnxruntime.pdb`** (símbolos de debug). A poda do script derruba `.pdb`/`.lib`/`.exp`/headers — sem ela, o instalador do Windows teria crescido mais que todo o resto do app junto. Isso responde a Open Question #3 do design pelo lado que ela não previa: o risco não era o `lib/` inteiro, era um arquivo só.
+- Tag do llama.cpp fixada: **b10146** (o design tinha pesquisado b10142)
+- **Instaladores medidos em 2026-07-27** (Windows x64): `-setup.exe` **47,6 MiB**, `.msi` **83,8 MiB**, `-portable.zip` **92,0 MiB**, binário **159,2 MiB**. O teto de ~450 MB que dispararia uma poda mais agressiva do ONNX Runtime **não chegou perto** de ser alcançado. Linux por medir
 
 **Fora do escopo:** embutir um modelo GGUF (o usuário escolhe o que cabe na máquina), CUDA/ROCm, macOS, e voltar Ollama atrás de flag.
 

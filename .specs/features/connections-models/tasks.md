@@ -3,6 +3,18 @@
 **Design**: `.specs/features/connections-models/design.md`
 **Status**: Complete (2026-07-25) — all 15 tasks implemented; cargo test + npm run build + npm run tauri dev full gate all green. No live Ollama/LM Studio instance available in this environment, so provider clients were not manually exercised against a real server.
 
+**Parcialmente revogada em 2026-07-27 (AD-039/AD-042).** As tasks de conexão
+(T4–T8, T10, T12) e os dois clientes de provedor (T5, T6) descrevem código que
+não existe mais. As de modelo — catálogo, estimativa de RAM, download com
+progresso, configuração (T2, T3, T9, T13, T14) — continuam valendo sobre o
+runtime único. Ver o banner de `spec.md`.
+
+**Nota que envelheceu bem, e mal:** o aviso acima, de que *"nenhum Ollama ou
+LM Studio ao vivo estava disponível neste ambiente"*, virou a justificativa
+principal para removê-los. Foi registrado como C-05 no `CONCERNS.md` e resolvido
+por remoção: os dois provedores que nunca foram exercitados contra um servidor
+real são exatamente os que saíram.
+
 ---
 
 ## Execution Plan

@@ -1,11 +1,186 @@
 # State
 
-**Last Updated:** 2026-07-26
-**Current Work:** **M9 planejado em 2026-07-26 (ver AD-039)** — `.specs/features/self-contained-runtime/` com `context.md` + `spec.md` (19 requisitos SELF-01…SELF-19) + `design.md` + `tasks.md` (22 tasks), pronto para Execute. Remove Ollama, LM Studio **e** a URL manual, colapsa os 4 `ProviderClient` num cliente concreto, derruba as tabelas `connections` e `model_configs`, e embute `llama-server` (Vulkan + CPU), ONNX Runtime e pdfium no instalador. O modelo GGUF continua sendo baixado — a spec afirma isso em vez de vender "100% offline". **Nada implementado.** Há dois planejamentos abertos e eles se tocam em `runtime/`: **M7.1** (AD-037, 8 tasks) e **M9** (22 tasks) — executáveis em qualquer ordem, mas não em paralelo. Contexto anterior: **Auditoria spec-a-código de 2026-07-26 (ver AD-036).** A revisão achou uma coisa não implementada, quatro dívidas conhecidas e não pagas, um arquivo de diagnóstico esquecido no repositório, e — o mais enganoso — documentação defasada: ROADMAP e o cabeçalho desta STATE ainda diziam "M8 nada implementado" depois da AD-035, e a AD-035 dizia que a T2 estava bloqueada depois de o mantenedor tê-la concluído. Tudo corrigido. **Situação real agora:** M1, M2, M3, M3.1, M4, M5 e M7 completos; **M8 com 23 das 24 tasks** (falta a T24 — publicar release de verdade e atualizar nos dois modos); **M6 é o único milestone sem spec e sem código**. 123 testes Rust verdes, 27 de script Node, `npm run build` limpo. Contexto anterior: **M8 planejado em 2026-07-26** (ver AD-034): `.specs/features/release-distribution/` com `context.md` + `spec.md` (27 requisitos) + `design.md` + `tasks.md` (24 tasks), pronto para Execute e sem dependência do M6. Cobre as três coisas que o usuário pediu numa tacada: CI de release semântica com disparo **manual** (select `major`/`minor`/`patch`, e a execução faz versão + CHANGELOG + tag + release sozinha), artefatos de instalação em toda release (`.msi`, `-setup.exe`, `.deb`, `.AppImage`) **mais** um `.zip` portátil, e auto-update no app que funciona nos dois modos **sem pedir administrador**. Nada implementado ainda — é planejamento. Contexto anterior: RAG consertado de verdade em 2026-07-26 (ver AD-033, que corrige a AD-032): o `pdf-extract` estava engolindo letras inteiras em **51,3% dos chunks** do corpus do usuário, e três defeitos de montagem de contexto faziam o modelo copiar as próprias respostas anteriores em vez de ler o documento. Motor de PDF trocado por pdfium, trechos recuperados passaram a entrar colados na pergunta, orçamento de histórico invertido (derruba o antigo, não o recente) e janela real do modelo (21760) passou a ser consultada em vez do chute de 4096. 74 testes Rust verdes; build de release rodado e **verificado pelo usuário na UI** — a continuação do Art. 968 passou a sair correta depois de reimportar o documento. Contexto anterior: App rodado de verdade em 2026-07-25 (ver AD-028): conversa funcionando ponta a ponta com o llama.cpp embutido, depois de corrigir o timeout de 5 s que matava toda resposta longa e o status de conexão que nascia velho. Catálogo agora tem 6 modelos GGUF para o runtime embutido (URLs verificadas), a lista de instalados virou nome + tamanho/conexão, e trocar de modelo reinicia o sidecar. Antes disso, auditoria spec-a-código (ver AD-027): seis requisitos estavam implementados só no backend e foram fechados — toggle de RAG global, streaming ao trocar de chat, aviso de anexo com erro, citação da fonte nos trechos, pasta do modelo de embedding e importação parcial de documentos. 59 testes Rust verdes, build do frontend limpo. Contexto anterior: todas as features planejadas estão implementadas (2026-07-25): M3.1 (10/10), M7 (16/16), M5 `documents-rag` (11/11) e M4 `chat-messaging` (12/12). 58 testes Rust verdes + 4 `#[ignore]` que exercitam ONNX/LanceDB de verdade. Falta: verificação clicando na UI (listada em Todos) e os milestones M6 (memória de conversa) e M8 (empacotamento), que ainda não têm spec. Contexto anterior: M3.1 e M7 implementados em 2026-07-25 — 38 testes Rust verdes, `npm run build` e `npm run tauri dev` limpos, sidecar llama.cpp exercitado de verdade (ver AD-024). Pendente nos dois: os passos que exigem clicar na UI. Próximo: M5 (`documents-rag`, 11 tasks), depois M4 (`chat-messaging`, 12 tasks). Mapeamento brownfield completo (`.specs/codebase/`, 7 docs). Dois planejamentos prontos para Execute, **nesta ordem obrigatória**: (1) `single-active-connection` — spec + tasks (10 tasks), regra nova de uma conexão/um modelo ativos; (2) `embedded-runtime` (M7) — spec + context + design + tasks (16 tasks), llama.cpp embutido. `documents-rag` (M5) e `chat-messaging` (M4) vêm depois.
+**Last Updated:** 2026-07-27
+**Current Work:** **M6 implementado — 8 das 9 tasks (ver AD-044).** A memória de conversa era o último milestone sem spec e sem código; agora tem `.specs/features/conversation-memory/` completo e o código no lugar. Cada turno completo vira um vetor num namespace exclusivo da conversa (`memory:<chat_id>`), a recuperação entra no prompt **depois** dos documentos e do histórico recente, e o confinamento por conversa foi provado contra um LanceDB real. Gates: `cargo test` **169 passando / 11 ignorados** (eram 150/9), `npm run build` limpo, i18n **147/147**. **Ninguém conversou com o app: a T9 continua aberta, e é ela que responde "ele lembra?".** **Os instaladores do M9 também foram gerados e medidos nesta sessão** (AD-045): NSIS 47,6 MiB, MSI 83,8 MiB, zip portátil 92,0 MiB — fechando a metade da T22 que não exige uma pessoa. Contexto anterior: **M9 com 21 das 22 tasks (ver AD-043)** — Fases 2, 3 e 4 executadas. O frontend voltou a falar a mesma língua do backend (tela de Runtime no lugar de Conexões), os componentes binários passaram a viajar dentro do instalador (`llama-server` Vulkan+CPU, ONNX Runtime, pdfium — **120,5 MB medidos**), o download de componente em runtime deixou de existir, e a documentação parou de descrever multi-provider. **A única task aberta é a T22**, que exige instalar numa máquina sem rede e conversar. Gates: `cargo test` **150 passando / 9 ignorados**, `npm run test:scripts` **43 passando**, `npm run build` limpo. **O app não foi aberto e nenhum instalador foi gerado — nada do M9 foi verificado clicando.** Contexto anterior: a Fase 1 (T1–T6, AD-042) tinha colapsado o backend para um runtime só e deixado o app quebrado em runtime, porque o frontend ainda chamava `list_connections`, `pull_model` e `get_active_pair`; isso está resolvido. Antes disso: **M7.1 implementado (AD-041)**, sidecar sem janela de console e morto por Job Object; **auditoria spec-a-código (AD-036)**; **M8 implementado (AD-035)**, 23 das 24 tasks, faltando só publicar uma release de verdade (T24); e a correção de RAG da AD-033, que trocou o `pdf-extract` por pdfium depois de medir 51,3% dos chunks corrompidos. **M6 segue sendo o único milestone sem spec e sem código.**
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-047: A T9 rodou e reprovou o M6 — a memória estava morta pelo próprio orçamento (2026-07-27)
+
+**Decision:** Executada a T9 de `conversation-memory` — a primeira conversa de verdade com o app. A memória **não recuperou nada**, e a causa é estrutural, não de ajuste fino. Corrigido com uma reserva de orçamento.
+
+**Reason:** Pedido do usuário — *"veja as spec e implementa e valida o que falta"*.
+
+**A medição, com os números que a T9 exigia:**
+- Conversa de **9 turnos**, **21.993 caracteres** de histórico.
+- Orçamento real do prompt: **78.848 caracteres**. `context_length` está nulo, mas o `budget_context` cai para o `current_context` que o sidecar informa — `n_ctx_slot = 21760` —, não para o default de 4096. O histórico **cabia inteiro**, com ~54 mil caracteres sobrando.
+- Pergunta sobre o primeiro turno, parafraseada: *"não tenho a capacidade de acessar informações pessoais"*.
+- **Repetida com a palavra literal do turno plantado (`codinome`): mesma recusa.**
+
+**A causa verdadeira, obtida instrumentando o `recall_blocks` e lendo a saída do app:**
+
+```
+DIAG recall: 1 hit(s), budget 54044
+DIAG   hit f8636416… verbatim=true text="Usuário: Voltando ao inicio: com que apelido eu batizei…"
+```
+
+O único candidato devolvido era **a própria pergunta anterior do usuário**, já citada no histórico verbatim e portanto descartada pelo filtro de duplicata — sobrando zero. `memory::search` pedia exatamente `MEMORY_TOP_K = 1` candidato, e o filtro rodava **depois** do corte. **Uma pergunta é o vizinho mais próximo dela mesma**, então quanto mais natural o usuário reformular algo, mais confiável era o funil devolver nada.
+
+É o inverso do que o próprio código já fazia para documentos: o comentário do `PER_NAMESPACE_K` diz que cada namespace precisa oferecer **mais** que a contagem final para o ranqueamento ter o que escolher. A memória não fazia isso.
+
+**Correção:** `MEMORY_CANDIDATES = 8` na busca, o filtro de verbatim aplicado **antes** do `take(MEMORY_TOP_K)`.
+
+**Um erro meu de diagnóstico, registrado porque quase virou fato:** antes de instrumentar, eu atribuí a falha ao orçamento — `fit_history` consome `&mut budget` antes do `recall_blocks`, e eu calculei o orçamento como 8.192 supondo o default de 4096. **A aritmética estava certa e a premissa errada:** o `budget_context` nunca usa o default quando o runtime responde. Eu tinha o número no `tasks.md` ("registre o orçamento") e o produzi por dedução em vez de medição. O `DIAG` com `budget 54044` foi o que desmentiu.
+
+**A reserva de 15% ficou, mas como precaução e não como correção.** Ela não era a causa desta falha; protege o caso real em que o histórico *de fato* enche o orçamento (janela pequena configurada à mão), onde a memória receberia zero. Está coberta por 3 testes.
+
+**Verificado de verdade:**
+- **`cargo test`: 174 passando, 0 falhas, 12 ignorados** (eram 169/12). Os 5 novos: 3 da reserva de orçamento, 2 do funil (um turno já citado não consome a vaga; o teto continua sendo teto).
+- **A gravação nunca esteve quebrada, e isso foi isolado por medição:** `vectors/` cresceu ~9,5 KB por turno durante a conversa e **parou de crescer** (5.748.117 bytes, idêntico) no turno seguinte a desligar o toggle. Fecha MEM-01 e MEM-16 com evidência de app.
+- **Custo de armazenamento (Open Question #3 do design): ~9,5 KB por turno** contra o `vectors/` real.
+
+**Trade-off/Notas:**
+- **8 candidatos é um número escolhido, não medido.** Precisa apenas ser maior que o número de turnos recentes que o prompt cita verbatim e que podem aparecer no topo do ranking. Se `MEMORY_TOP_K` subir, este sobe junto.
+- **O `MEMORY_TOP_K = 1` continua sem justificativa medida em conversa real** — a AD-044 já dizia isso e segue valendo.
+- **O diagnóstico temporário foi removido** antes do fim da sessão; o que ficou no lugar dele são os dois testes.
+- **A T9 não está fechada:** o reteste da recuperação com as duas correções, o backfill numa conversa real e o efeito de desligar o toggle sobre a resposta seguem por fazer.
+
+### AD-046: O app foi aberto pela primeira vez — e o runtime empacotado não executava (2026-07-27)
+
+**Decision:** Rodado o app de verdade (`npm run tauri dev`) e dirigido pela UI. A primeira ação real — "Preparar runtime" — falhou, e a causa era um defeito na poda do vendoring que **nenhum gate automatizado podia pegar**.
+
+**Reason:** Pedido do usuário — *"veja as spec e implementa e valida o que falta"*, com "rodar o app e fazer a UAT" escolhido explicitamente.
+
+**O defeito:** desde a b10146 o llama.cpp separa cada ferramenta em duas partes — um lançador (`llama-server.exe`, **9 KB**) e a biblioteca que o implementa (`llama-server-impl.dll`, **9,9 MB**). O `shouldPrune` só removia o sufixo `.exe` antes de casar com `llama-`, então tratava as duas bibliotecas necessárias — `llama-server-impl.dll` e `llama-common.dll` (7,9 MB) — como ferramentas extras e as apagava. O binário empacotado morria ao carregar com `0xC0000139` (STATUS_ENTRYPOINT_NOT_FOUND), **sem mensagem nenhuma**: a UI mostrava `o llama-server não executa nesta máquina:` com a causa vazia, porque `probe_devices` só recebe o erro do `Command`, e o processo nem chegou a existir.
+
+**O comentário da função já descrevia a regra certa** — *"every shared library is kept, because guessing which `.dll`/`.so` the server needs is exactly the kind of guess that fails on someone else's machine"* — e o código não a cumpria. O palpite falhou exatamente como o comentário previa.
+
+**Só o Windows quebrou.** No Linux as mesmas bibliotecas se chamam `libllama-server-impl.so` e `libllama-common.so.0.0.10146`, que não começam com `llama-` e escaparam por acidente. Ou seja: o CI do Linux jamais acusaria isto.
+
+**Por que os testes não pegaram, e a lição que fica:** o teste existente se chamava *"pruning drops the other llama tools and keeps every shared library"* e listava `llama.dll`, `libllama.so`, `ggml-vulkan.dll`, `pdfium.dll`… **toda biblioteca da lista evitava a única combinação que quebra**, o prefixo `llama-` num `.dll`. O nome do teste afirmava a garantia; os casos escolhidos não a exercitavam. É a versão de teste do que o `AGENTS.md` chama de "compila não é verificado".
+
+**E uma verificação anterior precisa ser reclassificada:** a AD-045 deu o SELF-16 como **verificado** por ter aberto o zip portátil e encontrado *"dois `llama-server.exe` (Vulkan e CPU)"*. Encontrou mesmo — os dois stubs de 9 KB que não executam. Conferir a **presença de um nome de arquivo** foi tomado como prova de que o componente funciona. O SELF-16 volta a "o zip contém os arquivos esperados", que é o que aquela inspeção de fato mostrou.
+
+**Verificado de verdade (é execução, não leitura):**
+- **`llama-server.exe --list-devices` do bundle Vulkan: exit 0**, respondendo `Vulkan0: NVIDIA GeForce RTX 3060 (12329 MiB, 11548 MiB free)`. Antes da correção: exit `-1073741511`, saída vazia.
+- O bundle CPU também sobe (exit 0, lista de dispositivos vazia — o esperado).
+- A causa foi isolada **parseando as tabelas de import/export do PE** (a máquina não tem `dumpbin` nem `objdump`): o único import não resolvido do exe era `llama-server-impl.dll`. Não foi dedução a partir do código de erro.
+- Confirmado contra o arquivo original baixado do GitHub: o zip contém `llama-server-impl.dll` com 9.898.496 bytes e `llama-server.exe` com 9.216.
+- `npm run test:scripts`: **44 passando** (era 43).
+- A árvore vendorizada foi refeita: **156,1 MB** (era 120,5 MB). O crescimento de **+17,8 MB por backend** bate exatamente com as duas bibliotecas restauradas.
+
+**Trade-off/Notas:**
+- **A regra nova poda também os `-impl` órfãos** (`llama-cli-impl.dll` e companhia, 4,3 MB somados), escolha do usuário entre as duas opções apresentadas. Sem o `.exe` correspondente ninguém carrega essas DLLs, então não é palpite; mas é uma regra acoplada ao layout do llama.cpp — o mesmo layout que mudou e causou este bug. Fica registrado como o ponto a revisitar se uma release futura reorganizar os arquivos de novo.
+- **O `build.rs` provou o seu valor nesta sessão:** o `cargo:rerun-if-changed=resources` recopiou as bibliotecas novas para `target/debug/resources` sem `--force` nem limpeza. Era uma precaução da T13 que até aqui nunca tinha sido exercitada.
+- **Os instaladores da AD-045 estão inservíveis.** NSIS, MSI e zip portátil foram gerados com a árvore quebrada e não conseguem executar o modelo. Os tamanhos daquele registro (47,6 / 83,8 / 92,0 MiB) deixam de valer, e não só por causa dos 35,6 MB a mais.
+
+### AD-045: O instalador foi gerado e medido — as duas Open Questions abertas do M9 têm número (2026-07-27)
+
+**Decision:** Rodado `npm run tauri build` e `make-portable.mjs` nesta máquina, fechando a **metade da T22 que não exige uma pessoa**: gerar os artefatos e medi-los.
+
+**Reason:** Pedido do usuário, entre os itens escolhidos em *"verifique as specs que falta, execute e depois teste"*.
+
+**Medido (Windows x64, build em 23m37s):**
+
+| Artefato | Tamanho |
+| --- | --- |
+| `-setup.exe` (NSIS) | **47,6 MiB** |
+| `.msi` | **83,8 MiB** |
+| `-portable.zip` | **92,0 MiB** |
+| `LocalMind.exe` | **159,2 MiB** |
+| `resources/` | **115,0 MiB**, 79 arquivos |
+
+**As duas Open Questions do design do M9 saíram do papel:**
+- **#2 — onde o `tauri build` põe os recursos?** Em `target/release/resources/`, com a estrutura preservada. O `make-portable.mjs` depende disso e o zip gerado confirma.
+- **#3 — quanto o instalador cresce?** O NSIS ficou em 47,6 MiB, **menos de um nono do teto de ~450 MB** que dispararia uma poda mais agressiva do ONNX Runtime. A poda que já existe basta. Os 274 MiB de payload comprimem bem porque são código.
+
+**O zip portátil foi aberto e conferido por dentro**, não só pesado: 84 entradas, `LocalMind.exe`, o marcador `.portable`, o `README.txt` e a árvore de recursos, com **dois** `llama-server.exe` (Vulkan e CPU), um `onnxruntime.dll` e um `pdfium.dll`. Isso move o SELF-16 de "implementado" para verificado.
+
+**Uma armadilha de leitura desarmada:** a AD-043 registra a árvore vendorizada como **120,5 MB** e este registro como **115,0 MiB**. É o mesmo número em bases diferentes (120,5 × 10⁶ = 114,9 × 2²⁰), não uma divergência. Anotado no design para ninguém "corrigir" um dos dois depois.
+
+**Trade-off/Notas:**
+- **A assinatura falhou, como tinha que falhar:** `A public key has been found, but no private key`. A chave privada é segredo do mantenedor (T2 do M8); nenhum agente a tem. Os bundles saíram, os `.sig` não.
+- **O binário inclui as mudanças do M6** — foi linkado 20 minutos depois da última edição de fonte, verificado por timestamp em vez de suposto.
+- **O `LocalMind.exe` está em 159,2 MiB** contra os 226 MB que a AD-034 registrou para o antigo `tauri-app.exe`. **Não afirmo que essa seja a medição do REL-27** (`strip` + LTO): o binário antigo é de 2026-07-26 e não dá para saber, agora, se foi construído antes ou depois da mudança de perfil. É uma observação, não a resposta.
+
+**Não feito:** o **delta** contra a versão publicada (exigiria o instalador da v0.1.1 para comparar) e **todos os números do Linux** (exigem o runner do CI). E o principal: nada disso foi **instalado**.
+
+### AD-044: M6 implementado — a terceira camada de RAG existe, e a memória é confinada à conversa (2026-07-27)
+
+**Decision:** Planejado e executado o M6 inteiro em `.specs/features/conversation-memory/` (context + spec com 20 requisitos + design + 9 tasks), e implementadas as 8 tasks de código. Era o **último milestone sem spec nenhuma**.
+
+**Reason:** Pedido do usuário — *"verifique as specs que falta, execute e depois teste"*, com o M6 escolhido explicitamente entre as opções levantadas.
+
+**Três decisões do usuário fecharam o desenho**, todas por pergunta direta antes de qualquer código:
+
+1. **Toggle por conversa** — e, na mesma resposta, uma restrição mais forte: *"a memoria do chat deve ser restrita ao chat daquela conversa"*. Isso virou o MEM-07/08/09, requisito de isolamento com teste próprio, em vez de uma consequência esperada do namespace. A distinção não é retórica: a CHAT-11 **também** parecia garantida pelo namespace e estava furada (AD-040).
+2. **Backfill sob demanda, por conversa** — recusadas a varredura no boot (CPU de embedding logo depois de um update se parece com travamento) e o "só daqui pra frente" (deixaria as conversas atuais sem saída).
+3. **A unidade é o par pergunta+resposta.** Uma resposta isolada ("sim, exatamente") não significa nada fora da pergunta que a originou.
+
+**A decisão de design que veio de uma medição antiga, não de preferência:** a memória é a **última** camada a receber orçamento, depois dos documentos e do histórico recente. A AD-033 mediu o que acontece quando o prompt é montado na ordem errada — com o documento a ~10 mil caracteres da pergunta, o modelo copiou as próprias respostas anteriores em vez da fonte. Uma camada nova servida antes do histórico recente reintroduziria exatamente esse defeito. Pela mesma razão o documento fica **mais perto** da pergunta que a memória: ele é a intenção explícita do usuário.
+
+**Um efeito colateral do orçamento que virou acerto:** o conjunto de exclusão da dedup (MEM-05) é o que **sobreviveu** ao `fit_history`, não o que foi lido do banco. Um turno que o orçamento derrubou do prompt é precisamente o que a memória existe para trazer de volta — usar a lista original o manteria fora dos dois lugares.
+
+**Verificado de verdade:**
+- **`cargo test`: 169 passando, 0 falhas, 11 ignorados** (eram 150/9). **+19 testes, nenhum perdido.**
+- **O confinamento foi provado contra um LanceDB real**, não deduzido do formato da string: dois chats com memória, o termo exclusivo de um não chega ao outro, a memória não enxerga os anexos do próprio chat, e apagar uma conversa deixa a outra intacta. Rodado com `-- --ignored`.
+- **A idempotência do `doc_id`** (gravar o mesmo turno duas vezes deixa um registro) também foi rodada contra LanceDB real — é uma afirmação sobre o comportamento do `upsert`, não sobre o nosso código.
+- **`npm run build` limpo**; i18n **147 chaves em EN e 147 em PT**, conferidas por script, sem divergência.
+- **A migração é a 8**, conferida contra a lista `MIGRATIONS` por teste — não presumida. Um banco em `user_version = 7` com chats e mensagens sobe com `use_memory = 1` e nada perdido.
+
+**Trade-off/Notas:**
+- **Desligar o toggle para de gravar, não só de ler.** Gastar embedding em dados que ninguém vai consultar seria desperdício; e religar não é beco sem saída porque o backfill existe. Foi essa a ordem do raciocínio: a decisão 2 do usuário é o que **permite** a 1 ser estrita.
+- **Teto próprio de 2 turnos**, separado do `TOP_K` de 4 dos documentos. Um teto compartilhado faria uma conversa longa ganhar vagas do arquivo que o usuário acabou de importar.
+- **Preâmbulo separado para a memória.** O preâmbulo dos documentos manda citar o nome do arquivo, e um turno de conversa não tem um — este modelo, instruído a citar uma fonte que não existe, **inventa uma** (observado como `[fonte: GPT-3 informações geral]`). O bloco de memória usa `[conversa anterior]`, que não imita a forma de citação.
+- **`should_record_turn` foi extraída como função pura** só para ser testável: cada uma das quatro condições é uma via de um turno pela metade chegar à memória, e nenhuma é observável de um teste que precise de `AppHandle`.
+- **O C-14 não foi resolvido, só não foi piorado.** `delete_chat` continua não cancelando a geração em curso; o que entrou foi uma checagem de existência antes do `upsert`, para uma geração que termina depois do delete não deixar vetores num namespace que ninguém mais vai limpar.
+- **Divergência de plano:** o `should_record_turn` ficou em `chat_commands.rs` como o `tasks.md` previa, mas o `backfill` foi escrito na T2 junto do módulo em vez de esperar a T6 — as duas dependem das mesmas funções puras e separá-las teria duplicado a leitura de mensagens.
+
+**A Open Question #1 foi respondida antes da T9, e a resposta mudou uma constante.** Um teste `#[ignore]` contra o **modelo de embedding real** (caminhos por variável de ambiente, sobre uma **cópia** do cache de modelos do usuário) mediu três coisas:
+
+1. **O turno certo é recuperado com folga** — 0,2484 contra 0,3413 e 0,3805, numa pergunta que não compartilha nenhuma palavra com a resposta guardada.
+2. **O plano B do design está descartado por medição.** Embeddar sem os rótulos `Usuário:`/`Assistente:` dá 1,33× de separação contra 1,37× com eles: tirar os rótulos **piora**. A suspeita de que eles aproximavam todos os turnos entre si estava errada.
+3. **O piso relativo de relevância é inerte nesta camada.** Numa pergunta sobre assunto que a conversa nunca tratou, **os 3 turnos passam o corte**. O `RELATIVE_DISTANCE_FLOOR` separa documentos porque um acerto de passagem cai perto de 0,09 (AD-025 mediu 3,9×); turnos de conversa ficam todos entre 0,25 e 0,38, e a razão nunca alcança 3×.
+
+**`MEMORY_TOP_K` caiu de 2 para 1** por causa do item 3: sem filtro que funcione, o teto **é** o filtro, e um turno irrelevante colado na pergunta é exatamente o modo de falha da AD-033. **Deliberadamente não inventei um limiar absoluto** a partir de três turnos sintéticos — um número tirado de n=1 pareceria rigor e não seria. Essa decisão fica para a T9, com conversa real.
+
+**Não feito, e não é pouco:** **a T9.** Ninguém abriu o app, ninguém conversou. O custo de armazenamento por turno não foi medido, e o limiar absoluto acima segue em aberto. Pela régua deste repositório, **isso não é "o M6 está pronto"** — é "o M6 compila, passa nos testes, e a sua camada de recuperação foi medida uma vez contra o modelo real".
+
+**Correção de documento aplicada de passagem:** o ROADMAP marcava as três features do **M7.1** como `PLANNED` desde o planejamento (AD-037), embora a AD-041 registre o milestone completo desde 2026-07-26. Mesmo padrão que a AD-036 já tinha encontrado no M8. Corrigido.
+
+### AD-043: M9 Fases 2–4 — o app voltou a ser coerente, e o vendoring revelou um .pdb de 408 MB (2026-07-27)
+
+**Decision:** Executadas T7–T21 de `self-contained-runtime`, mais o fechamento da T4. O frontend inteiro migrou de "conexões" para "runtime", os três componentes binários passaram a ser empacotados em vez de baixados, e a documentação foi atualizada para descrever o app que existe.
+
+**Reason:** Pedido do usuário — *"implemente as specs que falta"*.
+
+**A T4 estava marcada como concluída e não estava.** O `tasks.md` exigia os comandos `prepare_runtime`, `start_runtime`, `stop_runtime`, `runtime_status`, `download_model`; a Fase 1 tinha mantido os nomes antigos (`setup_embedded_runtime` e companhia). Como o gate da T4 era `cargo check` e o `invoke` do Tauri recebe o nome como string, nada apontou a divergência. Renomeado antes de escrever o `runtimeApi.ts`, porque o critério da T8 é justamente "cada função corresponde a um comando registrado, conferido nome a nome" — escrever a API contra os nomes errados teria propagado o erro em vez de expô-lo.
+
+**Dois desvios de plano, ambos por incoerência do plano com a própria spec:**
+
+1. **`prepare_runtime` deixou de baixar um modelo.** Herdado do M7, o preparo baixava o Phi-3.5 (2,4 GB) junto com o binário. Isso **contradiz o alvo declarado do M9** — *"numa máquina sem rede, com um `.gguf` já na pasta de modelos: instalar → abrir → escolher o modelo → conversar"*. Preparar agora só resolve o binário embutido e roda o probe; escolher o modelo é ação separada, e escolher o primeiro já sobe o sidecar. Estágio novo `NoModel` para nomear o estado resultante, que é o normal de uma instalação nova, não um erro.
+2. **Os estágios do runtime mudaram de vocabulário.** `DownloadingBinary`/`DownloadingModel` saíram. O progresso de download de GGUF ganhou canal próprio (`model-download-progress`, com a URL como identidade), separado do preparo do motor (`runtime-progress`). Sem essa separação a UI teria que adivinhar, pelo estágio, se a barra é do motor ou do modelo.
+
+**A medição que mudou uma decisão de design.** O ONNX Runtime para Windows extrai **425,9 MB** — e **408 MB disso é um único `onnxruntime.pdb`**, símbolos de debug que nada carrega em runtime. O design tinha uma Open Question sobre podar mais agressivamente a pasta `lib/`; o problema real não era a pasta, era um arquivo. A regra de poda passou a derrubar `.pdb`, `.lib`, `.exp` e headers, e o componente caiu para **16,2 MB**. Sem isso, o instalador do Windows teria crescido mais do que o app inteiro.
+
+**Verificado de verdade:**
+- **O vendoring rodou de ponta a ponta**, não só compilou: 4 componentes baixados, extraídos e podados. **120,5 MB** no total (llama Vulkan 73,8 · llama CPU 23,1 · ONNX 16,2 · pdfium 7,4). Segunda execução: no-op pelo stamp. `llama-server.exe` presente nos dois backends, `onnxruntime.dll` e `pdfium.dll` presentes, **zero** `.pdb` ou `.lib` restantes.
+- **`tar` não é o mesmo programa em toda máquina, e isso foi medido, não suposto.** A primeira versão do script usava `tar -xf` para tudo, apostando no bsdtar do Windows 10+. A partir do Git Bash quem responde é o GNU tar do MSYS, que recusa `.zip` com *"This does not look like a tar archive"*. O script passou a despachar por extensão. Um segundo erro na mesma linha: `ZipFile::ExtractToDirectory` com três argumentos falha no Windows PowerShell 5.1, cujo terceiro parâmetro é um encoding, não um booleano de overwrite.
+- **`cargo test`: 150 passando, 0 falhas, 9 ignorados.** `npm run test:scripts`: **43** (eram 27). `npm run build` limpo.
+- **i18n com 142 chaves em EN e 142 em PT**, conferidas por script; nenhum valor contém "Ollama" ou "LM Studio".
+- **Os 8 testes perdidos estão justificados um a um:** 5 de `runtime/release.rs` (o arquivo saiu com a consulta à API do GitHub), 2 de `download::extract` (a extração migrou para o script de vendoring), 1 de `pdfium::asset_url` (não há mais URL a montar). Entraram 8 novos.
+
+**Trade-off/Notas:**
+- **`tar` e `flate2` saíram do `Cargo.toml`**; `zip` fica, porque o updater portátil ainda o usa.
+- **O campo `provider` saiu do catálogo de modelos.** Com um runtime só ele não distinguia nada, e o teste que filtrava por ele passou a valer para todas as entradas.
+- **`ensure_executable` tem 3 testes que não rodam nesta máquina** — são `#[cfg(unix)]` e o desenvolvimento é em Windows. A resposta empírica para "o `.deb` preserva o bit?" vem do `check-linux-bundle.mjs`, que roda no CI e **reporta sem falhar** quando o bit está ausente; só a ausência do binário derruba o build. O design foi feito para não depender da resposta, e continua assim.
+- **Os arquivos criados e editados levam o marcador `SPEC:`** exigido por `.claude/rules/spec-driven-changes.md`. Antes desta sessão o repositório tinha **zero** marcadores: a regra existia e nunca tinha sido aplicada. Os arquivos que não toquei continuam sem.
+
+**Não feito, e não é pouco:** **a T22.** O app não foi aberto, nenhum instalador foi gerado, nenhum PDF foi importado offline, nenhum modelo foi baixado pela tela nova, e o bundle portátil não foi montado. Tudo o que se sabe é que compila, que os testes passam e que o vendoring funciona. Pela régua deste repositório, isso **não é** "o M9 está pronto".
+
+**Uma coisa deliberadamente não feita:** não rodei `npm run tauri dev`. A faxina da T18 apaga `<base>/runtime/{vulkan,cpu,onnxruntime,pdfium}` da pasta real do usuário no primeiro boot — que é exatamente o comportamento pedido, mas ~150 MB dele teriam que ser baixados de novo se este trabalho for revertido. Abrir o app é decisão do usuário, não minha.
 
 ### AD-042: M9 Fase 1 — o backend colapsou para um runtime só; o app está no meio da migração (2026-07-27)
 
@@ -730,7 +905,10 @@ De quebra, a falha revelou que o CI rodava **Node 20, fora de suporte desde abri
 - [ ] O `onnxruntime.dll` é baixado em runtime na primeira indexação (~79 MB); nunca foi exercitado pelo caminho do app (só por teste com a DLL apontada à mão) — confirmar que `rag::onnxruntime::ensure_dylib` baixa e extrai certo
 - [ ] Encarar os itens de `.specs/codebase/CONCERNS.md` não cobertos pelas features planejadas: C-03 (espelhamento manual de tipos Rust↔TS), C-04 (zero teste no frontend), C-06 (polling de download do LM Studio sem timeout), C-10, C-11. **C-09 saiu da lista pela metade**: o M8 trouxe CI (`ci.yml` valida build + testes + Conventional Commits), mas linter e formatter continuam fora — o código atual não passa em `clippy -D warnings`
 - [x] ~~**Executar `release-distribution` tasks.md** (24 tasks, M8)~~ — **23 de 24 feitas em 2026-07-26** (ver AD-035 e a correção na AD-036). A T2 foi concluída pelo mantenedor; resta só a T24
-- [ ] **Planejar o M6 (memória de conversa)** — é o único milestone sem `.specs/features/` nenhum: existe a AD-009 (decisão de RAG híbrido) e três bullets no ROADMAP, mais nada. Precisa de uma passada de Specify antes de qualquer código
+- [x] ~~**Planejar o M6 (memória de conversa)**~~ — feito em 2026-07-27 (AD-044): `context.md`, `spec.md` com 20 requisitos, `design.md` e `tasks.md`. O código das 8 tasks também entrou; **falta a T9**, que é conversar com o app e ver se ele lembra
+- [x] ~~**A Open Question #1 do M6** (turno rotulado é bom material de embedding?)~~ — respondida em 2026-07-27 contra o modelo real: sim, e os rótulos não atrapalham; mas o piso de relevância não filtra nada nesta camada, o que derrubou o `MEMORY_TOP_K` de 2 para 1
+- [ ] **Decidir, com conversa real, se a memória precisa de um teto absoluto de distância.** O piso relativo é inerte aqui (medido); hoje o único filtro é o teto de 1 turno. Um limiar absoluto tirado de três turnos sintéticos seria rigor de fachada — precisa de dados de uma conversa de verdade
+- [ ] **Medir quanto o `vectors/` cresce por turno de conversa** (Open Question #3 do design do M6). Número, não estimativa
 - [ ] **T24 do M8 é verificação real, não build**: publicar release de verdade, instalar o `-setup.exe` numa conta **sem** direitos de administrador (zero prompts de UAC), rodar o zip portátil e confirmar que nada foi escrito em `%APPDATA%`, e aplicar uma atualização de verdade nos dois modos
 - [ ] Confirmar na execução do M8 as Open Questions do design: flag `--bundles` da versão corrente do `tauri-action`; se o `tauri-plugin-updater` ignora mesmo a chave `windows-x86_64-portable` no `latest.json` (plano B: manifesto separado); comando que atualiza a versão no `Cargo.lock` sem tocar em mais nada; e os nomes exatos dos artefatos (o `patch-latest-json.mjs` deve **ler** os assets da release, não presumir os nomes)
 - [ ] Avaliar assinatura de código dos instaladores (Windows) — fora do escopo do M8 por decisão (AD-034); sem certificado, o SmartScreen avisa na 1ª execução

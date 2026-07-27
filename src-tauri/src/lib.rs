@@ -1,3 +1,6 @@
+// SPEC: embedded-runtime (EMBED-06), self-contained-runtime (SELF-01, SELF-18),
+//       conversation-memory (MEM-14, MEM-17)
+
 mod chat;
 mod chat_commands;
 mod commands;
@@ -44,10 +47,10 @@ fn autostart_sidecar(app: &tauri::AppHandle) {
         match runtime_commands::start_sidecar_from_row(&handle, &row).await {
             Ok(port) => {
                 println!("embedded runtime listening on 127.0.0.1:{port}");
-                // The UI checked every connection while this was still loading
-                // its model, so it saw "unavailable"; without this it would
-                // keep showing that until the user hit refresh by hand.
-                let _ = handle.emit("connections-changed", ());
+                // The UI read the runtime status while this was still loading
+                // its model, so it saw "ready" instead of "running"; without
+                // this it would keep showing that until the user hit refresh.
+                let _ = handle.emit("runtime-changed", ());
             }
             Err(e) => eprintln!("failed to start embedded runtime: {e}"),
         }
@@ -92,6 +95,16 @@ pub fn run() {
                 // Keeps the embedding model inside the user's chosen folder
                 // (AD-008) instead of a hidden per-user cache.
                 rag::embedding::set_cache_dir(cfg.base_path_buf().join("models"));
+
+                // The ~150 MB earlier versions downloaded into the base folder
+                // is dead weight now that the components ship in the installer
+                // (SELF-18). Best-effort: a locked file must not block the boot.
+                let removed = runtime::bundled::remove_legacy_downloads(
+                    &cfg.base_path_buf().join("runtime"),
+                );
+                if removed > 0 {
+                    println!("runtime: removed {removed} component folder(s) downloaded by an earlier version");
+                }
             }
 
             autostart_sidecar(app.handle());
@@ -108,6 +121,8 @@ pub fn run() {
             chat_commands::send_message,
             chat_commands::cancel_generation,
             chat_commands::set_chat_use_global_rag,
+            chat_commands::set_chat_use_memory,
+            chat_commands::index_chat_history,
             chat_commands::list_chat_attachments,
             config_commands::get_app_config,
             config_commands::get_default_base_path,
@@ -117,11 +132,11 @@ pub fn run() {
             config_commands::update_theme,
             config_commands::update_language,
             config_commands::update_base_path,
-            runtime_commands::setup_embedded_runtime,
-            runtime_commands::start_embedded_runtime,
-            runtime_commands::stop_embedded_runtime,
-            runtime_commands::embedded_runtime_status,
-            runtime_commands::download_embedded_model,
+            runtime_commands::prepare_runtime,
+            runtime_commands::start_runtime,
+            runtime_commands::stop_runtime,
+            runtime_commands::runtime_status,
+            runtime_commands::download_model,
             runtime_commands::list_downloadable_models,
             runtime_commands::list_installed_models,
             runtime_commands::model_limits,

@@ -36,8 +36,6 @@ tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
 async-trait = "0.1"
 futures-util = "0.3"
 zip = "2"
-tar = "0.4"
-flate2 = "1"
 # RAG stack (M5). Versions confirmed on crates.io on 2026-07-25; `dotext` was
 # rejected for DOCX because its last release is from 2017.
 # `ort-load-dynamic` instead of the default static ONNX Runtime: the prebuilt

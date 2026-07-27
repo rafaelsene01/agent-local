@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:scripts": "node --test scripts/*.test.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "vendor": "node scripts/vendor-runtime.mjs"
   },
   "engines": {
     "node": ">=22"

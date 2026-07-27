@@ -1,6 +1,9 @@
+// SPEC: chat-messaging (CHAT-01, CHAT-04, CHAT-10, CHAT-14),
+//       conversation-memory (MEM-14, MEM-17, MEM-18)
+
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, MessageSquarePlus, Paperclip } from "lucide-react";
+import { AlertTriangle, Brain, MessageSquarePlus, Paperclip } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { MessageInput } from "./MessageInput";
 import type { Message } from "../../types";
@@ -50,8 +53,12 @@ export function ChatPanel() {
     generatingChatId,
     error,
     retrievalWarning,
+    memoryIndexing,
+    memoryIndexed,
     createChat,
     setUseGlobalRag,
+    setUseMemory,
+    indexHistory,
     dismissRetrievalWarning,
   } = useChatStore();
   const activeChat = chats.find((c) => c.id === activeChatId);
@@ -85,15 +92,52 @@ export function ChatPanel() {
     <div className="flex flex-1 flex-col bg-[var(--bg-app)] text-[var(--text-primary)]">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border-color)] px-6 py-4">
         <h1 className="truncate text-base font-semibold">{activeChat.title}</h1>
-        <label className="flex shrink-0 items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-          <input
-            type="checkbox"
-            checked={activeChat.use_global_rag}
-            onChange={(e) => setUseGlobalRag(activeChat.id, e.target.checked)}
-          />
-          {t("chatPanel.useGlobalDocs")}
-        </label>
+        <div className="flex shrink-0 items-center gap-4 text-xs text-[var(--text-secondary)]">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={activeChat.use_global_rag}
+              onChange={(e) => setUseGlobalRag(activeChat.id, e.target.checked)}
+            />
+            {t("chatPanel.useGlobalDocs")}
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={activeChat.use_memory}
+              onChange={(e) => setUseMemory(activeChat.id, e.target.checked)}
+            />
+            {t("chatPanel.useMemory")}
+          </label>
+          {/* Only offered where it can do something: with the toggle off the
+              command refuses, so showing the button would be a dead end. */}
+          {activeChat.use_memory && (
+            <button
+              onClick={() => indexHistory(activeChat.id)}
+              disabled={memoryIndexing !== null}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--border-color)] px-2 py-1 hover:bg-[var(--bg-elevated)] disabled:opacity-60"
+            >
+              <Brain size={12} />
+              {memoryIndexing
+                ? t("chatPanel.indexingHistory", {
+                    done: memoryIndexing.done,
+                    total: memoryIndexing.total,
+                  })
+                : t("chatPanel.indexHistory")}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* A run that indexed nothing has to say so: silence after a click is
+          indistinguishable from a button that is broken (MEM-20). */}
+      {memoryIndexed !== null && (
+        <p className="border-b border-[var(--border-color)] px-6 py-2 text-xs text-[var(--text-secondary)]">
+          {memoryIndexed > 0
+            ? t("chatPanel.indexedTurns", { count: memoryIndexed })
+            : t("chatPanel.nothingToIndex")}
+        </p>
+      )}
 
       {/* The files this chat can already answer about — the counterpart of the
           failure notice further down. */}

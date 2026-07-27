@@ -1,9 +1,13 @@
+// SPEC: chat-messaging (CHAT-01, CHAT-02, CHAT-04, CHAT-06, CHAT-16)
+
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Paperclip, Send, Square } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
-import { useConnectionsStore } from "../../store/connectionsStore";
+import { useRuntimeStore } from "../../store/runtimeStore";
+import { runtimeApi } from "../../lib/runtimeApi";
+import { ContextGauge, estimateTokens } from "./ContextGauge";
 
 /** Same list the documents pipeline parses (DOC-03); anything else is refused
  *  before sending instead of failing silently after the message went out. */
@@ -20,20 +24,46 @@ function basename(path: string) {
 
 export function MessageInput() {
   const { t } = useTranslation();
-  const { activeChatId, generatingChatId, sendMessage, cancelGeneration } = useChatStore();
-  const { activePair, loadActivePair } = useConnectionsStore();
+  const { activeChatId, generatingChatId, sendMessage, cancelGeneration, messages } =
+    useChatStore();
+  const { activeModel, loadActiveModel } = useRuntimeStore();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
   const isGenerating = generatingChatId !== null && generatingChatId === activeChatId;
+  // The draft counts too: it is part of the next prompt, so the gauge moves
+  // while the user types instead of only after sending.
+  const contextTokens = estimateTokens([...messages.map((m) => m.content), text]);
+
+  const [runtimeContext, setRuntimeContext] = useState<number | null>(null);
 
   useEffect(() => {
-    loadActivePair();
-  }, [loadActivePair]);
+    loadActiveModel();
+  }, [loadActiveModel]);
 
-  // CHAT-02: without an active pair there is nowhere to send, so the input is
+  // Mirrors `budget_context` in chat_commands.rs: with no configured window the
+  // backend budgets against what the runtime actually allocated, not against
+  // DEFAULT_CONTEXT_TOKENS. Reading it here keeps the gauge's ceiling and the
+  // limit that truncates the prompt as the same number — showing 4 096 while
+  // the sidecar reports 21 760 made the gauge read "8.805 de 4.096".
+  useEffect(() => {
+    if (!activeModel || activeModel.context_length !== null) {
+      setRuntimeContext(null);
+      return;
+    }
+    let active = true;
+    runtimeApi
+      .modelLimits(activeModel.name)
+      .then((limits) => active && setRuntimeContext(limits.current_context))
+      .catch(() => active && setRuntimeContext(null));
+    return () => {
+      active = false;
+    };
+  }, [activeModel]);
+
+  // CHAT-02: with no model chosen there is nothing to answer, so the input is
   // blocked here instead of failing after the user typed a message.
-  const canSend = Boolean(activePair.connection && activePair.model);
+  const canSend = Boolean(activeModel);
 
   async function handleAttach() {
     const selected = await open({
@@ -116,6 +146,10 @@ export function MessageInput() {
           placeholder={t("chatPanel.placeholder")}
           className="max-h-40 flex-1 resize-y rounded-md border border-[var(--border-color)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none disabled:opacity-50"
         />
+
+        <div className="flex h-[38px] items-center">
+          <ContextGauge tokens={contextTokens} ceiling={activeModel?.context_length ?? runtimeContext} />
+        </div>
 
         {isGenerating ? (
           <button

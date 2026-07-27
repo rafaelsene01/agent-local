@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Pinned versions of the binary components that ship inside the installer.",
+    "Asset names are written out in full rather than assembled from a template:",
+    "a template is how a CUDA build gets downloaded by accident, and a typo here",
+    "must fail the build instead of fetching the wrong file.",
+    "Sizes were read from the GitHub API on 2026-07-27 and are informational."
+  ],
+  "llamaCpp": {
+    "repo": "ggml-org/llama.cpp",
+    "tag": "b10146",
+    "assets": {
+      "win32": {
+        "vulkan": { "name": "llama-b10146-bin-win-vulkan-x64.zip", "bytes": 33563215 },
+        "cpu": { "name": "llama-b10146-bin-win-cpu-x64.zip", "bytes": 18293898 }
+      },
+      "linux": {
+        "vulkan": { "name": "llama-b10146-bin-ubuntu-vulkan-x64.tar.gz", "bytes": 32345265 },
+        "cpu": { "name": "llama-b10146-bin-ubuntu-x64.tar.gz", "bytes": 16383837 }
+      }
+    }
+  },
+  "onnxruntime": {
+    "repo": "microsoft/onnxruntime",
+    "tag": "v1.28.0",
+    "assets": {
+      "win32": { "name": "onnxruntime-win-x64-1.28.0.zip" },
+      "linux": { "name": "onnxruntime-linux-x64-1.28.0.tgz" }
+    }
+  },
+  "pdfium": {
+    "repo": "bblanchon/pdfium-binaries",
+    "tag": "chromium/7961",
+    "assets": {
+      "win32": { "name": "pdfium-win-x64.tgz" },
+      "linux": { "name": "pdfium-linux-x64.tgz" }
+    }
+  }
+}

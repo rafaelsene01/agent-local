@@ -2,7 +2,15 @@
 
 **Design:** `.specs/features/self-contained-runtime/design.md`
 **Spec:** `.specs/features/self-contained-runtime/spec.md`
-**Status:** **Fase 1 concluída (2026-07-27) — T1–T6 de 22.** O backend colapsou para um runtime só. **O app está no meio da migração:** o frontend ainda chama comandos que não existem mais, então as telas de Conexões e Modelos vão falhar até a Fase 2 (T7–T11) entrar. `cargo test`: 146 passando.
+**Status:** **T1–T21 de 22 concluídas; a T22 está parcial (2026-07-27).** Os
+instaladores foram **regerados** a partir da árvore corrigida da AD-046 e
+medidos, e desta vez o `llama-server.exe` foi **executado a partir do zip
+portátil extraído** — a conferência que faltava. Ver as medições abaixo. O que
+continua aberto na T22 é o que exige uma pessoa: instalar sem rede, conversar,
+importar um PDF offline e abrir o portátil como app. Gates atuais:
+`cargo test` **174 passando / 0 falhas / 12 ignorados**,
+`npm run test:scripts` **44**, `npm run build` limpo. **O app foi aberto uma vez
+(AD-046) e falhou; depois da correção ninguém abriu de novo.**
 
 ---
 
@@ -20,6 +28,94 @@
 **Verificação que importa:** a migração foi ensaiada contra uma **cópia** do banco real do usuário. `user_version` 6 → 7, `chats` 2, `messages` 6, `documents` 1 e `chat_attachments` 0 — todas preservadas; `connections` deixou de existir. O original não foi tocado.
 
 **Testes perdidos, com justificativa (o gate da T5 exige):** 146 contra 148 antes da T6. Dois foram removidos porque o assunto deixou de existir — `fresh_database_uses_is_active_column` (a coluna estava numa tabela derrubada) e `deleting_a_connection_now_takes_its_model_configs_with_it` (provava o CASCADE de `model_configs`; a aplicação de FK continua coberta por `open_enables_foreign_keys` e pelo teste de mensagem órfã). Outros quatro foram **reescritos** em vez de apagados, para continuarem afirmando algo verdadeiro sobre o novo estado. Os de `ollama`/`lmstudio` sumiram junto com o código que testavam.
+
+---
+
+## Execution Log — Fases 2, 3 e 4 (2026-07-27)
+
+| Task | Status | Evidência |
+| --- | --- | --- |
+| T4 (fechamento) | ✅ | A T4 tinha sido dada como concluída **com os nomes antigos** (`setup_embedded_runtime` etc.). Renomeada para o que o design manda: `prepare_runtime`, `start_runtime`, `stop_runtime`, `runtime_status`, `download_model`. Eventos: `connections-changed` → `runtime-changed`, `embedded-setup-progress` → `runtime-progress` |
+| T7 | ✅ | `connections.*` virou `runtime.*`; **142 chaves em EN e 142 em PT**, conferidas por script; `grep -i "ollama\|lm studio"` nos locales volta vazio |
+| T8 | ✅ | `connectionsApi.ts` → `runtimeApi.ts`; saíram `Connection`, `ConnectionProvider`, `ConnectionStatus`, `ActivePair`, `ConfigApplied`; cada função corresponde a um comando do `invoke_handler` |
+| T9 | ✅ | `connectionsStore.ts` → `runtimeStore.ts`; progresso de download indexado pela URL do `.gguf` |
+| T10 | ✅ | `src/components/Runtime/{RuntimePanel,RuntimeCard,ModelsList,ModelDownloadCard,ModelConfigForm}.tsx`; `src/components/Connections/` apagado |
+| T11 | ✅ | `RuntimeSection.tsx`; view `connections` → `runtime`; `MessageInput` passou a olhar `activeModel` |
+| T12 | ✅ | `scripts/vendor.json` + `vendor-runtime.mjs` + 11 testes. **Rodado de verdade**: 120,5 MB baixados, extraídos e podados; segunda execução é no-op pelo stamp |
+| T13 | ✅ | `bundle.resources: ["resources/"]`, `beforeBuildCommand`/`beforeDevCommand` com `npm run vendor`, `cargo:rerun-if-changed=resources` no `build.rs`, `src-tauri/resources/` no `.gitignore` |
+| T14 | ✅ | `runtime/bundled.rs`: `resource_root`, `find_file`, `llama_server`, `onnxruntime_dylib`, `pdfium_library`, `ensure_executable`. 6 testes (3 só compilam em Unix) |
+| T15 | ✅ | `rag/pdfium.rs` perdeu `asset_url`, `RELEASE` e o download |
+| T16 | ✅ | `rag/onnxruntime.rs` perdeu `asset_url`, `ORT_VERSION` e o download |
+| T17 | ✅ | `choose_backend` escolhe entre os dois binários embutidos por probe local; `runtime/release.rs` apagado; `download::extract` removido; `tar` e `flate2` saíram do `Cargo.toml` |
+| T18 | ✅ | `remove_legacy_downloads` no boot; teste prova que o `llama-server.log` e a pasta `models/` sobrevivem |
+| T19 | ✅ | `stageBundle` extraída de `main` para poder ser testada; recursos ausentes falham o empacotamento |
+| T20 | ✅ | `check-linux-bundle.mjs` + 4 testes; passo novo no `release.yml`, depois do bundling do Linux |
+| T21 | ✅ | PROJECT, ROADMAP, README, INTEGRATIONS, ARCHITECTURE, STACK, STRUCTURE, CONCERNS, CONVENTIONS, TESTING |
+| T22 | 🔶 | **Parcial (2026-07-27, regerada).** A metade que não exige uma pessoa está feita **e agora vale**: instaladores gerados e medidos a partir da árvore corrigida, zip portátil extraído e o `llama-server` **executado de dentro dele**. Continua aberto tudo que precisa de alguém: instalar sem rede, conversar, importar um PDF offline, baixar um modelo pelo catálogo, rodar o portátil como app |
+
+### O que a implementação mediu (e que a spec pedia como número, não estimativa)
+
+- **Árvore vendorizada: 120,5 MB** no Windows x64 — llama Vulkan 73,8 MB, llama CPU 23,1 MB, ONNX Runtime 16,2 MB, pdfium 7,4 MB.
+- **O ONNX Runtime extrai 425,9 MB cru, e 408 MB disso é `onnxruntime.pdb`.** A poda de `.pdb`/`.lib`/`.exp`/headers foi o que trouxe o componente a 16,2 MB. O design previa risco no `lib/` inteiro (Open Question #3); o problema real era um arquivo só.
+- **`tar` não é o mesmo programa em toda máquina.** Medido aqui: a partir do Git Bash, `tar -xf` num `.zip` falha com *"This does not look like a tar archive"* (é o GNU tar do MSYS, não o bsdtar do Windows). O script passou a despachar por extensão.
+
+### Medições do build de release (regeradas em 2026-07-27, Windows x64)
+
+> **Os números anteriores foram descartados.** O primeiro build saiu da árvore de
+> vendoring quebrada (AD-046) e produzia um `llama-server.exe` que não executava.
+> A tabela abaixo é de um build novo, **depois** da correção da poda.
+
+`npm run tauri build` em **8m44s** (contra 23m37s do primeiro — o resto do
+`target/` já estava quente), seguido de
+`node scripts/make-portable.mjs --version 0.1.1`:
+
+| Artefato | Agora | Antes (inservível) | Δ |
+| --- | --- | --- | --- |
+| `LocalMind_0.1.1_x64-setup.exe` (NSIS) | **53,3 MiB** | 47,6 MiB | +5,7 |
+| `LocalMind_0.1.1_x64_en-US.msi` | **91,4 MiB** | 83,8 MiB | +7,6 |
+| `LocalMind_0.1.1_x64-portable.zip` | **107,2 MiB** | 92,0 MiB | +15,2 |
+| `LocalMind.exe` | **159,2 MiB** | 159,2 MiB | 0 |
+| `resources/` em `target/release/` | **150 MB, 83 arquivos** | 115,0 MiB, 79 arquivos | +4 arquivos |
+
+**Os +4 arquivos são a prova aritmética da correção:** `llama-server-impl.dll` e
+`llama-common.dll`, uma vez para cada backend (Vulkan e CPU). O `LocalMind.exe`
+não mudou um byte, o que confirma que o crescimento está inteiro nos recursos e
+não no binário.
+
+**Desta vez o bundle foi executado, não só inspecionado.** É a diferença que a
+AD-046 cobrou do SELF-16: o zip portátil foi extraído numa pasta limpa
+(86 arquivos, `.portable`, `README.txt`, `LocalMind.exe`) e o `llama-server.exe`
+**de dentro dele** foi rodado:
+
+```
+resources/llama/vulkan/llama-server.exe --list-devices
+  Vulkan0: NVIDIA GeForce RTX 3060 (12329 MiB, 11548 MiB free)     exit 0
+resources/llama/cpu/llama-server.exe --list-devices
+  Available devices:                                                exit 0
+```
+
+Os tamanhos no bundle extraído mostram por que conferir o nome do arquivo nunca
+bastou: `llama-server.exe` tem **9.216 bytes** e `llama-server-impl.dll`,
+**9.898.496**.
+
+Isso responde as Open Questions #2 e #3 do design com número medido. **O
+instalador ficou muito abaixo do teto de ~450 MB** que dispararia uma poda mais
+agressiva do ONNX Runtime — o payload comprime bem porque é código.
+
+**A assinatura falhou, e é o esperado:** `A public key has been found, but no private key`. A chave privada é segredo do mantenedor e mora nos secrets do GitHub (T2 do M8, AD-035); nenhum agente a tem. Os bundles foram gerados; só os `.sig` não.
+
+**Ainda não medido:** o **delta** em relação à versão anterior, que exigiria o instalador da v0.1.1 publicada para comparar, e **todos os números do Linux**, que exigem o runner do CI.
+
+### Desvios do plano, com o motivo
+
+1. **`prepare_runtime` deixou de baixar um modelo.** O plano herdado do M7 baixava o Phi-3.5 (2,4 GB) dentro do preparo. Isso torna o alvo do M9 — *"numa máquina sem rede, com um `.gguf` já na pasta de modelos: instalar → abrir → escolher o modelo → conversar"* — impossível de cumprir. O estágio `NoModel` foi criado para nomear o estado resultante, que é o normal de uma instalação nova.
+2. **Os estágios do runtime mudaram de nome.** `DownloadingBinary`/`DownloadingModel` saíram; entraram `NotPrepared`, `Preparing` e `NoModel`. O progresso de download de modelo passou a ter canal próprio (`model-download-progress`), separado do preparo do motor.
+3. **O campo `provider` saiu do catálogo de modelos.** Com um runtime só, ele não distinguia nada. O teste que filtrava por ele passou a valer para todas as entradas.
+4. **A migração é a 7, não a 6** (registrado na AD-042).
+
+### Testes perdidos, com justificativa
+
+De 150 para 150 no total, mas com movimentação: **-5** de `runtime/release.rs` (o arquivo saiu junto com a API do GitHub), **-2** de `download::extract` (a extração migrou para o script de vendoring), **-1** de `pdfium::asset_url` (não há mais URL a montar). **+8** novos: 6 em `runtime::bundled`, 1 em `rag::onnxruntime`, 1 em `rag::pdfium`. Nos scripts: 27 → 43.
 
 **Regra de ouro desta feature:** cada task compila e passa nos testes sozinha. Por isso a ordem é **criar → migrar chamadores → apagar**, nunca "apagar e consertar depois" — foi o que forçou T3+T4 num commit só na AD-023, e aqui a superfície removida é muito maior.
 
@@ -574,12 +670,12 @@ T5,T11,T17 → T21
 
 **Done when:**
 
-- [ ] Instalador gerado e **tamanho medido** nos dois SOs (Open Question #3), com o delta em relação à versão anterior
+- [x] ⚠️ Instalador gerado e **tamanho medido** — **só Windows** (NSIS 53,3 · MSI 91,4 · zip 107,2 MiB, 2026-07-27, árvore corrigida). **Linux continua sem número**, e o delta contra a versão publicada segue sem base de comparação: não há v0.1.1 publicada para comparar
 - [ ] Com a rede desligada e um `.gguf` copiado à mão: instalar → abrir → escolher o modelo → conversar
 - [ ] Com a rede desligada: importar um PDF e vê-lo chegar a `ready`; perguntar sobre ele e receber citação
 - [ ] Com rede: baixar um modelo do catálogo e conversar, sem nenhuma outra etapa de download
-- [ ] Bundle portátil extraído em pasta de usuário sobe e conversa
-- [ ] Gate check passa: `cargo test` (≥ contagem final da T17), `npm run test:scripts`, `npm run build`
+- [x] ⚠️ Bundle portátil extraído em pasta de usuário ~~sobe e conversa~~ — **meio feito**: extraído no scratchpad e o `llama-server.exe` de dentro dele executado (exit 0, Vulkan achando a RTX 3060). **O `LocalMind.exe` do bundle não foi aberto e ninguém conversou** — essa metade continua exigindo uma pessoa
+- [x] Gate check passa: `cargo test` **174 passando / 0 falhas / 12 ignorados** (T17 tinha 150), `npm run test:scripts` **44**, `npm run build` limpo
 
 **Tests:** none (UAT) · **Gate:** full
 **Commit:** —

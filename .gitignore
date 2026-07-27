@@ -35,3 +35,7 @@ src-tauri/.fastembed_cache/
 *.key
 *.key.pub
 localmind.key*
+
+# Binary components vendored into the installer by `npm run vendor`.
+# ~120 MB of build artefact, pinned in scripts/vendor.json — not source.
+src-tauri/resources/

@@ -2,6 +2,31 @@
 
 **Context**: `.specs/features/embedded-runtime/context.md` (user decisions on activation, platform scope, GPU scope, default model)
 
+> ## ⚠️ PARCIALMENTE REVOGADA por `self-contained-runtime` (M9) — 2026-07-27
+>
+> **Decisões: AD-039 (planejamento), AD-042 e AD-043 (execução).**
+>
+> Esta feature entregou o sidecar llama.cpp como **um fallback entre outros**:
+> uma "conexão embutida" que o usuário habilitava numa tela de Conexões, e que
+> baixava o próprio binário na primeira vez. O M9 promoveu esse sidecar a
+> **único runtime** e mudou de onde ele vem.
+>
+> Duas mudanças invertem premissas deste documento:
+>
+> 1. **O binário não é mais baixado** — viaja dentro do instalador
+>    (SELF-09/SELF-10). `runtime/release.rs`, que consultava a API do GitHub,
+>    foi apagado.
+> 2. **O setup não baixa mais um modelo padrão** — `prepare_runtime` resolve só
+>    o motor; escolher o modelo é ação separada (AD-043).
+>
+> **Mas boa parte desta spec continua valendo, e é o coração do app hoje:** o
+> ciclo de vida do sidecar (auto-start, morte no quit), a detecção de GPU com
+> fallback para CPU e a reconfiguração por restart são exatamente o que roda.
+> Ver o desfecho de cada requisito na rastreabilidade.
+>
+> **Complementada por** `.specs/features/sidecar-lifecycle/spec.md` (M7.1), que
+> reforçou EMBED-07 com Job Object e janela de console oculta.
+
 ## Problem Statement
 
 Today the app only talks to Ollama or LM Studio — both external programs the user must install themselves. On a clean machine with neither installed, M3's Conexões screen just shows an empty state; the app cannot chat at all. This feature ships a self-contained fallback: an embedded `llama.cpp` sidecar the app manages entirely on its own (download binary + a default model, run it as a local child process), so the app works out of the box with zero external installation.
@@ -134,27 +159,36 @@ Confirmed via web search (not fabricated):
 
 ## Requirement Traceability
 
-| Requirement ID | Story | Phase | Status |
-| --- | --- | --- | --- |
-| EMBED-01 | P1: Embedded option always visible in Conexões | Implemented | Verified* |
-| EMBED-02 | P1: First-enable downloads sidecar binary (OS+backend) with progress | Implemented | Verified* |
-| EMBED-03 | P1: First-enable downloads default model with progress | Implemented | Verified* |
-| EMBED-04 | P1: Sidecar starts as child process, reports status via ProviderClient | Implemented | Verified* |
-| EMBED-05 | P1: Embedded model selectable as active model (CONN-06 reuse) | Implemented | Verified* |
-| EMBED-06 | P1: Sidecar auto-starts with app when enabled + model ready | Implemented | Verified* |
-| EMBED-07 | P1: Sidecar terminates on normal app quit | Implemented | Verified* |
-| EMBED-08 | P1: Crashed/failed sidecar reports "unavailable", not a hang | Implemented | Verified* |
-| EMBED-09 | P1: Disabling the connection stops the sidecar | Implemented | Verified* |
-| EMBED-10 | P2: GPU-capable hardware uses accelerated sidecar variant | Implemented | Verified* |
-| EMBED-11 | P2: No GPU falls back to CPU sidecar without error | Implemented | Verified* |
-| EMBED-12 | P2: Context/GPU config applies via sidecar restart, honest `requires_reload` | Implemented | Verified* |
-| EMBED-13 | P2: Manual GGUF download via direct Hugging Face link | Implemented | Verified* |
-| EMBED-14 | P3: Display installed llama.cpp release tag | Implemented | Verified* |
+> **Atualizada em 2026-07-27.** Os 14 requisitos foram implementados em
+> 2026-07-25; a coluna abaixo diz o que restou depois do M9, conferido contra o
+> código atual.
+
+| Requirement ID | Story | Desfecho |
+| --- | --- | --- |
+| EMBED-01 | P1: Embedded option always visible in Conexões | ❌ **Revogado** por SELF-01 (AD-042) — não há tela de Conexões; o runtime é o único e a tela é "Runtime" |
+| EMBED-02 | P1: First-enable downloads sidecar binary with progress | ❌ **Revogado** por SELF-09/SELF-10 (AD-039) — o binário vem do instalador; `runtime/release.rs` apagado |
+| EMBED-03 | P1: First-enable downloads default model with progress | ❌ **Revogado** por AD-043 — `prepare_runtime` não baixa modelo; contradizia o alvo "instalar sem rede e conversar" |
+| EMBED-04 | P1: Sidecar as child process, status via `ProviderClient` | ⚠️ **Meio revogado** — o processo filho e o status continuam (SELF-04); o `ProviderClient` foi substituído pelo `LlamaServerClient` concreto (SELF-03) |
+| EMBED-05 | P1: Embedded model selectable as active model (CONN-06 reuse) | ❌ **Revogado por fusão** em SELF-07 — não há "modelo embutido" em oposição a outros |
+| EMBED-06 | P1: Sidecar auto-starts with app when model ready | ✅ **Vive** — marcador `SPEC:` em `lib.rs`; a pergunta mudou de "a conexão embutida está ativa?" para "há runtime pronto e modelo ativo?" (AD-043) |
+| EMBED-07 | P1: Sidecar terminates on normal app quit | ✅ **Vive e reforçado** — SIDE-04/05/06 acrescentaram o Job Object para o caso de kill forçado (AD-041) |
+| EMBED-08 | P1: Crashed sidecar reports "unavailable", not a hang | ✅ **Vive** — `runtime_status`. A AD-046 mostrou o limite: com o binário quebrado a UI reportou indisponível **com a causa vazia**, porque o processo nem chegou a existir |
+| EMBED-09 | P1: Disabling the connection stops the sidecar | ⚠️ **Reformulado** — virou `stop_runtime`, ação direta sobre o runtime, sem conexão no meio |
+| EMBED-10 | P2: GPU-capable hardware uses accelerated variant | ✅ **Vive** como SELF-11 — `probe_devices`; verificado ao vivo com a RTX 3060 (AD-041, AD-046) |
+| EMBED-11 | P2: No GPU falls back to CPU without error | ⚠️ **Vive, nunca exercitado** — o binário CPU embutido sobe (exit 0), mas o *fallback* de um para o outro nunca rodou numa máquina sem loader Vulkan (SELF-11) |
+| EMBED-12 | P2: Context/GPU config applies via sidecar restart | ✅ **Vive** como SELF-08 — `configure_model` continua reiniciando o sidecar (AD-042) |
+| EMBED-13 | P2: Manual GGUF download via direct Hugging Face link | ✅ **Vive** — `manualUrl` em `ModelsList.tsx`; hoje é o **único** caminho manual, já que o `pull` por nome saiu com o Ollama (CONN-10) |
+| EMBED-14 | P3: Display installed llama.cpp release tag | ⚠️ **Vive, reformulado** — `RuntimeStatus.release_tag` continua; a tag agora vem fixa de `scripts/vendor.json` (`b10146`), não de uma consulta à API do GitHub (SELF-14) |
 
 **ID format:** `EMBED-[NUMBER]`
-**Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**\*** Implementados e verificados por teste automatizado + exercício real do sidecar (binário, `--list-devices`, `/health`, `/v1/models`, `/v1/chat/completions`). Os passos que exigem clicar na UI (setup pelo card, fechar/reabrir o app) seguem pendentes — ver Todos no STATE.md.
-**Coverage:** 14 total, 14 implementados (2026-07-25)
+**Coverage:** 14 no total — **4 revogados, 4 reformulados, 6 vivos.** Nenhum
+apagado.
+
+**\*** A marca "Verified" de 2026-07-25 vinha de teste automatizado + exercício
+real do sidecar (`--list-devices`, `/health`, `/v1/models`,
+`/v1/chat/completions`). **Ela não cobria o binário empacotado**, que é coisa
+diferente do binário baixado — foi exatamente aí que a AD-046 encontrou um
+`llama-server.exe` que não executava.
 
 ---
 

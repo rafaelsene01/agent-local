@@ -18,19 +18,27 @@ chat-ia-local/
 │   │   ├── Onboarding/         # Wizard.tsx
 │   │   ├── Settings/           # SettingsPanel.tsx
 │   │   └── Sidebar/            # Sidebar · ChatList · DocumentsSection
-│   │                           #   · ConnectionsSection · SettingsSection
+│   │                           #   · RuntimeSection · SettingsSection
 │   ├── i18n/                   # index.ts + locales/{en,pt}.json
-│   ├── lib/                    # chatApi · configApi · connectionsApi · theme
-│   ├── store/                  # chatStore · configStore · uiStore · connectionsStore
+│   ├── lib/                    # chatApi · configApi · documentsApi · runtimeApi · updateApi · theme
+│   ├── store/                  # chatStore · configStore · uiStore · runtimeStore · documentsStore · updateStore
 │   ├── styles/themes.css       # CSS variables por tema
 │   ├── App.tsx · main.tsx · types.ts · index.css
 ├── src-tauri/                  # Backend Rust
 │   ├── src/
 │   │   ├── models/             # mod.rs (Chat/Message) · catalog.rs · memory_estimate.rs
-│   │   ├── providers/          # mod.rs (trait) · ollama.rs · lmstudio.rs · custom.rs
+│   │   ├── providers/          # mod.rs · llama_server.rs · openai_stream.rs
+│   │   ├── runtime/            # bundled · detect · download · job · log
+│   │   │                       #   · model · process · store
+│   │   ├── rag/                # chunking · embedding · onnxruntime · parsing
+│   │   │                       #   · pdfium · pipeline · store
+│   │   ├── chat/               # attachments · cancellation · context_assembler · memory
+│   │   ├── update/             # manifest · portable · signature
 │   │   ├── lib.rs · main.rs
-│   │   ├── commands.rs · config_commands.rs · connection_commands.rs · model_commands.rs
-│   │   └── config.rs · connections.rs · db.rs · system_info.rs
+│   │   ├── commands.rs · chat_commands.rs · config_commands.rs
+│   │   │   · document_commands.rs · runtime_commands.rs · update_commands.rs
+│   │   └── config.rs · db.rs · system_info.rs
+│   ├── resources/              # componentes vendorizados (gerado, gitignored)
 │   ├── capabilities/default.json
 │   ├── icons/ · Cargo.toml · tauri.conf.json · build.rs
 ├── dist/                       # Build do Vite (gerado, gitignored)
@@ -43,14 +51,14 @@ chat-ia-local/
 ### Comandos Tauri (fronteira frontend↔backend)
 
 **Purpose:** Única porta de entrada do frontend pro backend. Todo `#[tauri::command]` vive num arquivo `*_commands.rs`, nunca misturado com lógica de domínio.
-**Location:** `src-tauri/src/{commands,config_commands,connection_commands,model_commands}.rs`
+**Location:** `src-tauri/src/{commands,chat_commands,config_commands,document_commands,runtime_commands,update_commands}.rs`
 **Key files:** `lib.rs` registra todos no `invoke_handler![]` — se não está lá, o frontend não enxerga.
 
 ### Domínio / lógica
 
 **Purpose:** Lógica pura e orquestração, sem anotação Tauri — testável isoladamente.
-**Location:** `src-tauri/src/{config,connections,db,system_info}.rs`, `models/`, `providers/`
-**Key files:** `providers/mod.rs` (trait `ProviderClient` — o ponto de extensão pra qualquer runtime novo), `connections.rs` (`ConnectionManager`)
+**Location:** `src-tauri/src/{config,db,system_info}.rs`, `models/`, `providers/`, `runtime/`, `rag/`, `chat/`, `update/`
+**Key files:** `providers/llama_server.rs` (o cliente HTTP do sidecar), `runtime/store.rs` (a linha singleton que responde "qual modelo, com qual contexto, com qual GPU"), `runtime/bundled.rs` (onde cada componente do instalador é encontrado)
 
 ### Camada de dados do frontend
 

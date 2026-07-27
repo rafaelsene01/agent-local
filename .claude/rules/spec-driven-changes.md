@@ -44,7 +44,7 @@ Regras do marcador:
 
 - **Em inglês**, como todo comentário de código desta base (`AGENTS.md`).
 - O nome da feature é o **nome exato da pasta** em `.specs/features/`.
-- Os IDs são os reais da spec. Prefixos em uso: `SHELL`, `CHAT`, `CONN`, `DOC`, `EMBED`, `SELF`, `SIDE`, `REL`, `CFG`, `ACTIVE`. **Não invente ID** — se o requisito não existe, ele precisa existir na spec primeiro.
+- Os IDs são os reais da spec. Prefixos em uso: `SHELL`, `CHAT`, `CONN`, `DOC`, `EMBED`, `SELF`, `SIDE`, `REL`, `CFG`, `ACTIVE`, `MEM`. **Não invente ID** — se o requisito não existe, ele precisa existir na spec primeiro.
 - Editou um arquivo e o escopo mudou? **Atualize o marcador no mesmo commit.** Marcador desatualizado é pior que marcador ausente: ele mente com autoridade.
 - Arquivo que implementa requisito de mais de uma feature lista as duas: `// SPEC: chat-messaging (CHAT-11), documents-rag (DOC-07)`.
 

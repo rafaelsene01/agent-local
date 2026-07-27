@@ -61,9 +61,13 @@ Todos os pacotes são assinados, e o app verifica a assinatura antes de aplicar 
 
 Primeira versão publicada: **v0.1.1**. O que está pronto e em uso: chat com streaming, base de conhecimento com RAG e citações, anexos por conversa, runtime local com GPU, temas e idiomas, pacotes para Windows e Linux, e atualização automática.
 
-Em andamento: a arquitetura está sendo simplificada para **um único runtime embutido**. As versões iniciais também se conectavam a Ollama e LM Studio; esse suporte está sendo removido em favor de um caminho só, que é o que dispensa qualquer instalação prévia. Enquanto essa mudança não termina, o código no branch principal fica no meio do caminho — prefira uma versão publicada.
+Em andamento no branch principal: o app passou a ter **um único runtime, embutido no instalador**. O motor (llama.cpp, nas variantes GPU e CPU), o mecanismo de embeddings e o leitor de PDF agora viajam dentro do pacote — não há mais nada para baixar depois de instalar, exceto o modelo que você escolher. As versões iniciais se conectavam a programas externos; esse suporte saiu.
 
-Ainda não existe: memória de conversas longas (recuperar automaticamente trechos ditos muito antes) e macOS.
+Essa mudança ainda **não foi publicada nem exercitada numa instalação real** — as versões lançadas continuam sendo as anteriores. Prefira uma versão publicada.
+
+Também em andamento no branch principal: **memória de conversas longas**. Cada pergunta respondida vira um trecho recuperável da própria conversa, então o chat volta a encontrar o que foi dito muito antes, mesmo fora da janela de contexto. Fica restrito à conversa — um chat nunca lembra do outro —, pode ser desligado por conversa, e há um botão para indexar o histórico que você já tem. Como o resto do branch, **ainda não foi exercitado numa instalação real**.
+
+Ainda não existe: macOS.
 
 ## Para quem quiser olhar por dentro
 

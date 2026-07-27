@@ -5,7 +5,6 @@ use serde::Serialize;
 pub struct CuratedModel {
     pub id: &'static str,
     pub display_name: &'static str,
-    pub provider: &'static str,
     pub pull_identifier: &'static str,
     pub params_billions: f32,
     pub default_quant: &'static str,
@@ -22,7 +21,6 @@ pub struct CuratedModel {
 pub struct CuratedModelInfo {
     pub id: String,
     pub display_name: String,
-    pub provider: String,
     pub pull_identifier: String,
     pub params_billions: f32,
     pub default_quant: String,
@@ -35,7 +33,6 @@ impl From<&CuratedModel> for CuratedModelInfo {
         CuratedModelInfo {
             id: m.id.to_string(),
             display_name: m.display_name.to_string(),
-            provider: m.provider.to_string(),
             pull_identifier: m.pull_identifier.to_string(),
             params_billions: m.params_billions,
             default_quant: m.default_quant.to_string(),
@@ -54,7 +51,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-qwen2.5-1.5b",
         display_name: "Qwen2.5 1.5B Instruct",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
         params_billions: 1.54,
         default_quant: "Q4_K_M",
@@ -64,7 +60,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-llama3.2-3b",
         display_name: "Llama 3.2 3B Instruct",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
         params_billions: 3.21,
         default_quant: "Q4_K_M",
@@ -74,7 +69,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-phi3.5-mini",
         display_name: "Phi-3.5 Mini Instruct",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
         params_billions: 3.8,
         default_quant: "Q4_K_M",
@@ -84,7 +78,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-mistral-7b",
         display_name: "Mistral 7B Instruct v0.3",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
         params_billions: 7.25,
         default_quant: "Q4_K_M",
@@ -94,7 +87,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-qwen2.5-7b",
         display_name: "Qwen2.5 7B Instruct",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         params_billions: 7.62,
         default_quant: "Q4_K_M",
@@ -104,7 +96,6 @@ const CURATED_MODELS: &[CuratedModel] = &[
     CuratedModel {
         id: "gguf-llama3.1-8b",
         display_name: "Llama 3.1 8B Instruct",
-        provider: "embedded",
         pull_identifier: "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
         params_billions: 8.03,
         default_quant: "Q4_K_M",
@@ -126,17 +117,12 @@ mod tests {
         assert!(curated_models().len() >= 6);
     }
 
-    /// The embedded runtime downloads files, not registry names: a wrong
-    /// identifier here means a multi-GB download the sidecar can't load.
+    /// The runtime downloads files, not registry names: a wrong identifier
+    /// here means a multi-GB download the sidecar can't load. There is no
+    /// provider to filter by any more — every entry has to hold up (SELF-02).
     #[test]
-    fn embedded_entries_point_at_a_direct_gguf_and_declare_their_size() {
-        let embedded: Vec<_> = curated_models()
-            .iter()
-            .filter(|m| m.provider == "embedded")
-            .collect();
-        assert!(embedded.len() >= 4, "the embedded runtime needs real options");
-
-        for m in embedded {
+    fn every_entry_points_at_a_direct_gguf_and_declares_its_size() {
+        for m in curated_models() {
             assert!(
                 crate::runtime::model::validate_gguf_url(m.pull_identifier).is_ok(),
                 "{} is not a direct .gguf link",

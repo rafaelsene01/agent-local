@@ -1,61 +1,58 @@
 # External Integrations
 
-O app é offline-first: **nenhum** serviço de nuvem, telemetria, analytics ou autenticação externa. Todas as integrações são com processos locais na máquina do usuário, via HTTP em `localhost`, sem credenciais.
+O app é offline-first: **nenhum** serviço de nuvem, telemetria, analytics ou autenticação externa.
 
-## LLM Runtimes locais
+Desde o M9 (AD-039) ele também não fala com **nenhum programa externo**. O único runtime é o `llama-server` que viaja dentro do instalador; o app conversa com ele por HTTP em `127.0.0.1`, numa porta escolhida na hora de subir o processo.
 
-### Ollama
+> **Removido em 2026-07-27, na Fase 1+2 do M9.** Este documento descrevia integrações com **Ollama** (`:11434`), **LM Studio** (`:1234`) e um servidor OpenAI-compatible arbitrário informado por URL. As três saíram inteiras — código, tabelas e tela. O histórico do porquê está na AD-039; o que segue descreve o app que existe hoje.
 
-**Purpose:** Rodar modelos locais; listar e baixar modelos.
-**Implementation:** `src-tauri/src/providers/ollama.rs` (`OllamaClient`, impl `ProviderClient`)
-**Configuration:** URL padrão `http://localhost:11434`, semeada automaticamente em `connections` na primeira chamada de `list_connections` (desabilitada por padrão). Editável — a URL vem da linha da tabela, não é hardcoded no client.
-**Authentication:** nenhuma (API local sem auth).
-**Timeout:** 5s (`reqwest::Client::builder().timeout(...)`).
+## Runtime local (o único)
 
-**Endpoints usados** (confirmados contra `ollama/ollama` `docs/api.md`):
+### `llama-server`, embutido
 
-| Endpoint | Uso | Formato |
-| --- | --- | --- |
-| `GET /api/tags` | `health_check` + `list_installed_models` | JSON `{ models: [{ name, size, … }] }` |
-| `POST /api/pull` | `pull_model` | Request `{ model, stream: true }`; resposta **NDJSON** — uma linha por evento, com `{ status, total?, completed?, error? }` |
+**Purpose:** carregar o `.gguf` ativo e responder o chat.
+**Implementation:** `src-tauri/src/providers/llama_server.rs` (`LlamaServerClient` — struct concreta, sem trait).
+**Origem do binário:** `src-tauri/resources/llama/{vulkan,cpu}/`, empacotado pelo Tauri como recurso do bundle. Versão fixada em `scripts/vendor.json` e trazida por `npm run vendor` antes de todo build.
+**Configuration:** nada é configurável pelo usuário — a porta é livre, escolhida por `runtime::process::free_port`, e a URL nunca aparece na UI.
+**Authentication:** nenhuma (processo local, filho do app).
 
-**Nota:** `configure_model` **não faz chamada HTTP** — Ollama não tem endpoint de "salvar config". `num_ctx`/`num_gpu` vão dentro de `options` a cada requisição de `/api/chat`, o que será feito na feature `chat-messaging`. O `ConfigApplied` retornado deixa isso explícito (`requires_reload: false` + nota).
-
-### LM Studio
-
-**Purpose:** Mesmo papel do Ollama, com uma API nativa incompatível.
-**Implementation:** `src-tauri/src/providers/lmstudio.rs` (`LmStudioClient`)
-**Configuration:** URL padrão `http://localhost:1234`, semeada igual ao Ollama.
-**Authentication:** a API aceita `Authorization: Bearer $LM_API_TOKEN` na doc oficial, mas o client **não envia token** — assume instância local aberta. Se o usuário tiver auth ligada, vai falhar (ver CONCERNS.md).
-**Requer:** LM Studio ≥ 0.4.0 (quando a REST API nativa `/api/v1/*` foi lançada).
-
-**Endpoints usados** (confirmados contra `lmstudio.ai/docs/developer/rest/*`):
+**Endpoints usados:**
 
 | Endpoint | Uso | Formato |
 | --- | --- | --- |
-| `GET /api/v1/models` | `health_check` + `list_installed_models` | `{ models: [{ key, size_bytes, … }] }` — identificador é `key`, não `name` |
-| `POST /api/v1/models/download` | inicia `pull_model` | Request `{ model }`; resposta `{ job_id?, status, total_size_bytes? }`; `status: "already_downloaded"` vem **sem** `job_id` |
-| `GET /api/v1/models/download/status/:job_id` | polling do progresso | `{ status, total_size_bytes?, downloaded_bytes? }`; sem campo de percentual — calculado no cliente |
-| `POST /api/v1/models/load` | `configure_model` | `{ model, context_length?, offload_kv_cache_to_gpu?, echo_load_config: true }` |
+| `GET /v1/models` | `health_check` e `model_limits` | `{ data: [{ id, meta: { n_ctx_train, n_ctx } }] }` — é `meta.n_ctx_train` que dá o teto de contexto (AD-029) |
+| `POST /v1/chat/completions` | `stream_chat` | SSE, parseado por `providers/openai_stream.rs` |
 
-**Diferença estrutural vs. Ollama:** download é **job + polling** (750ms de intervalo), não stream. Ambos são normalizados pro mesmo `PullProgress` antes de chegar no frontend.
+**O que não é chamada HTTP:** modelo, tamanho de contexto e camadas de GPU são **flags de inicialização** do `llama-server` (`-m`, `-c`, `-ngl`). Mudar qualquer um reinicia o processo — foi a duplicação entre "configurar por HTTP" e "configurar por flag" que gerou o EMBED-12.
 
-**Divergência documentada:** o `design.md` original supunha `contextLength`/`gpuOffload` (camelCase, offload graduado). A API real usa `context_length` (snake_case) e `offload_kv_cache_to_gpu` (**boolean**, sem fração). `GpuOffload::Fraction` é aceito mas tratado como "ligado", com nota explicando — marcado como `SPEC_DEVIATION` em `lmstudio.rs`.
+**Lista de modelos instalados:** lida dos arquivos `.gguf` na pasta de modelos, **não** de `/v1/models` — o servidor só conhece o modelo que está carregado (AD-028).
 
-### Servidor OpenAI-compatible genérico ("custom")
+## Componentes binários empacotados
 
-**Purpose:** Permitir apontar pra qualquer outro servidor local compatível (CONN-01 AC4).
-**Implementation:** `src-tauri/src/providers/custom.rs` (`CustomClient`)
-**Configuration:** URL informada manualmente pelo usuário no formulário da aba Conexões.
-**Endpoints:** só `GET /v1/models` (o único padrão universal). `pull_model` e `configure_model` retornam erro/nota explícitos de "não suportado" em vez de fingir sucesso.
+Nenhum deles é baixado em tempo de execução (SELF-09/SELF-12). Todos são resolvidos por `runtime::bundled` a partir do `resource_dir` do Tauri.
 
-## APIs de terceiros (somente leitura, sem auth)
+| Componente | Onde no bundle | Quem usa | Versão fixada em |
+| --- | --- | --- | --- |
+| `llama-server` (Vulkan + CPU) | `resources/llama/<backend>/` | `runtime::process` | `scripts/vendor.json` |
+| ONNX Runtime | `resources/onnxruntime/` | `rag::embedding` via `ORT_DYLIB_PATH` | `scripts/vendor.json` |
+| pdfium | `resources/pdfium/` | `rag::pdfium::extract_text` | `scripts/vendor.json` |
 
-### Hugging Face / catálogo de modelos
+**Medição do vendoring (2026-07-27, Windows x64):** 120,5 MB no total — llama Vulkan 73,8 MB, llama CPU 23,1 MB, ONNX Runtime 16,2 MB, pdfium 7,4 MB. O ONNX Runtime extrai **425,9 MB** cru; 408 MB disso é um único `onnxruntime.pdb`, que a poda do script remove junto com `.lib`/`.exp`/headers.
 
-**Status:** **não integrado por API.** Nenhum dos dois runtimes expõe catálogo programático de "modelos disponíveis pra baixar" (confirmado por pesquisa — AD-015). A lista de modelos oferecidos pra download é **curada e embutida no binário**: `src-tauri/src/models/catalog.rs`, 8 entradas com `params_billions` públicos conhecidos.
+## Rede: o que sobrou
 
-**Consequência:** manter a lista atualizada é trabalho manual. O escape é o campo de pull manual (nome pro Ollama, link HF pro LM Studio), que não passa por catálogo nem por checagem de RAM.
+Só duas coisas saem da máquina, ambas por ação explícita do usuário:
+
+| O quê | Quando | Destino |
+| --- | --- | --- |
+| Download de um modelo GGUF | o usuário clica em baixar, no catálogo ou por link direto | Hugging Face (`resolve/main/*.gguf`) |
+| Verificação de atualização | no boot, se o toggle estiver ligado (REL-13) | GitHub Releases |
+
+### Catálogo de modelos
+
+**Status:** **não integrado por API.** A lista é curada e embutida no binário (`src-tauri/src/models/catalog.rs`), com 6 entradas GGUF cujo `content-length` foi conferido ao vivo. O campo `provider` saiu junto com o multi-provider: toda entrada é um link `.gguf` direto.
+
+**Consequência:** manter a lista atualizada é trabalho manual. O escape é o campo de download por link, que não passa por catálogo nem por checagem de RAM.
 
 ## Sistema operacional
 
@@ -64,7 +61,7 @@ O app é offline-first: **nenhum** serviço de nuvem, telemetria, analytics ou a
 **Implementation:** `src-tauri/src/system_info.rs` via crate `sysinfo` 0.39.
 **Uso:** `total_ram_gb()` alimenta o flag `fits_ram` de cada modelo curado. Retorna bytes desde sysinfo 0.26 (verificado no CHANGELOG do crate).
 **Fallback:** se retornar 0 (ambientes exóticos), `list_downloadable_models` devolve `ram_detected_gb: None` e marca **todos** como cabendo — nunca esconde tudo silenciosamente.
-**Não faz:** detecção de GPU/VRAM (não é confiável entre fabricantes sem SDK proprietário — decisão do usuário registrada no spec do M3).
+**Não faz:** detecção de VRAM por GPU. A escolha Vulkan vs CPU vem de rodar `llama-server --list-devices` e ler a saída (AD-022), não de uma lib de detecção.
 
 ### Diálogo de arquivos
 
@@ -74,7 +71,7 @@ O app é offline-first: **nenhum** serviço de nuvem, telemetria, analytics ou a
 ### Filesystem
 
 **Implementation:** `std::fs` direto no Rust (não o plugin `fs` do Tauri).
-**Escopo:** só dentro da pasta-base escolhida pelo usuário + o `config.json` no `app_config_dir` do SO.
+**Escopo:** a pasta-base escolhida pelo usuário, o `config.json` no `app_config_dir` do SO, e **leitura** do `resource_dir` do próprio app.
 **Validação:** `ensure_folder_structure` escreve um arquivo-sonda (`.localmind-write-test`) pra falhar cedo em pasta sem permissão.
 
 ## Webhooks
@@ -87,11 +84,18 @@ Não há fila nem scheduler. O que existe de assíncrono:
 
 | Job | Mecanismo | Local |
 | --- | --- | --- |
-| Download de modelo com progresso | `tokio::sync::mpsc` + `tauri::async_runtime::spawn` re-emitindo evento `model-download-progress` | `model_commands::pull_model` |
-| Health check de conexões | `async fn` sequencial dentro de `list_connections` (não paralelizado) | `connection_commands::list_connections` |
+| Download de modelo com progresso | `tokio::sync::mpsc` + `tauri::async_runtime::spawn` re-emitindo `model-download-progress` | `runtime_commands::download_model` |
+| Indexação de documento | `tauri::async_runtime::spawn` por documento | `rag::pipeline` |
+| Autostart do sidecar no boot | `tauri::async_runtime::spawn` no `setup` | `lib.rs::autostart_sidecar` |
 
 **Eventos Tauri emitidos** (backend → frontend):
 
 | Evento | Payload | Consumidor |
 | --- | --- | --- |
-| `model-download-progress` | `{ connection_id, identifier, progress: PullProgress }` | `connectionsStore.ts` via `listen()` no escopo do módulo |
+| `runtime-changed` | `()` | `runtimeStore.ts` — recarrega status e modelo ativo quando o sidecar termina de subir |
+| `runtime-progress` | `{ stage, progress, message }` | `runtimeStore.ts` — o card do runtime durante o preparo |
+| `model-download-progress` | `{ identifier, progress: PullProgress }` | `runtimeStore.ts` — `identifier` é a URL do `.gguf` |
+| `chat-stream-chunk` | `{ chat_id, message_id, delta, done, error }` | `chatStore.ts` |
+| `chat-retrieval-warning` | `{ chat_id, reason }` | `chatStore.ts` |
+| `document-status` | `{ id, status, error_message }` | `documentsStore.ts` |
+| `update-download-progress` | `{ downloaded, total }` | `updateStore.ts` (só no modo portátil) |

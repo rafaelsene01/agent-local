@@ -1,6 +1,10 @@
+// SPEC: chat-messaging (CHAT-01, CHAT-02, CHAT-04, CHAT-05, CHAT-14),
+//       conversation-memory (MEM-01, MEM-02, MEM-03, MEM-14, MEM-16, MEM-17)
+
 use crate::chat::attachments;
 use crate::chat::cancellation::CancellationRegistry;
 use crate::chat::context_assembler;
+use crate::chat::memory;
 use crate::db::{require_conn, DbState};
 use crate::runtime_commands;
 use crate::models::Message;
@@ -73,6 +77,47 @@ pub fn create_message(
     content: String,
 ) -> Result<Message, String> {
     insert_message(&app, &chat_id, &role, &content)
+}
+
+/// Whether the exchange that just ended is worth remembering (MEM-03).
+///
+/// Split out as a predicate because every one of these conditions is a way for
+/// a half-finished turn to reach the memory, and none of them is observable
+/// from a test that needs an `AppHandle`. A cancelled generation leaves the
+/// partial text on screen and in the history — that is CHAT-04 and stays — but
+/// storing it as memory would make a truncated sentence retrievable later with
+/// the authority of a complete answer.
+fn should_record_turn(
+    answer: &str,
+    had_error: bool,
+    was_cancelled: bool,
+    memory_enabled: bool,
+) -> bool {
+    memory_enabled && !had_error && !was_cancelled && !answer.trim().is_empty()
+}
+
+#[tauri::command]
+pub fn set_chat_use_memory(
+    db: State<DbState>,
+    chat_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let guard = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = require_conn(&guard)?;
+    sql.execute(
+        "UPDATE chats SET use_memory = ?1 WHERE id = ?2",
+        params![enabled as i64, chat_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Indexes the exchanges already stored in this conversation (MEM-17). Returns
+/// how many turns were indexed, which is what lets the UI say "nothing to do"
+/// instead of implying something happened.
+#[tauri::command]
+pub async fn index_chat_history(app: AppHandle, chat_id: String) -> Result<usize, String> {
+    memory::backfill(&app, &chat_id).await
 }
 
 #[tauri::command]
@@ -204,6 +249,7 @@ pub async fn send_message(
         &content,
         &user_message.id,
         use_global_rag(&app, &chat_id)?,
+        memory::uses_memory(&app, &chat_id),
         budget_context(&client, &model).await,
     )
     .await?;
@@ -274,8 +320,39 @@ pub async fn send_message(
 
     // Whatever arrived is kept: a cancelled or failed generation still leaves
     // the user with the part that was already on screen (CHAT-04, CHAT-05).
-    if !accumulated.is_empty() {
-        let _ = insert_message(&app, &chat_id, "assistant", &accumulated);
+    let answer = if accumulated.is_empty() {
+        None
+    } else {
+        insert_message(&app, &chat_id, "assistant", &accumulated).ok()
+    };
+
+    // The exchange becomes memory only after it is persisted, and off the
+    // request path: embedding takes long enough that waiting for it would show
+    // up as the answer hanging after its last token (MEM-01, MEM-02).
+    if let Some(answer) = &answer {
+        if should_record_turn(
+            &answer.content,
+            error.is_some(),
+            token.is_cancelled(),
+            memory::uses_memory(&app, &chat_id),
+        ) {
+            let turn = memory::Turn {
+                answer_id: answer.id.clone(),
+                question: content.clone(),
+                answer: answer.content.clone(),
+            };
+            let app_for_memory = app.clone();
+            let chat_for_memory = chat_id.clone();
+            tauri::async_runtime::spawn(async move {
+                // Best effort by design: the answer is already delivered, and a
+                // vector store that refuses a write must not surface as a
+                // failed message.
+                if let Err(e) = memory::record_turn(&app_for_memory, &chat_for_memory, &turn).await
+                {
+                    eprintln!("conversation memory not recorded: {e}");
+                }
+            });
+        }
     }
 
     let _ = app.emit(
@@ -299,4 +376,38 @@ pub async fn send_message(
 pub fn cancel_generation(app: AppHandle, chat_id: String) -> Result<(), String> {
     app.state::<CancellationRegistry>().cancel(&chat_id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_finished_answer_is_remembered() {
+        assert!(should_record_turn("resposta completa", false, false, true));
+    }
+
+    #[test]
+    fn a_cancelled_generation_is_not_remembered() {
+        // The partial text stays in the history (CHAT-04); it just does not
+        // become a passage that can be retrieved as if it were complete.
+        assert!(!should_record_turn("resposta pela met", false, true, true));
+    }
+
+    #[test]
+    fn a_failed_generation_is_not_remembered() {
+        assert!(!should_record_turn("resposta parcial", true, false, true));
+    }
+
+    #[test]
+    fn nothing_is_remembered_while_the_toggle_is_off() {
+        // MEM-14: off stops the writing too, not only the reading. The way back
+        // is the on-demand backfill, which is why this can be this strict.
+        assert!(!should_record_turn("resposta completa", false, false, false));
+    }
+
+    #[test]
+    fn an_answer_that_is_only_whitespace_is_not_a_turn() {
+        assert!(!should_record_turn("   \n ", false, false, true));
+    }
 }

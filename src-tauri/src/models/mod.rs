@@ -1,3 +1,5 @@
+// SPEC: app-shell (SHELL-04), chat-messaging (CHAT-14), conversation-memory (MEM-14)
+
 pub mod catalog;
 pub mod memory_estimate;
 
@@ -13,6 +15,10 @@ pub struct Chat {
     /// Travels with the chat so the UI can show the persisted choice instead
     /// of assuming a default per render.
     pub use_global_rag: bool,
+    /// Whether completed turns of this chat are remembered and recalled
+    /// (MEM-14). Same reasoning as above: it travels with the chat so the
+    /// toggle shows the stored choice, not a default.
+    pub use_memory: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]

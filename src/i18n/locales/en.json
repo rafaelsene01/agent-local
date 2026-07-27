@@ -5,7 +5,7 @@
   "sidebar": {
     "chats": "Chats",
     "documents": "Documents",
-    "connections": "Connections",
+    "runtime": "Runtime",
     "settings": "Settings"
   },
   "chats": {
@@ -26,8 +26,13 @@
     "send": "Send",
     "cancel": "Stop",
     "attach": "Attach files",
-    "noActiveModel": "Pick an active connection and model in Connections before sending.",
+    "noActiveModel": "Pick a model under Runtime before sending.",
     "useGlobalDocs": "Use my documents",
+    "useMemory": "Remember this conversation",
+    "indexHistory": "Index history",
+    "indexingHistory": "Indexing history… ({{done}}/{{total}})",
+    "indexedTurns": "{{count}} exchange(s) added to this conversation's memory",
+    "nothingToIndex": "No complete exchange to index yet",
     "attachmentsSelected": "{{count}} file(s) attached",
     "clearAttachments": "Clear",
     "generating": "Generating…",
@@ -35,7 +40,8 @@
     "attachmentFailed": "Attachment \"{{name}}\" could not be processed ({{reason}}) — the answer was generated without it.",
     "retrievalFailed": "Your documents could not be searched ({{reason}}) — the answer was generated without them.",
     "dismiss": "Dismiss",
-    "attachmentsRejected": "Unsupported files ignored: {{files}}"
+    "attachmentsRejected": "Unsupported files ignored: {{files}}",
+    "contextUsage": "Context: {{used}} of {{max}} tokens"
   },
   "documents": {
     "title": "Documents",
@@ -56,33 +62,22 @@
     "fileDialogTitle": "Choose documents",
     "rejected": "Not imported: {{name}} — {{reason}}"
   },
-  "connections": {
-    "title": "Connections",
-    "placeholder": "No connection configured yet",
+  "runtime": {
+    "title": "Runtime",
+    "tabRuntime": "Runtime",
+    "tabModels": "Models",
     "status": {
-      "available": "Active connection: {{name}} — available",
-      "unavailable": "Active connection: {{name}} — not responding",
-      "none": "No active connection"
+      "running": "Answering with {{name}}",
+      "idle": "Model chosen: {{name}} — runtime stopped",
+      "none": "No model chosen"
     },
-    "empty": "No connection available yet",
-    "retry": "Retry",
-    "useConnection": "Use this connection",
-    "noActiveConnection": "No active connection — pick one to decide where the chat sends messages.",
-    "activeUnavailable": "This connection is active but is not responding.",
-    "clearActive": "Clear selection",
-    "addManual": "Add a custom connection",
-    "providerCustom": "Custom (OpenAI-compatible)",
-    "providerOllama": "Ollama",
-    "providerLmStudio": "LM Studio",
-    "providerEmbedded": "Built-in runtime",
-    "embedded": {
+    "engine": {
       "title": "Built-in runtime (llama.cpp)",
-      "description": "Runs entirely inside the app — no Ollama or LM Studio needed.",
-      "notInstalled": "Not installed yet. Setup downloads the llama.cpp server (~35 MB) and the Phi-3.5 Mini model (~2.4 GB).",
-      "install": "Download and set up",
-      "installing": "Setting up…",
-      "downloadingBinary": "Downloading the llama.cpp server",
-      "downloadingModel": "Downloading the model (Phi-3.5 Mini, ~2.4 GB)",
+      "description": "Ships inside LocalMind — there is nothing else to install.",
+      "notPrepared": "Not prepared yet. Preparing picks the build that runs on this machine.",
+      "prepare": "Prepare runtime",
+      "preparing": "Preparing the runtime…",
+      "noModel": "Runtime ready, but no model chosen — pick one under Models.",
       "ready": "Ready to start",
       "running": "Running on port {{port}}",
       "start": "Start",
@@ -93,17 +88,10 @@
       "backendCpu": "CPU only",
       "cpuFallback": "No compatible GPU found — running on CPU.",
       "release": "llama.cpp {{tag}}",
-      "customModel": "Download another GGUF model",
-      "customModelPlaceholder": "Direct link to a .gguf file",
-      "customModelDownload": "Download"
+      "activeModel": "Active model: {{name}}"
     },
-    "baseUrlPlaceholder": "http://localhost:PORT",
-    "add": "Add",
-    "tabConnections": "Connections",
-    "tabModels": "Models",
     "installedModels": "Installed models",
-    "noAvailableConnections": "No reachable connection to list models from.",
-    "noInstalledModels": "No installed models yet.",
+    "noInstalledModels": "No model in your models folder yet — download one below.",
     "active": "Active",
     "useModel": "Use this model",
     "downloadModels": "Download models",
@@ -113,9 +101,8 @@
     "download": "Download",
     "downloaded": "Downloaded",
     "downloadError": "Download failed",
-    "manualPull": "Download by name or link",
-    "manualPullPlaceholder": "Model name (Ollama) or Hugging Face link (LM Studio)",
-    "pull": "Download",
+    "manualDownload": "Download from a direct link",
+    "manualDownloadPlaceholder": "Direct link to a .gguf file",
     "configureModel": "Configure {{model}}",
     "close": "Close",
     "contextLength": "Context length",
@@ -128,14 +115,12 @@
       "fraction": "Custom"
     },
     "save": "Save",
-    "notApplied": "not applied",
-    "requiresReload": "This provider only applies these settings on the next model (re)load.",
-    "requiresProvider": "Needs {{provider}} running to download — start it and refresh the connection.",
+    "saved": "Applied — the runtime restarted with these settings.",
     "ramEstimate": "~{{gb}} GB RAM",
-    "contextMax": "max {{max}}",
-    "contextMaxUnknown": "this provider does not report the limit",
+    "contextMax": "up to {{max}} (80% of what the model was trained for)",
+    "contextMaxUnknown": "the runtime did not report the limit",
     "contextCurrent": "in use: {{current}}",
-    "useProviderDefault": "Use provider default"
+    "useRuntimeDefault": "Use the runtime default"
   },
   "update": {
     "availableTitle": "Version {{version}} is available",

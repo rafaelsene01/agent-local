@@ -1,10 +1,10 @@
+pub mod bundled;
 pub mod detect;
 pub mod download;
 pub mod job;
 pub mod log;
 pub mod model;
 pub mod process;
-pub mod release;
 pub mod store;
 
 /// Only these two are shipped as prebuilt llama.cpp binaries by the project
@@ -48,7 +48,6 @@ impl Backend {
 pub enum RuntimeError {
     UnsupportedPlatform,
     Network(String),
-    AssetNotFound(String),
     Io(String),
 }
 
@@ -60,9 +59,6 @@ impl std::fmt::Display for RuntimeError {
                 "runtime embutido não está disponível neste sistema operacional"
             ),
             RuntimeError::Network(msg) => write!(f, "falha de rede: {msg}"),
-            RuntimeError::AssetNotFound(name) => {
-                write!(f, "o release do llama.cpp não contém o arquivo '{name}'")
-            }
             RuntimeError::Io(msg) => write!(f, "erro de arquivo: {msg}"),
         }
     }

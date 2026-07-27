@@ -9,7 +9,7 @@
 // Usage:
 //   node scripts/make-portable.mjs --version 1.2.3 [--binary <path>] [--out <dir>]
 
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const APP_NAME = "LocalMind";
 /** Read by `update::flavor()` in the Rust backend. Keep both sides in sync. */
 export const PORTABLE_MARKER = ".portable";
+
+/** Must match `bundle.resources` in tauri.conf.json and the folder
+ *  `runtime::bundled::resource_root` resolves to. */
+export const RESOURCES_DIR = "resources";
 
 export function portableArchiveName(version, arch = "x64") {
   if (!/^\d+\.\d+\.\d+$/.test(String(version ?? ""))) {
@@ -67,29 +71,51 @@ function parseArgs(argv) {
   return flags;
 }
 
-function main(argv) {
-  const flags = parseArgs(argv);
-  const version = flags.version;
-  if (!version) throw new Error("--version is required");
-
-  const binary = resolve(flags.binary ?? join(ROOT, "src-tauri", "target", "release", `${APP_NAME}.exe`));
+/** Lays out the folder that becomes the archive. Split from `main` so the
+ *  contents can be asserted without running the zipper. */
+export function stageBundle({ appDir, binary, resources, version }) {
   if (!existsSync(binary)) {
     throw new Error(
       `binary not found: ${binary}\n` +
         "Run the Tauri build first, and check that tauri.conf.json sets mainBinaryName.",
     );
   }
+  // The runtime components live next to the executable on Windows — that is
+  // where Tauri's resource resolver looks. A bundle without them opens and then
+  // fails at the first thing the user tries, so its absence is an error here
+  // rather than a silently smaller zip (SELF-16).
+  if (!existsSync(resources)) {
+    throw new Error(
+      `bundled resources not found: ${resources}\n` +
+        "Run `npm run vendor` and the Tauri build before packaging the portable bundle.",
+    );
+  }
 
+  mkdirSync(appDir, { recursive: true });
+  copyFileSync(binary, join(appDir, `${APP_NAME}.exe`));
+  writeFileSync(join(appDir, PORTABLE_MARKER), "");
+  writeFileSync(join(appDir, "README.txt"), portableReadme(version));
+  cpSync(resources, join(appDir, RESOURCES_DIR), { recursive: true });
+  return appDir;
+}
+
+function main(argv) {
+  const flags = parseArgs(argv);
+  const version = flags.version;
+  if (!version) throw new Error("--version is required");
+
+  const binary = resolve(flags.binary ?? join(ROOT, "src-tauri", "target", "release", `${APP_NAME}.exe`));
   const outDir = resolve(flags.out ?? join(ROOT, "src-tauri", "target", "release", "portable"));
   const stagingRoot = join(outDir, "staging");
   const appDir = join(stagingRoot, APP_NAME);
 
   rmSync(stagingRoot, { recursive: true, force: true });
-  mkdirSync(appDir, { recursive: true });
-
-  copyFileSync(binary, join(appDir, `${APP_NAME}.exe`));
-  writeFileSync(join(appDir, PORTABLE_MARKER), "");
-  writeFileSync(join(appDir, "README.txt"), portableReadme(version));
+  stageBundle({
+    appDir,
+    binary,
+    resources: resolve(flags.resources ?? join(dirname(binary), RESOURCES_DIR)),
+    version,
+  });
 
   const archive = join(outDir, portableArchiveName(version));
   rmSync(archive, { force: true });

@@ -1,17 +1,37 @@
 # Conexões & Modelos — Specification
 
+> ## ⚠️ PARCIALMENTE REVOGADA por `self-contained-runtime` (M9) — 2026-07-27
+>
+> **Decisões: AD-039 (planejamento) e AD-042 (execução).**
+>
+> O app não fala mais com Ollama nem com LM Studio, não aceita conexão por URL
+> manual, e as tabelas `connections` e `model_configs` foram derrubadas pela
+> migração 7. **Tudo neste documento que descreve "uma conexão" descreve um app
+> que não existe mais.**
+>
+> O que sobreviveu não foi a gestão de conexões — foi a **gestão de modelos**:
+> detecção de RAM, catálogo curado com estimativa, download com progresso e
+> configuração de contexto/GPU continuam valendo, agora sobre o runtime único.
+> Ver a tabela de rastreabilidade no fim para o desfecho de cada requisito.
+>
+> **A spec vigente é `.specs/features/self-contained-runtime/spec.md`.**
+
 ## Problem Statement
 
 O app precisa saber com quais runtimes locais (Ollama, LM Studio) conversar, quais modelos usar dentro deles, e — quando o usuário quiser — baixar novos modelos sem sugerir algo que vai travar a máquina por falta de memória. Hoje a sidebar só tem um placeholder "Nenhuma conexão configurada ainda". Esta feature entrega a gestão real de conexões e modelos, pré-requisito para o chat conversar de verdade (M4).
 
 ## Goals
 
-- [ ] Detectar Ollama e LM Studio automaticamente e mostrar status de saúde
-- [ ] Usuário marca quais conexões estão habilitadas para uso
-- [ ] Listar modelos já instalados/carregados por conexão habilitada, para escolher qual usar
-- [ ] Listar modelos candidatos a download, ocultando/avisando sobre os que não cabem na RAM disponível
-- [ ] Baixar modelo com barra de progresso real
-- [ ] Configurar tamanho de contexto e CPU/GPU por modelo
+> Os checkboxes abaixo estavam **todos desmarcados** apesar de a feature ter sido
+> entregue em 2026-07-25 — leitura enganosa que ficou do template original.
+> Marcados agora com o desfecho real; ❌ é o que o M9 revogou.
+
+- [x] ❌ Detectar Ollama e LM Studio automaticamente e mostrar status de saúde — entregue, depois revogado (AD-042)
+- [x] ❌ Usuário marca quais conexões estão habilitadas para uso — entregue, depois revogado (AD-042)
+- [x] Listar modelos já instalados/carregados ~~por conexão habilitada~~, para escolher qual usar — hoje lê os `.gguf` da pasta de modelos
+- [x] Listar modelos candidatos a download, ocultando/avisando sobre os que não cabem na RAM disponível
+- [x] Baixar modelo com barra de progresso real
+- [x] Configurar tamanho de contexto e CPU/GPU por modelo
 
 ## Out of Scope
 
@@ -133,31 +153,44 @@ Confirmado via busca (não fabricado):
 
 ## Requirement Traceability
 
-| Requirement ID | Story | Phase | Status |
-| --- | --- | --- | --- |
-| CONN-01 | P1: Detectar conexões + status | Execute | Implemented |
-| CONN-02 | P1: Habilitar/desabilitar conexão | Execute | Implemented |
-| CONN-03 | P1: Conexão manual (URL customizada) | Execute | Implemented |
-| CONN-04 | P1: Estado vazio (nenhuma conexão) | Execute | Implemented |
-| CONN-05 | P1: Listar modelos instalados por conexão | Execute | Implemented |
-| CONN-06 | P1: Selecionar modelo ativo | Execute | Implemented |
-| CONN-07 | P2: Detectar RAM do sistema | Execute | Implemented |
-| CONN-08 | P2: Lista curada de modelos + estimativa de RAM | Execute | Implemented |
-| CONN-09 | P2: Ocultar/avisar modelos que não cabem | Execute | Implemented |
-| CONN-10 | P2: Pull manual por nome/link | Execute | Implemented |
-| CONN-11 | P2: Download com progresso | Execute | Implemented |
-| CONN-12 | P2: Configurar contexto por modelo | Execute | Implemented |
-| CONN-13 | P2: Configurar CPU/GPU por modelo | Execute | Implemented |
+> **Atualizada em 2026-07-27.** Cada desfecho abaixo foi conferido contra o
+> código atual por `grep`, não deduzido do que o M9 dizia que ia fazer.
+
+| Requirement ID | Story | Desfecho |
+| --- | --- | --- |
+| CONN-01 | P1: Detectar conexões + status | ❌ **Revogado** por SELF-02 (AD-042) — `providers/ollama.rs` e `providers/lmstudio.rs` não existem mais |
+| CONN-02 | P1: Habilitar/desabilitar conexão | ❌ **Revogado** por SELF-01 (AD-042) — a tabela `connections` caiu na migração 7 |
+| CONN-03 | P1: Conexão manual (URL customizada) | ❌ **Revogado** por SELF-01 (AD-039) — escolha explícita do usuário: nenhum provedor externo sobra |
+| CONN-04 | P1: Estado vazio (nenhuma conexão) | ❌ **Revogado** por SELF-01 — substituído pelo estágio `NoModel`, que é o normal de uma instalação nova (AD-043) |
+| CONN-05 | P1: Listar modelos instalados por conexão | ⚠️ **Vive, reformulado** — `list_installed_models` lê os `.gguf` da pasta de modelos; não há mais "por conexão" |
+| CONN-06 | P1: Selecionar modelo ativo | ✅ **Vive** como SELF-07 — `set_active_model` sobre a linha `embedded_runtime` |
+| CONN-07 | P2: Detectar RAM do sistema | ✅ **Vive** — `system_info::total_ram_gb`, com teste |
+| CONN-08 | P2: Lista curada de modelos + estimativa de RAM | ✅ **Vive** — `models/catalog.rs`; o campo `provider` saiu do catálogo (AD-043) e 8 entradas do Ollama foram removidas, sobrando os 6 GGUF |
+| CONN-09 | P2: Ocultar/avisar modelos que não cabem | ✅ **Vive** — `ModelsList.tsx` filtra por `fits_ram`, com "mostrar todos" |
+| CONN-10 | P2: Pull manual por nome/link | ⚠️ **Vive, estreitado** — o campo de URL continua (`manualUrl` em `ModelsList.tsx`), mas só aceita link direto de `.gguf`; o `pull` por nome saiu junto com o Ollama |
+| CONN-11 | P2: Download com progresso | ✅ **Vive** — evento `model-download-progress`, com canal próprio separado do preparo do motor (AD-043) |
+| CONN-12 | P2: Configurar contexto por modelo | ✅ **Vive** como SELF-08 — `configure_model` |
+| CONN-13 | P2: Configurar CPU/GPU por modelo | ✅ **Vive** como SELF-08 — `configure_model` |
 
 **ID format:** `CONN-[NUMBER]`
-**Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 13 total, 13 mapeados para design, 0 não mapeados
+**Coverage:** 13 no total — **5 revogados, 2 reformulados, 6 vivos.** Nenhum
+apagado: o histórico do "por quê" fica.
+
+**Onde os vivos são mantidos hoje:** os requisitos que sobreviveram passaram a
+ser rastreados pela spec de `self-contained-runtime` (SELF-01, SELF-07, SELF-08).
+Ao mexer no catálogo, na detecção de RAM ou no download de modelo, é **lá** que a
+rastreabilidade se atualiza — não aqui.
 
 ---
 
 ## Success Criteria
 
-- [ ] Com Ollama rodando, o app detecta e lista seus modelos instalados sem configuração manual
-- [ ] Modelos curados que não cabem na RAM detectada não aparecem soltos na lista principal
-- [ ] Um download real progride visivelmente até 100% e o modelo vira selecionável
-- [ ] Configurar contexto/CPU-GPU de um modelo reflete nas chamadas subsequentes (verificável via log)
+> **Revogados junto com as conexões.** Os dois primeiros critérios abaixo
+> dependiam de um Ollama rodando; os dois últimos migraram para os critérios de
+> `self-contained-runtime`. Ficam registrados como o que a feature *pretendia*
+> provar em 2026-07-25.
+
+- [x] ~~Com Ollama rodando, o app detecta e lista seus modelos instalados sem configuração manual~~ — revogado (AD-042)
+- [x] Modelos curados que não cabem na RAM detectada não aparecem soltos na lista principal — continua valendo, agora sob SELF-01
+- [ ] Um download real progride visivelmente até 100% e o modelo vira selecionável — **nunca verificado clicando**; migrou para a T22 de `self-contained-runtime`
+- [ ] Configurar contexto/CPU-GPU de um modelo reflete nas chamadas subsequentes — migrou para SELF-08

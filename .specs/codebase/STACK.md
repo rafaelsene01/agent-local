@@ -27,10 +27,10 @@
 
 ## Backend
 
-- API Style: comandos Tauri (`#[tauri::command]` + `invoke_handler`), não HTTP. 22 comandos registrados em `lib.rs`
+- API Style: comandos Tauri (`#[tauri::command]` + `invoke_handler`), não HTTP. 30 comandos registrados em `lib.rs`
 - Database: SQLite via `rusqlite` 0.31 (feature `bundled` — compila o SQLite junto, sem dependência do SO). Sem ORM; SQL literal com `params![]`
-- HTTP client: `reqwest` 0.12 (features `json`, `stream`) para falar com Ollama/LM Studio
-- Async: `tokio` 1 (features `sync`, `time`) + `tauri::async_runtime`; `async-trait` 0.1 para o trait `ProviderClient` ser dyn-compatible; `futures-util` 0.3 para `bytes_stream()`
+- HTTP client: `reqwest` 0.12 (features `json`, `stream`) para falar com o sidecar `llama-server` em `127.0.0.1` e para baixar modelos GGUF
+- Async: `tokio` 1 (features `sync`, `time`) + `tauri::async_runtime`; `futures-util` 0.3 para `bytes_stream()`. **`async-trait` saiu na AD-042** junto com o trait `ProviderClient` — não há mais despacho dinâmico
 - Serialização: `serde` 1 (derive) + `serde_json` 1
 - IDs: `uuid` 1 (v4); timestamps `chrono` 0.4 em RFC3339 (string)
 - Sistema: `sysinfo` 0.39 (RAM total)
@@ -43,7 +43,7 @@
 
 ## Testing
 
-- Unit: `cargo test` nativo (8 testes hoje, todos em `#[cfg(test)] mod tests` co-locados)
+- Unit: `cargo test` nativo (150 testes + 9 `#[ignore]`, todos em `#[cfg(test)] mod tests` co-locados)
 - Integration: nenhum runner configurado
 - E2E: nenhum
 - Frontend: **nenhum** framework de teste instalado (sem Vitest/RTL) — ver CONCERNS.md
@@ -51,10 +51,9 @@
 
 ## External Services
 
-- LLM runtime local: Ollama (`:11434`, API própria `/api/tags`, `/api/pull`)
-- LLM runtime local: LM Studio (`:1234`, API nativa v1 `/api/v1/*`)
-- LLM genérico: qualquer servidor OpenAI-compatible (`/v1/models`) via conexão manual
-- Nenhum serviço de nuvem, telemetria ou auth externa — o app é offline-first por premissa (PROJECT.md)
+**Nenhum.** Desde o M9 o app não fala com programa externo algum. O único runtime é o `llama-server` que viaja no instalador (`resources/llama/{vulkan,cpu}/`) e roda como processo filho em `127.0.0.1`.
+
+O que sai da máquina, sempre por ação explícita do usuário: o download de um modelo GGUF (Hugging Face) e a verificação de atualização (GitHub Releases, com toggle de opt-out). Nenhum serviço de nuvem, telemetria ou auth externa.
 
 ## Development Tools
 

@@ -156,27 +156,29 @@ Explicitamente excluído. Documentado para impedir crescimento de escopo.
 
 ## Requirement Traceability
 
+> **Status atualizado em 2026-07-27.** "Implementado" aqui significa: o código existe e o gate automatizado da task passou. **Nada foi exercitado clicando, e nenhum instalador foi gerado** — os requisitos que só um app instalado pode provar estão marcados como tal.
+
 | ID | História | Tasks | Status |
 | --- | --- | --- | --- |
-| SELF-01 | P1: Um runtime só | T4, T7, T8, T9, T10, T11 | In Tasks |
-| SELF-02 | P1: Um runtime só | T4, T5 | In Tasks |
-| SELF-03 | P1: Um runtime só | T1, T5 | In Tasks |
-| SELF-04 | P1: Um runtime só | T3 | In Tasks |
-| SELF-05 | P1: Um runtime só | T3 | In Tasks |
-| SELF-06 | P1: Fonte de verdade | T6 | In Tasks |
-| SELF-07 | P1: Fonte de verdade | T2 | In Tasks |
-| SELF-08 | P1: Fonte de verdade | T2 | In Tasks |
-| SELF-09 | P1: Componentes no instalador | T13, T22 | In Tasks |
-| SELF-10 | P1: Componentes no instalador | T14, T17 | In Tasks |
-| SELF-11 | P1: Componentes no instalador | T17, T22 | In Tasks |
-| SELF-12 | P1: Componentes no instalador | T15, T16, T22 | In Tasks |
-| SELF-13 | P1: Componentes no instalador | T14, T20 | In Tasks |
-| SELF-14 | P2: Versões fixadas | T12, T13 | In Tasks |
-| SELF-15 | P2: Versões fixadas | T12, T17 | In Tasks |
-| SELF-16 | P2: Distribuição | T19 | In Tasks |
-| SELF-17 | P2: Distribuição | T19 | In Tasks |
-| SELF-18 | P3: Faxina | T18 | In Tasks |
-| SELF-19 | Transversal | T7, T21 | In Tasks |
+| SELF-01 | P1: Um runtime só | T4, T7, T8, T9, T10, T11 | ✅ Implementado (`npm run build` limpo; não clicado) |
+| SELF-02 | P1: Um runtime só | T4, T5 | ✅ Implementado — `grep -ri "ollama\|lmstudio"` no código só acha comentários que explicam a remoção |
+| SELF-03 | P1: Um runtime só | T1, T5 | ✅ Implementado — `LlamaServerClient`; `async-trait` saiu do `Cargo.toml` |
+| SELF-04 | P1: Um runtime só | T3 | ✅ Implementado |
+| SELF-05 | P1: Um runtime só | T3 | ✅ Implementado — coberto por teste |
+| SELF-06 | P1: Fonte de verdade | T6 | ✅ **Verificado** — migração 7 ensaiada contra uma cópia do banco real (AD-042) |
+| SELF-07 | P1: Fonte de verdade | T2 | ✅ Implementado — 8 testes em `runtime::store` |
+| SELF-08 | P1: Fonte de verdade | T2 | ✅ Implementado — teste garante que escolher modelo não zera contexto/GPU |
+| SELF-09 | P1: Componentes no instalador | T13, T22 | ✅ **Verificado no Windows (2026-07-27)** — regrediu com a poda quebrada (AD-046) e foi refeito: instaladores novos gerados e medidos (**NSIS 53,3 · MSI 91,4 · zip 107,2 MiB**), e o `llama-server.exe` **executado a partir do bundle extraído**, respondendo `Vulkan0: NVIDIA GeForce RTX 3060`. **Linux continua sem nenhuma medição** |
+| SELF-10 | P1: Componentes no instalador | T14, T17 | ✅ Implementado — `prepare_runtime` não faz requisição HTTP nenhuma; `runtime/release.rs` foi apagado |
+| SELF-11 | P1: Componentes no instalador | T17, T22 | ⚠️ **Parcial** — o binário Vulkan embutido foi **executado** e respondeu `Vulkan0: NVIDIA GeForce RTX 3060 (12329 MiB)`, e o CPU também sobe (exit 0, lista vazia); o *fallback* de um para o outro continua sem rodar numa máquina sem loader Vulkan |
+| SELF-12 | P1: Componentes no instalador | T15, T16, T22 | ⚠️ **Parcial** — o download saiu dos dois módulos; importar um PDF offline **não foi testado** |
+| SELF-13 | P1: Componentes no instalador | T14, T20 | ⚠️ **Parcial** — `ensure_executable` tem 3 testes, mas **só rodam em Unix** e esta máquina é Windows. A resposta empírica vem do `check-linux-bundle.mjs` no CI |
+| SELF-14 | P2: Versões fixadas | T12, T13 | ✅ Implementado — `scripts/vendor.json`, llama.cpp `b10146` |
+| SELF-15 | P2: Versões fixadas | T12, T17 | ✅ **Verificado** — asset ausente falha nomeando o arquivo (teste); o vendoring rodou de verdade e trouxe os 4 componentes |
+| SELF-16 | P2: Distribuição | T19 | ✅ **Verificado (2026-07-27)** — o zip foi refeito (**107,2 MiB, 86 arquivos**), extraído numa pasta limpa, e os **dois** `llama-server.exe` de dentro dele foram **executados** com exit 0 (o Vulkan achando a RTX 3060). Isso é o que a conferência anterior parecia provar e não provava: o `.exe` é um stub de 9.216 bytes e a implementação são 9,9 MB na DLL ao lado (AD-046) |
+| SELF-17 | P2: Distribuição | T19 | ⚠️ **Não verificado** — `move_tree` já é recursivo, mas nenhuma atualização portátil foi aplicada |
+| SELF-18 | P3: Faxina | T18 | ✅ Implementado — 2 testes cobrem "remove os quatro, preserva o log e os modelos" |
+| SELF-19 | Transversal | T7, T21 | ✅ Implementado — i18n com 142 chaves em EN e 142 em PT, zero menções a Ollama/LM Studio; docs atualizados |
 
 **Descrição de cada ID:**
 

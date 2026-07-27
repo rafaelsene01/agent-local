@@ -3,7 +3,11 @@
 **Design**: `.specs/features/embedded-runtime/design.md`
 **Spec**: `.specs/features/embedded-runtime/spec.md`
 **Pré-requisito**: `single-active-connection` executado (T1 de lá entrega a infra de migração que a T3 daqui usa)
-**Status**: Complete (2026-07-25) — exceto os itens de T16 que exigem clique na UI, listados abaixo
+**Status**: Complete (2026-07-25) — **parcialmente revogada em 2026-07-27
+(AD-039/AD-042/AD-043)**: as tasks de download do binário e do modelo padrão
+(T4, T5, T7) descrevem um fluxo que não existe mais; o ciclo de vida do sidecar
+(T8, T9) continua sendo o que roda. Ver o banner de `spec.md`. Da T16 sobrou um
+item aberto, sobre o autostart — os outros foram fechados ou revogados.
 
 ---
 
@@ -78,7 +82,11 @@ Phase 4 — Frontend
 - [x] Timeout por client reduzido de 5s para 2s (é `localhost`)
 - [x] Ordem da lista retornada é estável (não depende de quem respondeu primeiro)
 - [x] Gate check passa: `cd src-tauri && cargo check`
-- [ ] Verificação manual: com nada rodando, a sidebar carrega em ~2s, não ~10s
+- [x] ❌ ~~Verificação manual: com nada rodando, a sidebar carrega em ~2s, não ~10s~~
+      — **item sem objeto desde 2026-07-27 (AD-042).** `connection_commands.rs`
+      e o `list_connections` que esta task otimizou foram apagados. Não há mais
+      quatro conexões para checar em paralelo: há um runtime. O C-02 deixou de
+      existir por remoção, não por otimização
 
 **Tests**: none (comando Tauri I/O)
 **Gate**: build
@@ -403,12 +411,24 @@ Phase 4 — Frontend
 
 **Done when**:
 - [x] `npm run build` passa e `npm run tauri dev` sobe até `Finished` + `Running`
-- [ ] Setup completo executado na UI: binário baixado, modelo baixado, sidecar sobe, status vira "disponível"
+- [x] ❌ ~~Setup completo executado na UI: binário baixado, modelo baixado, sidecar sobe, status vira "disponível"~~
+      — **item obsoleto desde 2026-07-27 (AD-039, AD-043).** Nem o binário nem o
+      modelo são baixados no setup: o binário vem do instalador (SELF-09) e o
+      modelo virou ação separada. O equivalente vivo é a T22 de
+      `self-contained-runtime`. **A metade "sidecar sobe" foi feita na AD-046**,
+      pela UI, e falhou — foi assim que o bug da poda apareceu
 - [x] `curl http://127.0.0.1:<porta>/v1/models` lista o modelo (prova que é OpenAI-compatible de verdade)
 - [x] `curl -X POST http://127.0.0.1:<porta>/v1/chat/completions -d '…'` devolve uma resposta gerada (prova que o modelo carregou e infere)
 - [x] Backend escolhido (`vulkan` ou `cpu`) bate com o hardware da máquina de teste
-- [ ] Fechar o app → `tasklist`/`ps` confirma que `llama-server` sumiu (EMBED-07)
-- [ ] Reabrir o app com a conexão embutida ativa → sidecar sobe sozinho (EMBED-06)
+- [x] Fechar o app → `tasklist`/`ps` confirma que `llama-server` sumiu (EMBED-07)
+      — fechado por outro caminho na **AD-041**: o teste `runtime::process::sidecar_real`
+      mostrou o kernel matando o `llama-server pid 11572` ao fechar o handle do
+      Job Object, que é a mesma via de um `taskkill /F`
+- [x] ⚠️ ~~Reabrir o app com a **conexão embutida ativa**~~ → sidecar sobe sozinho (EMBED-06)
+      — a condição foi reformulada (AD-043): não existe "conexão ativa", e o
+      autostart hoje pergunta *"há runtime pronto e modelo ativo?"*. **O autostart
+      em si continua sem ter sido observado** — na AD-046 o app abriu sem runtime
+      preparado, então não havia o que iniciar
 
 **Tests**: none
 **Gate**: full

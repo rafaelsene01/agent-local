@@ -45,7 +45,7 @@ Consome diretamente:
 4. WHEN o usuário cancela durante o streaming THEN o sistema SHALL parar a geração e manter o que já foi recebido até ali
 5. WHEN a chamada ao modelo falha (conexão caiu, erro do provedor) THEN o sistema SHALL mostrar erro na própria conversa, sem travar a UI
 
-**Independent Test**: Enviar "oi" com um modelo configurado e ver a resposta aparecer progressivamente; desligar o Ollama no meio de uma resposta e ver erro tratado.
+**Independent Test**: Enviar "oi" com um modelo configurado e ver a resposta aparecer progressivamente; ~~desligar o Ollama~~ **matar o `llama-server`** no meio de uma resposta e ver erro tratado (atualizado em 2026-07-27 — AD-042: não há mais Ollama; o sidecar é o único runtime).
 
 ---
 
@@ -127,16 +127,17 @@ Consome diretamente:
 | CHAT-13 | P2: Combinar RAG global + RAG do chat | Implemented | Implemented |
 | CHAT-14 | P2: Toggle de uso da base global por chat | Implemented | Implemented |
 | CHAT-15 | P2: Priorização de orçamento de contexto | Implemented | Implemented |
+| CHAT-16 | P3: Indicador de uso do contexto | Implemented | ✅ **Verificado no app (2026-07-27)** — anel ao lado de Enviar, tooltip `Contexto: 8.805 de 21.760 tokens`. O teto espelha o `budget_context` do backend (window configurada, senão o `current_context` que o runtime informa), depois de a primeira versão mostrar `8.805 de 4.096` por assumir o default |
 
 **ID format:** `CHAT-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 15 total, 15 implementados (2026-07-25). Streaming verificado contra socket real (frame partido entre leituras); o fluxo completo pela UI segue por verificar.
+**Coverage:** 16 total, 16 implementados. Streaming verificado contra socket real (frame partido entre leituras). **O fluxo pela UI foi exercitado em 2026-07-27**: chat criado, mensagem enviada e resposta em streaming em 11,2 s contra o runtime empacotado, mais 12 turnos seguidos na mesma conversa.
 
 ---
 
 ## Success Criteria
 
-- [x] Conversa real funciona ponta a ponta com um modelo do Ollama, com streaming visível
+- [x] Conversa real funciona ponta a ponta ~~com um modelo do Ollama~~ **com o runtime embutido**, com streaming visível (atualizado em 2026-07-27 — AD-042)
 - [x] Anexar um arquivo muda a resposta de forma verificável (teste com fato inventado)
 - [x] Um anexo do chat A nunca influencia o chat B
 - [x] Excluir um chat remove seus anexos do disco e dos embeddings

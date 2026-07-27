@@ -269,5 +269,17 @@ Os nomes de asset ficam **escritos por extenso**, não montados por template: fo
 ## Open Questions
 
 1. **O `.deb`/`.AppImage` preserva o bit de execução dos recursos?** Não sei, e o design foi construído para não depender disso. A task de verificação inspeciona o `.deb` gerado (`dpkg -c`) e registra a resposta — se preservar, a cópia de fallback nunca dispara e vira só uma rede de segurança.
-2. **O `tauri build` copia recursos para `target/release/`?** O `make-portable.mjs` precisa saber de onde copiar. A task confere o diretório real depois do primeiro build de release em vez de assumir.
-3. **Quanto o instalador cresce, de fato?** A medir por SO. Se o Windows passar de ~450 MB, vale reavaliar podar mais agressivamente o ONNX Runtime (hoje a pasta `lib/` inteira).
+2. ~~**O `tauri build` copia recursos para `target/release/`?**~~ — **RESPONDIDA em 2026-07-27, medindo.** Sim: `src-tauri/target/release/resources/`, com **79 arquivos e 115,0 MiB**, preservando a estrutura `llama/{vulkan,cpu}`, `onnxruntime/`, `pdfium/`, mais o `icon.ico` e o `.vendor-stamp.json`. É de lá que o `make-portable.mjs` copia, e o zip gerado confirma o caminho.
+3. ~~**Quanto o instalador cresce, de fato?**~~ — **RESPONDIDA em 2026-07-27, medindo** (Windows x64; o Linux continua por medir, porque exige o runner do CI):
+
+   | Artefato | Tamanho |
+   | --- | --- |
+   | `LocalMind_0.1.1_x64-setup.exe` (NSIS) | **47,6 MiB** |
+   | `LocalMind_0.1.1_x64_en-US.msi` | **83,8 MiB** |
+   | `LocalMind_0.1.1_x64-portable.zip` | **92,0 MiB** |
+   | `LocalMind.exe` (binário nu) | **159,2 MiB** |
+   | `resources/` descompactado | **115,0 MiB** |
+
+   **Ficou muito abaixo do teto de ~450 MB que dispararia a reavaliação da poda** — o instalador NSIS cabe em menos de um nono dele. A razão é que os 274 MiB de payload (binário + recursos) comprimem bem: DLLs de `ggml` e o `onnxruntime.dll` são código, e o LZMA sólido do NSIS resolve. **A poda agressiva do `lib/` do ONNX Runtime não é necessária**; a que já existe (`.pdb`/`.lib`/`.exp`/headers) foi suficiente.
+
+   **Nota de unidade, para uma leitura futura não achar divergência onde não há:** a AD-043 registra a árvore vendorizada como **120,5 MB** e este quadro como **115,0 MiB**. É o mesmo número em bases diferentes (120,5 × 10⁶ bytes = 114,9 × 2²⁰).

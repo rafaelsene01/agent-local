@@ -1,29 +1,34 @@
+// SPEC: self-contained-runtime (SELF-01, SELF-02, SELF-07, SELF-08)
+
 use crate::config;
 use crate::db::{require_conn, DbState};
 use crate::providers::{PullProgress, PullStatus};
 use crate::runtime::detect::{probe_devices, DeviceProbe};
 use crate::runtime::process::{free_port, spawn, SidecarConfig, SidecarState};
 use crate::runtime::store::{self, EmbeddedRuntimeRow};
-use crate::runtime::{detect, download, model, release, Backend, RuntimeError, TargetOs};
+use crate::runtime::{bundled, detect, model, Backend, RuntimeError, TargetOs};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+/// The states the runtime card renders. There is no `DownloadingModel` stage:
+/// downloading a GGUF is no longer part of preparing the engine, so it reports
+/// on its own channel (`model-download-progress`) and a machine with a `.gguf`
+/// already in the models folder never needs the network (SELF-11).
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub enum EmbeddedSetupStage {
+pub enum RuntimeStage {
     Unsupported,
-    NotInstalled,
-    DownloadingBinary,
-    DownloadingModel,
+    NotPrepared,
+    Preparing,
+    NoModel,
     Ready,
     Running,
-    Error,
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct EmbeddedRuntimeStatus {
-    pub stage: EmbeddedSetupStage,
+pub struct RuntimeStatus {
+    pub stage: RuntimeStage,
     pub release_tag: Option<String>,
     pub backend: Option<String>,
     pub port: Option<u16>,
@@ -32,45 +37,21 @@ pub struct EmbeddedRuntimeStatus {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct EmbeddedSetupProgress {
-    stage: EmbeddedSetupStage,
+struct RuntimeProgress {
+    stage: RuntimeStage,
     progress: Option<PullProgress>,
     message: Option<String>,
 }
 
-fn emit_stage(app: &AppHandle, stage: EmbeddedSetupStage, message: Option<String>) {
+fn emit_stage(app: &AppHandle, stage: RuntimeStage, message: Option<String>) {
     let _ = app.emit(
-        "embedded-setup-progress",
-        EmbeddedSetupProgress {
+        "runtime-progress",
+        RuntimeProgress {
             stage,
             progress: None,
             message,
         },
     );
-}
-
-/// Forwards byte-level progress from a download channel to the frontend under
-/// the current stage, reusing the same `PullProgress` shape the model
-/// download UI already renders.
-fn forward_progress(
-    app: &AppHandle,
-    stage: EmbeddedSetupStage,
-) -> tokio::sync::mpsc::Sender<PullProgress> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<PullProgress>(32);
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Some(progress) = rx.recv().await {
-            let _ = app.emit(
-                "embedded-setup-progress",
-                EmbeddedSetupProgress {
-                    stage: stage.clone(),
-                    progress: Some(progress),
-                    message: None,
-                },
-            );
-        }
-    });
-    tx
 }
 
 fn base_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -83,159 +64,111 @@ pub fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base_path(app)?.join("models"))
 }
 
-fn runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(base_path(app)?.join("runtime"))
+/// The tag the shipped binaries were built from. Read from the same manifest
+/// the vendoring script uses, so the version the app reports and the version
+/// on disk cannot drift apart.
+const VENDOR_MANIFEST: &str = include_str!("../../scripts/vendor.json");
+
+pub fn vendored_llama_tag() -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(VENDOR_MANIFEST)
+        .ok()?
+        .get("llamaCpp")?
+        .get("tag")?
+        .as_str()
+        .map(str::to_string)
 }
 
-/// The archive lays the binaries out differently per platform/build, so the
-/// extracted tree is searched instead of assuming a fixed path.
-fn find_server_binary(dir: &Path) -> Option<PathBuf> {
-    let target = if cfg!(windows) {
-        "llama-server.exe"
-    } else {
-        "llama-server"
-    };
-    let entries = std::fs::read_dir(dir).ok()?;
-    let mut dirs = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            dirs.push(path);
-        } else if path.file_name().is_some_and(|n| n == target) {
-            return Some(path);
-        }
-    }
-    dirs.iter().find_map(|d| find_server_binary(d))
-}
-
-async fn download_and_extract_backend(
-    app: &AppHandle,
-    tag_assets: &[release::Asset],
-    os: TargetOs,
-    backend: Backend,
-    runtime_dir: &Path,
-) -> Result<PathBuf, String> {
-    let asset = release::pick_asset(tag_assets, os, backend).ok_or_else(|| {
-        RuntimeError::AssetNotFound(release::asset_suffix(os, backend).to_string()).to_string()
-    })?;
-
-    let archive = runtime_dir.join(&asset.name);
-    let progress = forward_progress(app, EmbeddedSetupStage::DownloadingBinary);
-    download::download_with_progress(&asset.browser_download_url, &archive, progress)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let dest = runtime_dir.join(backend.as_str());
-    let _ = std::fs::remove_dir_all(&dest);
-    download::extract(&archive, &dest).map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file(&archive);
-
-    find_server_binary(&dest).ok_or_else(|| {
-        format!(
-            "o arquivo baixado não contém o llama-server (procurado em {})",
-            dest.display()
-        )
-    })
-}
-
-/// Downloads the Vulkan build first and only falls back to the CPU build when
-/// the Vulkan binary cannot even run: the Vulkan build works fine on CPU with
-/// `-ngl 0`, so the common path is a single download (AD-022).
-#[tauri::command]
-pub async fn setup_embedded_runtime(
-    app: AppHandle,
-    db: State<'_, DbState>,
-) -> Result<EmbeddedRuntimeStatus, String> {
-    let Some(os) = TargetOs::current() else {
-        return Err(RuntimeError::UnsupportedPlatform.to_string());
-    };
-    let runtime_dir = runtime_dir(&app)?;
-    let models_dir = models_dir(&app)?;
-    std::fs::create_dir_all(&runtime_dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
-
-    emit_stage(&app, EmbeddedSetupStage::DownloadingBinary, None);
-    let latest = release::resolve_latest().await.map_err(|e| e.to_string())?;
-
-    let mut backend = Backend::Vulkan;
-    let mut binary =
-        download_and_extract_backend(&app, &latest.assets, os, backend, &runtime_dir).await?;
-
-    let mut gpu_layers = 0;
-    match probe_devices(&binary) {
+/// Picks between the two binaries that shipped in the installer. Both are
+/// present on every install, so this makes no network call and the answer is a
+/// property of the machine, not of the download.
+///
+/// Vulkan is probed first and CPU is the fallback for machines whose Vulkan
+/// loader is missing entirely: the Vulkan build itself runs fine on CPU with
+/// `-ngl 0`, so the fallback is the exception, not the rule (AD-022).
+fn choose_backend(app: &AppHandle) -> Result<(Backend, PathBuf, i32), String> {
+    let vulkan = bundled::llama_server(app, Backend::Vulkan)?;
+    match probe_devices(&vulkan) {
         DeviceProbe::GpuAvailable(name) => {
-            gpu_layers = -1;
             emit_stage(
-                &app,
-                EmbeddedSetupStage::DownloadingBinary,
+                app,
+                RuntimeStage::Preparing,
                 Some(format!("GPU detectada: {name}")),
             );
+            Ok((Backend::Vulkan, vulkan, -1))
         }
         DeviceProbe::CpuOnly => {
             emit_stage(
-                &app,
-                EmbeddedSetupStage::DownloadingBinary,
+                app,
+                RuntimeStage::Preparing,
                 Some("Nenhuma GPU compatível encontrada — usando CPU".to_string()),
             );
+            Ok((Backend::Vulkan, vulkan, 0))
         }
         DeviceProbe::BinaryFailed(reason) => {
-            // The Vulkan binary can't even start here (no loader): a
-            // different asset is needed, not just different flags.
             emit_stage(
-                &app,
-                EmbeddedSetupStage::DownloadingBinary,
-                Some(format!("Build Vulkan não executou ({reason}) — baixando a versão CPU")),
+                app,
+                RuntimeStage::Preparing,
+                Some(format!(
+                    "Build Vulkan não executou ({reason}) — usando a versão CPU"
+                )),
             );
-            backend = Backend::Cpu;
-            binary =
-                download_and_extract_backend(&app, &latest.assets, os, backend, &runtime_dir).await?;
-            if let DeviceProbe::BinaryFailed(reason) = detect::probe_devices(&binary) {
+            let cpu = bundled::llama_server(app, Backend::Cpu)?;
+            // Both builds failing is a real dead end, and the reason from the
+            // last probe is the only clue the user can act on.
+            if let DeviceProbe::BinaryFailed(reason) = detect::probe_devices(&cpu) {
                 return Err(format!("o llama-server não executa nesta máquina: {reason}"));
             }
+            Ok((Backend::Cpu, cpu, 0))
         }
     }
+}
 
-    emit_stage(&app, EmbeddedSetupStage::DownloadingModel, None);
-    let progress = forward_progress(&app, EmbeddedSetupStage::DownloadingModel);
-    let model_path = model::download_default_model(&models_dir, progress)
-        .await
-        .map_err(|e| e.to_string())?;
+/// Preparing keeps the model out of it on purpose. The model the user wants is
+/// a separate, much larger decision, and tying the two together would make a
+/// fresh install impossible without the network — which is exactly what this
+/// milestone set out to fix (SELF-11).
+#[tauri::command]
+pub async fn prepare_runtime(
+    app: AppHandle,
+    db: State<'_, DbState>,
+) -> Result<RuntimeStatus, String> {
+    if TargetOs::current().is_none() {
+        return Err(RuntimeError::UnsupportedPlatform.to_string());
+    }
+    let models_dir = models_dir(&app)?;
+    std::fs::create_dir_all(&models_dir).map_err(|e| e.to_string())?;
 
-    let row = EmbeddedRuntimeRow {
-        release_tag: Some(latest.tag_name),
-        backend: Some(backend.as_str().to_string()),
-        binary_path: Some(binary.to_string_lossy().to_string()),
-        model_path: Some(model_path.to_string_lossy().to_string()),
-        context_length: None,
-        gpu_layers: Some(gpu_layers),
-    };
-    {
+    emit_stage(&app, RuntimeStage::Preparing, None);
+    let (backend, binary, probed_gpu_layers) = choose_backend(&app)?;
+
+    // The model already chosen (or copied into the folder by hand) survives a
+    // re-prepare: only the engine half of the row is rewritten.
+    let row = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
+        let mut row = store::load(sql)?;
+        row.release_tag = vendored_llama_tag();
+        row.backend = Some(backend.as_str().to_string());
+        row.binary_path = Some(binary.to_string_lossy().to_string());
+        if row.gpu_layers.is_none() {
+            row.gpu_layers = Some(probed_gpu_layers);
+        }
         store::save(sql, &row)?;
+        row
+    };
+
+    if !row.is_ready() {
+        emit_stage(&app, RuntimeStage::NoModel, None);
+        return Ok(status_from(&row, None, RuntimeStage::NoModel));
     }
 
-    let _ = app.emit(
-        "embedded-setup-progress",
-        EmbeddedSetupProgress {
-            stage: EmbeddedSetupStage::Ready,
-            progress: Some(PullProgress {
-                status: PullStatus::Success,
-                downloaded_bytes: None,
-                total_bytes: None,
-                message: None,
-            }),
-            message: None,
-        },
-    );
-
-    // EMBED-04 AC4: with binary and model in place the sidecar comes up on its
-    // own, so the connection reports "available" without another click. A
-    // failure here still leaves a usable installed state to start manually.
+    // EMBED-04 AC4: with engine and model in place the sidecar comes up on its
+    // own, so the runtime reports "running" without another click. A failure
+    // here still leaves a usable prepared state to start manually.
     match start_sidecar_from_row(&app, &row).await {
-        Ok(port) => Ok(status_from(&row, Some(port), EmbeddedSetupStage::Running)),
+        Ok(port) => Ok(status_from(&row, Some(port), RuntimeStage::Running)),
         Err(e) => {
-            let mut status = status_from(&row, None, EmbeddedSetupStage::Ready);
+            let mut status = status_from(&row, None, RuntimeStage::Ready);
             status.message = Some(e);
             Ok(status)
         }
@@ -282,21 +215,21 @@ pub async fn start_sidecar_from_row(
 }
 
 #[tauri::command]
-pub async fn start_embedded_runtime(
+pub async fn start_runtime(
     app: AppHandle,
     db: State<'_, DbState>,
-) -> Result<EmbeddedRuntimeStatus, String> {
+) -> Result<RuntimeStatus, String> {
     let row = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
         store::load(sql)?
     };
     let port = start_sidecar_from_row(&app, &row).await?;
-    Ok(status_from(&row, Some(port), EmbeddedSetupStage::Running))
+    Ok(status_from(&row, Some(port), RuntimeStage::Running))
 }
 
 #[tauri::command]
-pub fn stop_embedded_runtime(app: AppHandle) -> Result<(), String> {
+pub fn stop_runtime(app: AppHandle) -> Result<(), String> {
     let state = app.state::<SidecarState>();
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(mut sidecar) = guard.take() {
@@ -318,17 +251,11 @@ pub async fn apply_runtime_config(
     let row = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
-        let mut row = store::load(sql)?;
-        row.context_length = context_length;
-        if let Some(layers) = gpu_layers {
-            row.gpu_layers = Some(layers);
-        }
-        store::save(sql, &row)?;
-        row
+        store::set_config(sql, context_length, gpu_layers)?
     };
 
     if running_port(app).is_some() {
-        stop_embedded_runtime(app.clone())?;
+        stop_runtime(app.clone())?;
         start_sidecar_from_row(app, &row).await?;
     }
     Ok(())
@@ -355,17 +282,18 @@ pub async fn apply_active_model(
     let (row, changed) = {
         let guard = db.0.lock().map_err(|e| e.to_string())?;
         let sql = require_conn(&guard)?;
-        let mut row = store::load(sql)?;
-        let changed = row.model_path.as_deref() != Some(wanted.as_str());
-        if changed {
-            row.model_path = Some(wanted);
-            store::save(sql, &row)?;
-        }
-        (row, changed)
+        store::set_active_model(sql, &wanted)?
     };
 
-    if changed && running_port(app).is_some() {
-        stop_embedded_runtime(app.clone())?;
+    if running_port(app).is_some() {
+        if changed {
+            stop_runtime(app.clone())?;
+            start_sidecar_from_row(app, &row).await?;
+        }
+    } else if row.is_ready() {
+        // Picking the first model is what turns a prepared runtime into a
+        // usable one, so it starts here instead of leaving the user to hunt
+        // for a Start button they were never told about.
         start_sidecar_from_row(app, &row).await?;
     }
     Ok(())
@@ -393,9 +321,9 @@ pub fn running_port(app: &AppHandle) -> Option<u16> {
 fn status_from(
     row: &EmbeddedRuntimeRow,
     port: Option<u16>,
-    stage: EmbeddedSetupStage,
-) -> EmbeddedRuntimeStatus {
-    EmbeddedRuntimeStatus {
+    stage: RuntimeStage,
+) -> RuntimeStatus {
+    RuntimeStatus {
         stage,
         release_tag: row.release_tag.clone(),
         backend: row.backend.clone(),
@@ -410,13 +338,13 @@ fn status_from(
 }
 
 #[tauri::command]
-pub fn embedded_runtime_status(
+pub fn runtime_status(
     app: AppHandle,
     db: State<DbState>,
-) -> Result<EmbeddedRuntimeStatus, String> {
+) -> Result<RuntimeStatus, String> {
     if TargetOs::current().is_none() {
-        return Ok(EmbeddedRuntimeStatus {
-            stage: EmbeddedSetupStage::Unsupported,
+        return Ok(RuntimeStatus {
+            stage: RuntimeStage::Unsupported,
             release_tag: None,
             backend: None,
             port: None,
@@ -430,27 +358,80 @@ pub fn embedded_runtime_status(
     let row = store::load(sql)?;
     let port = running_port(&app);
 
+    // "Prepared but with no model" is its own state, not a broken install: it
+    // names the one thing left to do instead of sending the user back to a
+    // preparation step that already succeeded.
     let stage = if port.is_some() {
-        EmbeddedSetupStage::Running
+        RuntimeStage::Running
     } else if row.is_ready() {
-        EmbeddedSetupStage::Ready
+        RuntimeStage::Ready
+    } else if row.is_prepared() {
+        RuntimeStage::NoModel
     } else {
-        EmbeddedSetupStage::NotInstalled
+        RuntimeStage::NotPrepared
     };
 
     Ok(status_from(&row, port, stage))
 }
 
+/// Progress of a GGUF download, keyed by the URL the caller asked for so the
+/// card that started it is the one that shows the bar.
+#[derive(Debug, Serialize, Clone)]
+struct ModelDownloadProgress {
+    identifier: String,
+    progress: PullProgress,
+}
+
+fn forward_model_progress(
+    app: &AppHandle,
+    identifier: String,
+) -> tokio::sync::mpsc::Sender<PullProgress> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<PullProgress>(32);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = app.emit(
+                "model-download-progress",
+                ModelDownloadProgress {
+                    identifier: identifier.clone(),
+                    progress,
+                },
+            );
+        }
+    });
+    tx
+}
+
 /// EMBED-13: any direct `.gguf` link, downloaded into the same models folder
-/// the sidecar already reads from.
+/// the sidecar already reads from. This is the only download the app makes on
+/// the user's behalf now, and it is always a model they picked (SELF-11).
 #[tauri::command]
-pub async fn download_embedded_model(app: AppHandle, url: String) -> Result<(), String> {
+pub async fn download_model(app: AppHandle, url: String) -> Result<(), String> {
     let models_dir = models_dir(&app)?;
-    let progress = forward_progress(&app, EmbeddedSetupStage::DownloadingModel);
-    model::download_model_from_url(&url, &models_dir, progress)
+    let progress = forward_model_progress(&app, url.clone());
+    let result = model::download_model_from_url(&url, &models_dir, progress)
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+
+    // The success frame closes the progress bar; without it a finished
+    // download would sit at whatever percentage the last chunk reported.
+    let _ = app.emit(
+        "model-download-progress",
+        ModelDownloadProgress {
+            identifier: url,
+            progress: PullProgress {
+                status: match &result {
+                    Ok(()) => PullStatus::Success,
+                    Err(_) => PullStatus::Error,
+                },
+                downloaded_bytes: None,
+                total_bytes: None,
+                message: result.as_ref().err().cloned(),
+            },
+        },
+    );
+    result
 }
 
 // ---------------------------------------------------------------------------

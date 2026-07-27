@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { ChatList } from "./ChatList";
 import { DocumentsSection } from "./DocumentsSection";
-import { ConnectionsSection } from "./ConnectionsSection";
+import { RuntimeSection } from "./RuntimeSection";
 import { SettingsSection } from "./SettingsSection";
 
 export function Sidebar() {
@@ -16,7 +16,7 @@ export function Sidebar() {
 
       <ChatList />
       <DocumentsSection />
-      <ConnectionsSection />
+      <RuntimeSection />
       <SettingsSection />
     </aside>
   );

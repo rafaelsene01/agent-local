@@ -120,37 +120,9 @@ fn available_space(dir: &Path) -> Option<u64> {
         .map(|d| d.available_space())
 }
 
-pub fn extract(archive: &Path, dest: &Path) -> Result<(), RuntimeError> {
-    let name = archive.to_string_lossy().to_lowercase();
-    if name.ends_with(".zip") {
-        extract_zip(archive, dest)
-    } else if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
-        extract_tar_gz(archive, dest)
-    } else {
-        Err(RuntimeError::Io(format!(
-            "formato de arquivo não suportado: {}",
-            archive.display()
-        )))
-    }
-}
-
-fn extract_zip(archive: &Path, dest: &Path) -> Result<(), RuntimeError> {
-    let file = File::open(archive).map_err(|e| RuntimeError::Io(e.to_string()))?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|e| RuntimeError::Io(e.to_string()))?;
-    zip.extract(dest).map_err(|e| RuntimeError::Io(e.to_string()))
-}
-
-fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), RuntimeError> {
-    let file = File::open(archive).map_err(|e| RuntimeError::Io(e.to_string()))?;
-    let decoder = flate2::read::GzDecoder::new(file);
-    let mut tar = tar::Archive::new(decoder);
-    tar.unpack(dest).map_err(|e| RuntimeError::Io(e.to_string()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("localmind-test-{name}-{}", std::process::id()));
@@ -159,41 +131,11 @@ mod tests {
         dir
     }
 
-    #[test]
-    fn extracts_a_zip_archive() {
-        let dir = temp_dir("zip");
-        let archive = dir.join("bundle.zip");
-        {
-            let file = File::create(&archive).unwrap();
-            let mut writer = zip::ZipWriter::new(file);
-            writer
-                .start_file::<_, ()>("llama-server.txt", zip::write::SimpleFileOptions::default())
-                .unwrap();
-            writer.write_all(b"binary").unwrap();
-            writer.finish().unwrap();
-        }
-
-        let out = dir.join("out");
-        extract(&archive, &out).unwrap();
-
-        assert_eq!(
-            fs::read_to_string(out.join("llama-server.txt")).unwrap(),
-            "binary"
-        );
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn rejects_an_unknown_archive_format() {
-        let dir = temp_dir("unknown");
-        let archive = dir.join("bundle.7z");
-        fs::write(&archive, b"x").unwrap();
-
-        let err = extract(&archive, &dir.join("out")).unwrap_err();
-
-        assert!(matches!(err, RuntimeError::Io(_)));
-        let _ = fs::remove_dir_all(&dir);
-    }
+    // The archive extraction that lived here moved to
+    // `scripts/vendor-runtime.mjs`: the app no longer downloads archives, only
+    // `.gguf` files, so `extracts_a_zip_archive` and
+    // `rejects_an_unknown_archive_format` lost their subject along with the
+    // `extract` function they covered (SELF-15).
 
     #[tokio::test]
     async fn an_aborted_download_leaves_no_final_file() {

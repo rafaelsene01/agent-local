@@ -1,3 +1,6 @@
+// SPEC: app-shell (SHELL-08), chat-messaging (CHAT-11), documents-rag (DOC-02),
+//       self-contained-runtime (SELF-06), conversation-memory (MEM-15, MEM-16)
+
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Mutex;
@@ -143,6 +146,17 @@ DROP TABLE IF EXISTS model_configs;
 DROP TABLE IF EXISTS connections;
 ";
 
+/// Conversation memory is on by default because off is what the app did before
+/// the feature existed — nobody would need a toggle to get that (MEM-15).
+///
+/// Existing chats inherit the default and therefore have the toggle on with an
+/// empty memory: the turns already in `messages` are only embedded when the user
+/// asks for it, which is the on-demand backfill the feature was designed around
+/// rather than a boot-time sweep (MEM-17).
+const MIGRATION_8_CHAT_MEMORY: &str = "
+ALTER TABLE chats ADD COLUMN use_memory INTEGER NOT NULL DEFAULT 1;
+";
+
 /// Ordered list of schema versions. A migration is applied only when
 /// `PRAGMA user_version` is below its number, which is what makes a column
 /// change reach databases that already exist on disk — `CREATE TABLE IF NOT
@@ -155,6 +169,7 @@ const MIGRATIONS: &[(u32, &str)] = &[
     (5, MIGRATION_5_CHAT_ATTACHMENTS),
     (6, MIGRATION_6_DOCUMENT_NAMESPACE),
     (7, MIGRATION_7_SINGLE_RUNTIME),
+    (8, MIGRATION_8_CHAT_MEMORY),
 ];
 
 fn user_version(conn: &Connection) -> Result<u32, String> {
@@ -294,6 +309,54 @@ mod tests {
             })
             .unwrap();
         assert_eq!(namespace, "global");
+    }
+
+    /// The upgrade path that matters for MEM-15: a machine with conversations
+    /// already in it. The chats survive and come back with memory on, because
+    /// a chat that upgraded into the feature is indistinguishable from one
+    /// created after it.
+    #[test]
+    fn a_pre_existing_chat_gains_conversation_memory_switched_on() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        for (version, sql) in MIGRATIONS.iter().take_while(|(v, _)| *v <= 7) {
+            conn.execute_batch(sql).unwrap();
+            conn.pragma_update(None, "user_version", *version).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO chats (id, title, created_at, updated_at)
+                VALUES ('chat-old', 'conversa antiga', 'now', 'now');
+             INSERT INTO messages (id, chat_id, role, content, created_at)
+                VALUES ('m1', 'chat-old', 'user', 'pergunta', 'now');",
+        )
+        .unwrap();
+
+        apply_migrations(&mut conn).unwrap();
+
+        let enabled: i64 = conn
+            .query_row(
+                "SELECT use_memory FROM chats WHERE id = 'chat-old'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(enabled, 1, "an upgraded chat must have memory available");
+
+        let messages: i64 = conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(messages, 1, "the upgrade must not touch the conversation");
+    }
+
+    /// The number is checked against the list rather than assumed: migration 6
+    /// was already taken by `documents.namespace` when the M9 plan expected it
+    /// to be free, and the mismatch only surfaced at implementation time.
+    #[test]
+    fn conversation_memory_is_migration_eight() {
+        let position = MIGRATIONS
+            .iter()
+            .position(|(_, sql)| *sql == MIGRATION_8_CHAT_MEMORY)
+            .expect("the migration must be registered in the list");
+        assert_eq!(MIGRATIONS[position].0, 8);
     }
 
     #[test]

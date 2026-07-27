@@ -1,3 +1,6 @@
+// SPEC: chat-messaging (CHAT-01, CHAT-04, CHAT-05, CHAT-10, CHAT-14),
+//       conversation-memory (MEM-14, MEM-17, MEM-18)
+
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { chatApi } from "../lib/chatApi";
@@ -7,6 +10,7 @@ import type {
   ChatAttachment,
   ChatRetrievalWarning,
   ChatStreamChunk,
+  MemoryBackfillProgress,
   Message,
 } from "../types";
 
@@ -26,6 +30,12 @@ interface ChatState {
   /** Set when an answer was produced without the knowledge base because
    *  retrieval failed. Distinct from `error`: the message itself worked. */
   retrievalWarning: string | null;
+  /** Progress of the on-demand history indexing, or null when none is running
+   *  (MEM-18). Cleared when it finishes so the button goes back to normal. */
+  memoryIndexing: MemoryBackfillProgress | null;
+  /** What the last indexing run produced, to be able to say "nothing to index"
+   *  instead of leaving the user guessing whether it worked. */
+  memoryIndexed: number | null;
 
   loadChats: () => Promise<void>;
   createChat: () => Promise<void>;
@@ -33,6 +43,8 @@ interface ChatState {
   renameChat: (id: string, title: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
   setUseGlobalRag: (id: string, enabled: boolean) => Promise<void>;
+  setUseMemory: (id: string, enabled: boolean) => Promise<void>;
+  indexHistory: (id: string) => Promise<void>;
   sendMessage: (content: string, attachmentPaths: string[]) => Promise<void>;
   cancelGeneration: () => Promise<void>;
   dismissRetrievalWarning: () => void;
@@ -49,6 +61,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   error: null,
   retrievalWarning: null,
+  memoryIndexing: null,
+  memoryIndexed: null,
 
   loadChats: async () => {
     set({ isLoading: true, error: null });
@@ -121,6 +135,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  // Same optimistic shape as the toggle above (MEM-14).
+  setUseMemory: async (id, enabled) => {
+    const previous = get().chats;
+    set({
+      chats: previous.map((c) => (c.id === id ? { ...c, use_memory: enabled } : c)),
+    });
+    try {
+      await chatApi.setChatUseMemory(id, enabled);
+    } catch (err) {
+      set({ error: String(err), chats: previous });
+    }
+  },
+
+  // Only runs when the user asks (MEM-17). The count is kept so the UI can
+  // distinguish "indexed 12 turns" from "there was nothing to index".
+  indexHistory: async (id) => {
+    set({ memoryIndexing: { chat_id: id, done: 0, total: 0 }, memoryIndexed: null, error: null });
+    try {
+      const indexed = await chatApi.indexChatHistory(id);
+      set({ memoryIndexed: indexed });
+    } catch (err) {
+      set({ error: String(err) });
+    } finally {
+      set({ memoryIndexing: null });
+    }
+  },
+
   // The command resolves only when generation ends; tokens arrive meanwhile
   // through the listener below. Everything here is scoped to `chatId` because
   // the user may be looking at another chat by the time it finishes.
@@ -187,6 +228,14 @@ listen<ChatRetrievalWarning>("chat-retrieval-warning", (event) => {
   const { chat_id, reason } = event.payload;
   if (useChatStore.getState().activeChatId !== chat_id) return;
   useChatStore.setState({ retrievalWarning: reason });
+});
+
+// Indexing a long history takes long enough that a button with no feedback
+// reads as a button that did nothing (MEM-18).
+listen<MemoryBackfillProgress>("memory-backfill-progress", (event) => {
+  const running = useChatStore.getState().memoryIndexing;
+  if (!running || running.chat_id !== event.payload.chat_id) return;
+  useChatStore.setState({ memoryIndexing: event.payload });
 });
 
 listen<ChatStreamChunk>("chat-stream-chunk", (event) => {

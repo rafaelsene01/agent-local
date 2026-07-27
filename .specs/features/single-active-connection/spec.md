@@ -1,5 +1,24 @@
 # Conexão e Modelo Ativos Únicos — Specification
 
+> ## ⚠️ QUASE INTEIRAMENTE REVOGADA por `self-contained-runtime` (M9) — 2026-07-27
+>
+> **Decisões: AD-039 (planejamento) e AD-042 (execução).**
+>
+> Esta feature existia para responder *"se três conexões estão habilitadas, qual
+> delas o chat usa?"*. **O M9 dissolveu a pergunta em vez de respondê-la:** com um
+> runtime só, não há conexão para escolher. A tabela `connections` foi derrubada
+> pela migração 7 e o `ConnectionsList.tsx` foi apagado.
+>
+> Sobrou a **metade do modelo**: continua existindo exatamente um modelo ativo,
+> agora numa linha da tabela `embedded_runtime` em vez de um par
+> (conexão, modelo) — é o SELF-07.
+>
+> E sobrou algo que este documento entregou **de passagem** e que o projeto
+> inteiro usa até hoje: o **versionamento de migração** por `PRAGMA user_version`
+> (ACTIVE-09), que resolveu o C-01 e está na migração 8.
+>
+> **A spec vigente é `.specs/features/self-contained-runtime/spec.md`.**
+
 ## Problem Statement
 
 O M3 entregou conexões como um conjunto de checkboxes: várias podem estar "habilitadas" ao mesmo tempo (`connections.enabled`), enquanto o modelo ativo já é único (`model_configs.is_active`, com `set_active_model` zerando os outros). Essa assimetria deixa uma pergunta sem resposta na hora de mandar uma mensagem: **se três conexões estão habilitadas, qual delas o chat usa?** Antes de implementar o chat (M4) ou adicionar um quarto runtime (M7), o modelo mental precisa ser um só: **uma conexão ativa, um modelo ativo, e é esse par que responde.**
@@ -110,21 +129,29 @@ O M3 entregou conexões como um conjunto de checkboxes: várias podem estar "hab
 
 ## Requirement Traceability
 
-| Requirement ID | Story | Phase | Status |
-| --- | --- | --- | --- |
-| ACTIVE-01 | P1: Ativar conexão desativa a anterior | Tasks | Complete |
-| ACTIVE-02 | P1: Estado "nenhuma ativa" é válido e visível | Tasks | Complete |
-| ACTIVE-03 | P1: Todas as conexões listadas com status, ativa destacada | Tasks | Complete |
-| ACTIVE-04 | P1: Ativar conexão indisponível é permitido, mas sinalizado | Tasks | Complete |
-| ACTIVE-05 | P1: Escolher modelo ativa sua conexão na mesma ação | Tasks | Complete |
-| ACTIVE-06 | P1: Modelo ativo sempre pertence à conexão ativa (invariante) | Tasks | Complete |
-| ACTIVE-07 | P1: Consultar o par ativo (conexão + modelo) num único retorno | Tasks | Complete |
-| ACTIVE-08 | P1: Modelos de conexões disponíveis inativas são inspecionáveis | Tasks | Complete |
-| ACTIVE-09 | P1: Migração versionada aplicada em banco existente | Tasks | Complete |
-| ACTIVE-10 | P1: Migração normaliza múltiplos habilitados para um ativo | Tasks | Complete |
+> **Atualizada em 2026-07-27.** Os 10 requisitos foram implementados e o desfecho
+> abaixo é o que restou depois do M9, conferido contra o código.
+
+| Requirement ID | Story | Desfecho |
+| --- | --- | --- |
+| ACTIVE-01 | P1: Ativar conexão desativa a anterior | ❌ **Revogado** por SELF-01 (AD-042) — não há conexão para ativar |
+| ACTIVE-02 | P1: Estado "nenhuma ativa" é válido e visível | ❌ **Revogado** por SELF-01 — o equivalente hoje é o estágio `NoModel` (AD-043) |
+| ACTIVE-03 | P1: Todas as conexões listadas com status, ativa destacada | ❌ **Revogado** por SELF-01 — `ConnectionsList.tsx` apagado |
+| ACTIVE-04 | P1: Ativar conexão indisponível é permitido, mas sinalizado | ❌ **Revogado** por SELF-01 |
+| ACTIVE-05 | P1: Escolher modelo ativa sua conexão na mesma ação | ❌ **Revogado por perda de objeto** — só havia uma ação porque havia duas coisas a manter em sincronia |
+| ACTIVE-06 | P1: Modelo ativo sempre pertence à conexão ativa (invariante) | ❌ **Revogado por perda de objeto** — a invariante virou verdade estrutural: uma linha só em `embedded_runtime` |
+| ACTIVE-07 | P1: Consultar o par ativo num único retorno | ❌ **Revogado** — `get_active_pair` saiu do `invoke_handler`; hoje é `get_active_model` (SELF-07) |
+| ACTIVE-08 | P1: Modelos de conexões inativas são inspecionáveis | ❌ **Revogado** por SELF-01 |
+| ACTIVE-09 | P1: Migração versionada aplicada em banco existente | ✅ **Vive, e é o legado desta feature** — a lista `MIGRATIONS` em `db.rs` está na 8; resolveu o C-01 |
+| ACTIVE-10 | P1: Migração normaliza múltiplos habilitados para um ativo | ⚠️ **Cumprida e superada** — a migração 2 rodou; a 7 derrubou a tabela que ela normalizava |
 
 **ID format:** `ACTIVE-[NUMBER]`
-**Coverage:** 10 total, 10 mapeados para tasks, 0 não mapeados — **10 implementados (2026-07-25)**
+**Coverage:** 10 no total — **8 revogados, 1 vivo (ACTIVE-09), 1 cumprido e
+superado.** Nenhum apagado.
+
+**A metade que sobreviveu não está aqui:** "exatamente um modelo ativo" continua
+sendo regra do app, rastreada como **SELF-07** em
+`.specs/features/self-contained-runtime/spec.md`.
 
 ---
 

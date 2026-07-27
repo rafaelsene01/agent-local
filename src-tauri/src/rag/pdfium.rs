@@ -1,58 +1,26 @@
-use crate::runtime::download;
+// SPEC: self-contained-runtime (SELF-12)
+
+use crate::runtime::bundled;
 use pdfium_render::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::AppHandle;
 
-/// Pinned release from `bblanchon/pdfium-binaries`, verified live on
-/// 2026-07-26 (HTTP 200, 3.74 MB for the Windows asset).
-///
-/// Replaces `pdf-extract` 0.12, which silently dropped whole glyphs from this
-/// project's own test corpus: `q`, `v`, `x`, `b`, `f` and every accented vowel
+/// pdfium replaced `pdf-extract` 0.12, which silently dropped whole glyphs from
+/// this project's own corpus: `q`, `v`, `x`, `b`, `f` and every accented vowel
 /// vanished from 51% of the chunks of a Código Civil PDF ("salvo se o exercício
 /// da profissão" came out as "salo se o eerccio da profisso"). pdfium reads the
 /// same file with zero losses, measured against poppler as a reference.
-const RELEASE: &str = "chromium/7961";
+///
+/// It used to be downloaded on first use; it now ships in the installer, and
+/// the pinned release lives in `scripts/vendor.json`.
 
-/// Downloaded rather than bundled, the same trade-off already made for the
-/// llama.cpp sidecar (AD-022) and the ONNX Runtime (AD-025).
-fn asset_url() -> Option<String> {
-    let file = if cfg!(windows) {
-        "pdfium-win-x64.tgz"
-    } else if cfg!(target_os = "linux") {
-        "pdfium-linux-x64.tgz"
-    } else {
-        return None;
-    };
-    Some(format!(
-        "https://github.com/bblanchon/pdfium-binaries/releases/download/{RELEASE}/{file}"
-    ))
-}
-
-/// Set once the library is on disk; `extract_text` is synchronous and has no
-/// `AppHandle`, so the resolved path has to outlive the download. Same shape as
+/// Set once the library is resolved; `extract_text` is synchronous and has no
+/// `AppHandle`, so the path has to outlive the lookup. Same shape as
 /// `embedding::MODEL_CACHE_DIR`.
 static LIBRARY_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// The archive nests the library under `bin/` (Windows) or `lib/` (Linux), and
-/// the layout is the vendor's to change, so it is searched for rather than
-/// assumed.
-fn find_library(dir: &Path) -> Option<PathBuf> {
-    let wanted = Pdfium::pdfium_platform_library_name();
-    let entries = std::fs::read_dir(dir).ok()?;
-    let mut dirs = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            dirs.push(path);
-        } else if path.file_name().is_some_and(|n| n == wanted) {
-            return Some(path);
-        }
-    }
-    dirs.iter().find_map(|d| find_library(d))
-}
-
-/// Only PDFs need the library, so importing a `.txt` never triggers a download.
+/// Only PDFs need the library, so importing a `.txt` never touches it.
 pub async fn ensure_for(app: &AppHandle, path: &Path) -> Result<(), String> {
     if super::parsing::extension_of(path) != "pdf" {
         return Ok(());
@@ -60,39 +28,10 @@ pub async fn ensure_for(app: &AppHandle, path: &Path) -> Result<(), String> {
     ensure_library(app).await.map(|_| ())
 }
 
+/// Still `async` because the document pipeline calls it that way; there is no
+/// I/O left to await beyond resolving a path.
 pub async fn ensure_library(app: &AppHandle) -> Result<PathBuf, String> {
-    let cfg = crate::config::load_config(app)?
-        .ok_or_else(|| "Nenhuma pasta de armazenamento configurada ainda".to_string())?;
-    let dir = cfg.base_path_buf().join("runtime").join("pdfium");
-
-    if let Some(existing) = find_library(&dir) {
-        remember(&existing);
-        return Ok(existing);
-    }
-
-    let url = asset_url()
-        .ok_or_else(|| "a leitura de PDF só está disponível para Windows e Linux".to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-
-    // No progress consumer: this runs once, inside the document pipeline, which
-    // already reports its own "parsing" stage to the UI.
-    let archive = dir.join(url.rsplit('/').next().unwrap_or("pdfium-archive"));
-    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-    tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
-
-    download::download_with_progress(&url, &archive, tx)
-        .await
-        .map_err(|e| format!("falha ao baixar o leitor de PDF: {e}"))?;
-    download::extract(&archive, &dir).map_err(|e| e.to_string())?;
-    let _ = std::fs::remove_file(&archive);
-
-    let library = find_library(&dir).ok_or_else(|| {
-        format!(
-            "o pacote do pdfium não contém {} em {}",
-            Pdfium::pdfium_platform_library_name().to_string_lossy(),
-            dir.display()
-        )
-    })?;
+    let library = bundled::pdfium_library(app)?;
     remember(&library);
     Ok(library)
 }
@@ -135,17 +74,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_pinned_asset_url_is_well_formed_for_this_platform() {
-        let url = asset_url().expect("Windows and Linux are supported");
-        assert!(url.contains(RELEASE));
-        assert!(url.ends_with(".tgz"));
-    }
-
-    #[test]
     fn a_non_pdf_needs_no_library() {
-        // `ensure_for` short-circuits on extension before touching the network
-        // or the config, which is what keeps a .txt import offline.
+        // `ensure_for` short-circuits on extension before resolving anything,
+        // which is what makes importing a .txt work on a broken install too.
         assert_eq!(super::super::parsing::extension_of(Path::new("nota.txt")), "txt");
         assert_eq!(super::super::parsing::extension_of(Path::new("a.PDF")), "pdf");
+    }
+
+    /// Reading a PDF with no library loaded has to say so, not panic or return
+    /// empty text that would be indexed as a valid (blank) document.
+    #[test]
+    fn extracting_before_the_library_is_resolved_fails_with_a_message() {
+        if LIBRARY_PATH.lock().unwrap().is_some() {
+            // Another test in this process already resolved it; the assertion
+            // below would then be testing nothing.
+            return;
+        }
+        let error = extract_text(Path::new("qualquer.pdf")).unwrap_err();
+        assert!(error.contains("leitor de PDF"), "unexpected message: {error}");
     }
 }

@@ -51,7 +51,7 @@ import { ModelConfigForm } from "./ModelConfigForm";
 
 ## Type Safety / Documentation
 
-**Rust:** tipos explícitos nas assinaturas públicas; `#[derive(Debug, Serialize, Clone)]` no que sai pro frontend, `Deserialize` no que entra. Structs de resposta de API externa são privadas ao módulo (`struct TagsResponse` em `ollama.rs`) e nunca vazam pro frontend — sempre convertidas pro tipo comum (`InstalledModel`).
+**Rust:** tipos explícitos nas assinaturas públicas; `#[derive(Debug, Serialize, Clone)]` no que sai pro frontend, `Deserialize` no que entra. Structs de resposta HTTP são privadas ao módulo (`struct ModelsResponse` em `llama_server.rs`) e nunca vazam pro frontend — sempre convertidas pro tipo comum (`InstalledModel`, `ModelLimits`).
 
 **TypeScript:** `strict` ligado (via `tsconfig.json`). Union types de string literal em vez de enum:
 ```ts
@@ -93,8 +93,8 @@ catch (err) { set({ error: String(err), isLoading: false }); }
 
 2. **Divergências entre spec/design e realidade**, com marcador padronizado:
 ```rust
-// SPEC_DEVIATION: design.md guessed camelCase `contextLength`/`gpuOffload` […]
-// The real v1 REST API (confirmed against lmstudio.ai/docs/…) uses snake_case
+// SPEC_DEVIATION: tasks.md kept the old command names after the rename […]
+// Renamed here so runtimeApi.ts can map one function per registered command
 ```
 
 3. **Fatos verificados** que ficariam invisíveis no código:
@@ -120,5 +120,5 @@ As variáveis vivem em `src/styles/themes.css`, um bloco por `[data-theme=…]`.
 
 [Conventional Commits](https://www.conventionalcommits.org/), escopo = nome da feature, corpo explicando o **porquê** e registrando qualquer `SPEC_DEVIATION`. Um commit por task.
 ```
-feat(connections): implement LmStudioClient
+feat(runtime): start llama-server from the bundled binaries
 ```

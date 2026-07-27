@@ -14,6 +14,15 @@ pub struct EmbeddedRuntimeRow {
 }
 
 impl EmbeddedRuntimeRow {
+    /// The engine half alone: a probed backend whose binary is still on disk.
+    /// Kept apart from `is_ready` because "prepared but no model" is the normal
+    /// state of a fresh install now that preparing downloads nothing (SELF-11).
+    pub fn is_prepared(&self) -> bool {
+        self.binary_path
+            .as_deref()
+            .is_some_and(|bin| std::path::Path::new(bin).exists())
+    }
+
     /// Both halves are required: a binary with no model can't answer, and a
     /// model with no binary can't run.
     pub fn is_ready(&self) -> bool {
@@ -91,21 +100,37 @@ pub fn active_model(sql: &SqlConnection) -> Result<Option<ActiveModel>, String> 
 
 /// Choosing a model must not silently reset the context/GPU the user tuned, so
 /// this writes one field of the singleton row rather than replacing it.
-pub fn set_active_model(sql: &SqlConnection, model_path: &str) -> Result<(), String> {
+///
+/// Returns the row and whether the model actually changed — the caller needs
+/// the second half to decide if the sidecar has to be restarted.
+pub fn set_active_model(
+    sql: &SqlConnection,
+    model_path: &str,
+) -> Result<(EmbeddedRuntimeRow, bool), String> {
     let mut row = load(sql)?;
-    row.model_path = Some(model_path.to_string());
-    save(sql, &row)
+    let changed = row.model_path.as_deref() != Some(model_path);
+    if changed {
+        row.model_path = Some(model_path.to_string());
+        save(sql, &row)?;
+    }
+    Ok((row, changed))
 }
 
+/// `context_length: None` is a real value — "let the server pick" — so it is
+/// written. `gpu_layers: None` is the absence of an opinion and leaves the
+/// current offload alone; the two nulls mean different things here.
 pub fn set_config(
     sql: &SqlConnection,
     context_length: Option<u32>,
     gpu_layers: Option<i32>,
-) -> Result<(), String> {
+) -> Result<EmbeddedRuntimeRow, String> {
     let mut row = load(sql)?;
     row.context_length = context_length;
-    row.gpu_layers = gpu_layers;
-    save(sql, &row)
+    if let Some(layers) = gpu_layers {
+        row.gpu_layers = Some(layers);
+    }
+    save(sql, &row)?;
+    Ok(row)
 }
 
 pub fn save(sql: &SqlConnection, row: &EmbeddedRuntimeRow) -> Result<(), String> {
@@ -255,6 +280,60 @@ mod tests {
         let row = load(&sql).unwrap();
         assert_eq!(row.binary_path.as_deref(), Some("/bin/llama-server"));
         assert_eq!(row.release_tag.as_deref(), Some("b10107"));
+    }
+
+    /// The state a fresh install sits in now that preparing downloads no
+    /// model: the engine is there, the model is the user's next move.
+    #[test]
+    fn an_engine_without_a_model_is_prepared_but_not_ready() {
+        let binary = a_model_file("llama-server-stub");
+        let row = EmbeddedRuntimeRow {
+            binary_path: Some(binary.to_string_lossy().to_string()),
+            model_path: None,
+            ..Default::default()
+        };
+        assert!(row.is_prepared(), "the binary is on disk");
+        assert!(!row.is_ready(), "but there is nothing to load");
+
+        let _ = std::fs::remove_file(&binary);
+    }
+
+    #[test]
+    fn a_binary_path_pointing_at_nothing_is_not_prepared() {
+        let row = EmbeddedRuntimeRow {
+            binary_path: Some("/nope/llama-server".to_string()),
+            ..Default::default()
+        };
+        assert!(!row.is_prepared());
+    }
+
+    #[test]
+    fn set_config_leaves_the_gpu_choice_alone_when_none_is_given() {
+        let sql = setup();
+        set_config(&sql, Some(4096), Some(-1)).unwrap();
+        set_config(&sql, Some(8192), None).unwrap();
+
+        let row = load(&sql).unwrap();
+        assert_eq!(row.context_length, Some(8192));
+        assert_eq!(
+            row.gpu_layers,
+            Some(-1),
+            "no opinion about the GPU must not read as 'turn it off'"
+        );
+    }
+
+    #[test]
+    fn set_active_model_reports_whether_the_choice_actually_changed() {
+        let sql = setup();
+        let path = a_model_file("same.gguf");
+        let as_str = path.to_string_lossy().to_string();
+
+        let (_, first) = set_active_model(&sql, &as_str).unwrap();
+        let (_, second) = set_active_model(&sql, &as_str).unwrap();
+        assert!(first, "the first choice is a change");
+        assert!(!second, "re-picking the same file must not restart the sidecar");
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

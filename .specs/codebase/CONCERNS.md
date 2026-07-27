@@ -11,49 +11,40 @@ Riscos observados no código real (com caminho/arquivo como evidência), prioriz
 **Quando dói:** o M7 (`embedded-runtime`) e a mudança de "conexão única ativa" já mexem em `connections` — este é o momento natural de resolver.
 **Fix sugerido:** adicionar `PRAGMA user_version` + um vetor de migrações aplicadas em ordem (`migrations: &[(u32, &str)]`), rodando só as acima da versão atual. ~40 linhas, sem dependência nova.
 
-### C-02: `list_connections` faz health checks sequenciais de 5s — trava a UI
+### C-02: ~~`list_connections` faz health checks sequenciais de 5s — trava a UI~~ — **RESOLVIDO POR REMOÇÃO (2026-07-27, M9)**
 
-**Evidência:** `src-tauri/src/connection_commands.rs` — o loop `for conn in base_list { manager.refresh_status(&conn).await }` é sequencial; cada client usa `timeout(Duration::from_secs(5))` (`providers/ollama.rs`, `lmstudio.rs`, `custom.rs`).
-**Risco:** com Ollama e LM Studio ambos **desligados** (o cenário mais comum de primeira execução), abrir a sidebar leva **~10s** só esperando timeouts. Cada conexão custom adicionada soma mais 5s. `ConnectionsSection` chama isso no `useEffect` de montagem, então o app inteiro parece travado.
-**Fix sugerido:** paralelizar com `futures_util::future::join_all` (o crate já está nas dependências) — passa de 10s pra ~5s; e/ou baixar o timeout de health check pra 1-2s (é `localhost`, não rede).
+Não existe mais lista de conexões para checar. O `runtime_status` lê uma linha de banco e consulta o estado do processo filho em memória; nenhum health check HTTP acontece ao abrir a sidebar. `list_connections`, `ConnectionManager` e os três clients com timeout de 5s foram apagados na AD-042.
 
 ### C-03: `src/types.ts` espelha as structs Rust manualmente, sem geração
 
-**Evidência:** `src/types.ts` tem 8 interfaces que replicam à mão structs de `providers/mod.rs`, `connections.rs`, `models/catalog.rs` e `model_commands.rs`. O caso mais frágil é `DownloadableModel`: no Rust é `struct DownloadableModel { #[serde(flatten)] info: CuratedModelInfo, fits_ram: bool }`, e no TS é uma interface **plana** com todos os campos — a correspondência só existe por causa do `flatten`.
+**Evidência:** `src/types.ts` replica à mão structs de `providers/mod.rs`, `runtime/store.rs`, `models/catalog.rs` e `runtime_commands.rs`. O M9 **reduziu** a superfície — `Connection`, `ConnectionProvider`, `ConnectionStatus`, `ActivePair` e `ConfigApplied` deixaram de existir dos dois lados —, mas não resolveu o problema. O caso mais frágil é `DownloadableModel`: no Rust é `struct DownloadableModel { #[serde(flatten)] info: CuratedModelInfo, fits_ram: bool }`, e no TS é uma interface **plana** com todos os campos — a correspondência só existe por causa do `flatten`.
 **Risco:** renomear um campo no Rust compila normalmente e o TS também compila; a quebra só aparece em runtime, como `undefined` na tela. Nenhum teste pega isso hoje (ver C-04).
 **Fix sugerido:** adotar `ts-rs` ou `specta`/`tauri-specta` pra gerar `types.ts` a partir das structs. Vale a pena quando o número de tipos crescer mais (hoje são 8; dobrar isso torna o manual insustentável).
 
 ### C-04: Zero cobertura de teste no frontend
 
 **Evidência:** `package.json` não tem Vitest, Jest, Testing Library nem script `test`. `.specs/codebase/TESTING.md` já registra isso como "none (por ora)".
-**Risco:** 12 componentes React e 4 stores Zustand, incluindo lógica não-trivial sem teste nenhum: o filtro `fits_ram` + toggle "mostrar todos" (`ModelsList.tsx`), o cálculo de percentual de download (`ModelDownloadCard.tsx`), o listener de evento que indexa progresso por chave composta (`connectionsStore.ts`).
+**Risco:** 12 componentes React e 4 stores Zustand, incluindo lógica não-trivial sem teste nenhum: o filtro `fits_ram` + toggle "mostrar todos" (`ModelsList.tsx`), o cálculo de percentual de download (`ModelDownloadCard.tsx`), o listener de evento que indexa progresso pela URL do `.gguf` (`runtimeStore.ts`) e, desde o M6, o listener de `memory-backfill-progress` que descarta eventos de outra conversa (`chatStore.ts`).
 **Fix sugerido:** Vitest + RTL cobrindo primeiro os stores (lógica pura, sem DOM) — é onde está o maior risco por menor esforço.
 
 ## Médio impacto
 
-### C-05: Providers nunca exercitados contra servidor real
+### C-05: ~~Providers nunca exercitados contra servidor real~~ — **RESOLVIDO POR REMOÇÃO (2026-07-27, M9)**
 
-**Evidência:** registrado na AD-019 do STATE.md e nos commits de T5/T6 — nem Ollama nem LM Studio estavam rodando durante a implementação do M3. A verificação foi `cargo check` + payloads confirmados na documentação oficial.
-**Risco:** parsing de resposta (`TagsResponse`, `ModelsResponse`, `DownloadStatusResponse`) e o loop NDJSON nunca rodaram com bytes de verdade. Campos opcionais/ausentes na prática podem quebrar a desserialização.
-**Fix sugerido:** já está nos Todos do STATE.md — subir Ollama localmente e percorrer detectar → listar → baixar modelo pequeno → configurar. Alternativa complementar: testes unitários com fixtures JSON gravadas (o `TESTING.md` já prevê "unit com fixtures/mocks quando prático" pra essa camada).
+Os dois clients que nunca tinham falado com um servidor de verdade (`OllamaClient`, `LmStudioClient`) são justamente os que saíram. O que restou — `LlamaServerClient` — fala com o sidecar que o próprio app sobe, e esse caminho já foi exercitado ao vivo na AD-028 e na AD-041.
 
-### C-06: Polling de download do LM Studio não tem timeout nem cancelamento
+### C-06: ~~Polling de download do LM Studio não tem timeout nem cancelamento~~ — **RESOLVIDO POR REMOÇÃO (2026-07-27, M9)**
 
-**Evidência:** `src-tauri/src/providers/lmstudio.rs` — `loop { … tokio::time::sleep(750ms) }` só sai em `completed`, `failed` ou erro HTTP.
-**Risco:** se o job ficar em `"paused"` (status documentado na API), o loop roda indefinidamente consumindo uma request a cada 750ms pelo resto da sessão. Não há como o usuário cancelar — não existe comando de cancelamento de download em `model_commands.rs`.
-**Fix sugerido:** tratar `"paused"` como estado terminal reportável, e/ou adicionar um `CancellationToken` (o padrão de `CancellationRegistry` já está previsto no design de `chat-messaging`, dá pra reusar).
+O loop de polling saiu junto com `providers/lmstudio.rs`. Todo download agora é um GET direto de um `.gguf`, com progresso por bytes e sem estado de job para consultar.
 
-### C-07: `require_conn` duplicado em 3 arquivos
+### C-07: ~~`require_conn` duplicado em 3 arquivos~~ — **RESOLVIDO**
 
-**Evidência:** função idêntica em `commands.rs:8`, `connection_commands.rs:7` e `model_commands.rs:11` — mesma assinatura, mesma mensagem de erro em português.
-**Risco:** baixo em si, mas é o tipo de duplicação que diverge silenciosamente (alguém muda a mensagem em um lugar só). Vai virar 4 cópias assim que o M7 adicionar comandos.
-**Fix sugerido:** mover pra `db.rs` como `pub fn require_conn(...)` e importar. Refactor de ~10 minutos, melhor fazer antes do M7.
+**Evidência:** a duplicação foi resolvida no caminho: `require_conn` vive em `db.rs` e é importada. Dois dos três arquivos que a copiavam (`connection_commands.rs`, `model_commands.rs`) nem existem mais.
+**Status:** resolvido. Mantido aqui como registro.
 
-### C-08: Token de auth do LM Studio não é enviado
+### C-08: ~~Token de auth do LM Studio não é enviado~~ — **RESOLVIDO POR REMOÇÃO (2026-07-27, M9)**
 
-**Evidência:** a doc oficial mostra `Authorization: Bearer $LM_API_TOKEN` nos exemplos; `LmStudioClient` não envia header nenhum.
-**Risco:** usuários que ativarem autenticação no LM Studio verão a conexão como "indisponível" sem explicação — o erro vira `ProviderError::Unavailable` genérico.
-**Fix sugerido:** campo opcional de token na conexão (a tabela `connections` precisaria de uma coluna — ver C-01), ou pelo menos distinguir 401/403 de "servidor offline" na mensagem.
+Não há mais servidor externo a autenticar. O sidecar é filho do app, escuta em `127.0.0.1` numa porta efêmera e não usa credencial.
 
 ## Baixo impacto
 
@@ -75,15 +66,15 @@ Riscos observados no código real (com caminho/arquivo como evidência), prioriz
 **Risco:** apagar um chat que está gerando deixa o `send_message` rodando até o fim, gastando GPU/CPU para um resultado que agora é recusado pelo banco (desde a C-13). Desperdício visível como lentidão, não como erro.
 **Fix sugerido:** chamar o cancelamento antes da transação, do mesmo jeito que `cancel_generation` faz.
 
-### C-10: Semeadura de conexão casa por `provider`, não por URL
+> **O M6 encostou nisto sem resolver (2026-07-27, AD-044).** A gravação de memória roda no fim da geração, então uma conversa apagada no meio poderia receber vetores num namespace que o `delete_chat` já limpou — órfãos que nada mais apagaria. `chat::memory::record_turn` confere que o chat ainda existe antes do `upsert`, o mesmo padrão do `still_exists` do pipeline. Isso fecha a janela nova; **a concern original continua aberta**.
 
-**Evidência:** `connection_commands::list_connections` — `existing.iter().any(|c| c.provider == candidate.provider)`.
-**Risco:** se o usuário adicionar manualmente uma conexão com provider `ollama` numa porta diferente, o Ollama padrão de `:11434` nunca é semeado (o app assume que já existe). Cenário raro, mas confuso quando acontece.
-**Fix sugerido:** comparar por `base_url`, não por `provider`.
+### C-10: ~~Semeadura de conexão casa por `provider`, não por URL~~ — **RESOLVIDO POR REMOÇÃO (2026-07-27, M9)**
+
+Não há semeadura: a tabela `connections` foi derrubada pela migração 7 e o runtime é um só, descoberto no `resource_dir` do próprio app.
 
 ### C-11: Variantes `Quant::Q5/Q8/F16` sem uso (warning permanente no build)
 
-**Evidência:** warning `variants Q5, Q8 and F16 are never constructed` em todo `cargo build` — todos os 8 modelos curados usam `Quant::Q4`.
+**Evidência:** warning `variants Q5, Q8 and F16 are never constructed` em `cargo check` — os 6 modelos curados (eram 8 a mais antes da AD-042) usam todos `Quant::Q4`. Sob `cargo test` o warning encolhe para `Q5 and F16`, porque um teste de `memory_estimate` constrói `Q8`; o código de produção não constrói nenhuma das três.
 **Risco:** nenhum funcional, mas warning constante treina o olho a ignorar a saída do compilador, o que esconde warnings reais.
 **Fix sugerido:** ou usar as variantes (adicionar modelos com outro quant ao catálogo), ou `#[allow(dead_code)]` explícito com comentário dizendo que existem pra completude da fórmula.
 

@@ -1,3 +1,6 @@
+// SPEC: app-shell (SHELL-03, SHELL-04, SHELL-05, SHELL-06, SHELL-07),
+//       chat-messaging (CHAT-12), conversation-memory (MEM-09)
+
 use crate::db::{require_conn, DbState};
 use crate::models::{Chat, Message};
 use chrono::Utc;
@@ -28,6 +31,8 @@ pub fn create_chat(db: State<DbState>, title: Option<String>) -> Result<Chat, St
         updated_at: now,
         // Matches the column default; a new chat starts using the global base.
         use_global_rag: true,
+        // Same: the column defaults to on, so a new chat remembers (MEM-15).
+        use_memory: true,
     })
 }
 
@@ -38,10 +43,12 @@ fn row_to_chat(row: &rusqlite::Row) -> rusqlite::Result<Chat> {
         created_at: row.get(2)?,
         updated_at: row.get(3)?,
         use_global_rag: row.get::<_, i64>(4)? != 0,
+        use_memory: row.get::<_, i64>(5)? != 0,
     })
 }
 
-const SELECT_CHAT: &str = "SELECT id, title, created_at, updated_at, use_global_rag FROM chats";
+const SELECT_CHAT: &str =
+    "SELECT id, title, created_at, updated_at, use_global_rag, use_memory FROM chats";
 
 #[tauri::command]
 pub fn list_chats(db: State<DbState>) -> Result<Vec<Chat>, String> {
@@ -127,6 +134,12 @@ pub async fn delete_chat(
         if let Ok(store) = crate::rag::store::VectorStore::open(&dir).await {
             let _ = store
                 .delete_namespace(&crate::rag::store::chat_namespace(&id))
+                .await;
+            // The conversation's memory lives in its own namespace, so deleting
+            // the attachments' one leaves it behind (MEM-09). Two deletes, not
+            // one, and both best-effort for the same reason as above.
+            let _ = store
+                .delete_namespace(&crate::chat::memory::memory_namespace(&id))
                 .await;
         }
     }

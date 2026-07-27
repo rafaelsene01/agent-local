@@ -230,7 +230,7 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 | REL-24 | P2: Toggle de opt-out persistido; desligado = zero rede no boot | Implemented | Persistência testada; **ausência de rede não medida** |
 | REL-25 | P2: CI de validação (`npm run build` + `cargo test`) em push e PR | **Verified** | **Executado no GitHub em 2026-07-26**: falhou primeiro (glob de `node --test` + Node 20), e depois da correção rodou **verde em 2m17s** |
 | REL-26 | P2: Validação de Conventional Commits em PR | Implemented | YAML válido; **não executado** |
-| REL-27 | P3: `strip` + LTO no perfil de release, redução medida | Partial | Perfil configurado; **medição pendente**. `lto` ficou `"thin"` e `panic = "abort"` ficou de fora — ver tasks.md |
+| REL-27 | P3: `strip` + LTO no perfil de release, redução medida | **Verified** | **Medido em 2026-07-27**: mesmo commit compilado duas vezes, sem o perfil (`strip=none`, `lto=false`, `codegen-units=16`, num `CARGO_TARGET_DIR` separado) dá **227.636.224 B (217,1 MiB)**; com o perfil, **166.924.800 B (159,2 MiB)**. **Redução de 60.711.424 B — 57,9 MiB, 26,7%.** Isso também desfaz a dúvida da AD-045: os ~226 MB do binário antigo batem com o baseline, então ele era pré-perfil. `lto` segue `"thin"` e `panic = "abort"` segue de fora |
 
 **ID format:** `REL-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified

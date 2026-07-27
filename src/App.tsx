@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { ChatPanel } from "./components/Chat/ChatPanel";
 import { SettingsPanel } from "./components/Settings/SettingsPanel";
-import { ConnectionsPanel } from "./components/Connections/ConnectionsPanel";
+import { RuntimePanel } from "./components/Runtime/RuntimePanel";
 import { DocumentsPanel } from "./components/Documents/DocumentsPanel";
 import { Wizard } from "./components/Onboarding/Wizard";
 import { UpdateBanner } from "./components/Update/UpdateBanner";
@@ -47,8 +47,8 @@ function App() {
         <UpdateBanner />
         {activeView === "settings" ? (
           <SettingsPanel />
-        ) : activeView === "connections" ? (
-          <ConnectionsPanel />
+        ) : activeView === "runtime" ? (
+          <RuntimePanel />
         ) : activeView === "documents" ? (
           <DocumentsPanel />
         ) : (

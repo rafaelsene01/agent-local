@@ -1,3 +1,6 @@
+// SPEC: app-shell (SHELL-04), chat-messaging (CHAT-06, CHAT-14),
+//       self-contained-runtime (SELF-01), conversation-memory (MEM-14, MEM-18)
+
 export interface Chat {
   id: string;
   title: string;
@@ -5,6 +8,15 @@ export interface Chat {
   updated_at: string;
   /** Whether this chat also searches the global knowledge base (CHAT-14). */
   use_global_rag: boolean;
+  /** Whether completed turns are remembered and recalled later (MEM-14). */
+  use_memory: boolean;
+}
+
+/** Progress of an on-demand history indexing run (MEM-18). */
+export interface MemoryBackfillProgress {
+  chat_id: string;
+  done: number;
+  total: number;
 }
 
 /** Terminal states: `injected_whole` (small file put in the prompt verbatim),
@@ -123,17 +135,6 @@ export interface DocumentStatusEvent {
   error_message: string | null;
 }
 
-export type ConnectionProvider = "ollama" | "lmstudio" | "custom" | "embedded";
-export type ConnectionStatus = "available" | "unavailable" | "unknown";
-
-export interface Connection {
-  id: string;
-  provider: ConnectionProvider;
-  base_url: string;
-  is_active: boolean;
-  status: ConnectionStatus;
-}
-
 export interface InstalledModel {
   name: string;
   size_bytes: number | null;
@@ -142,12 +143,12 @@ export interface InstalledModel {
 export interface DownloadableModel {
   id: string;
   display_name: string;
-  provider: ConnectionProvider;
+  /** The direct `.gguf` URL — there is no registry to pull by name (SELF-02). */
   pull_identifier: string;
   params_billions: number;
   default_quant: string;
   estimated_ram_gb: number;
-  /** Exact download size, known for the embedded runtime's GGUF files. */
+  /** Exact download size, checked against the server when the entry was added. */
   download_bytes: number | null;
   fits_ram: boolean;
 }
@@ -166,8 +167,9 @@ export interface PullProgress {
   message: string | null;
 }
 
+/** Keyed by the URL that was asked for, so the card that started a download is
+ *  the one that shows its bar. */
 export interface ModelDownloadProgressEvent {
-  connection_id: string;
   identifier: string;
   progress: PullProgress;
 }
@@ -181,33 +183,31 @@ export interface ModelLimits {
   current_context: number | null;
 }
 
-export interface ConfigApplied {
-  context_length_applied: number | null;
-  gpu_offload_applied: string | null;
-  requires_reload: boolean;
-  note: string | null;
-}
-
+/** Mirrors `store::ActiveModel` in runtime/store.rs. `null` from the backend
+ *  covers both "never chose one" and "the file is gone" — the two cases the
+ *  user fixes the same way. */
 export interface ActiveModel {
-  connection_id: string;
-  model_name: string;
+  name: string;
+  path: string;
   context_length: number | null;
-  gpu_offload: string | null;
+  gpu_layers: number | null;
 }
 
-/** Mirrors `EmbeddedSetupStage` in embedded_commands.rs — the mapping is
- *  manual on purpose (no codegen in this project, see C-03). */
-export type EmbeddedSetupStage =
+/** Mirrors `RuntimeStage` in runtime_commands.rs — the mapping is manual on
+ *  purpose (no codegen in this project, see C-03).
+ *
+ *  `no_model` is a first-class state, not an error: preparing the runtime
+ *  downloads nothing, so a fresh install is prepared and modelless. */
+export type RuntimeStage =
   | "unsupported"
-  | "not_installed"
-  | "downloading_binary"
-  | "downloading_model"
+  | "not_prepared"
+  | "preparing"
+  | "no_model"
   | "ready"
-  | "running"
-  | "error";
+  | "running";
 
-export interface EmbeddedRuntimeStatus {
-  stage: EmbeddedSetupStage;
+export interface RuntimeStatus {
+  stage: RuntimeStage;
   release_tag: string | null;
   backend: "vulkan" | "cpu" | null;
   port: number | null;
@@ -215,15 +215,8 @@ export interface EmbeddedRuntimeStatus {
   message: string | null;
 }
 
-export interface EmbeddedSetupProgressEvent {
-  stage: EmbeddedSetupStage;
+export interface RuntimeProgressEvent {
+  stage: RuntimeStage;
   progress: PullProgress | null;
   message: string | null;
-}
-
-/** Who answers right now. `model` can be null while `connection` is set:
- *  a connection was activated but no model picked yet. */
-export interface ActivePair {
-  connection: Connection | null;
-  model: ActiveModel | null;
 }

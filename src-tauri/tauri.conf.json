@@ -5,9 +5,9 @@
   "version": "../package.json",
   "identifier": "com.localmind.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run vendor && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run vendor && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,6 +26,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "resources/"
+    ],
     "targets": [
       "msi",
       "nsis",

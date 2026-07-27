@@ -1,16 +1,18 @@
+// SPEC: self-contained-runtime (SELF-01)
+
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft } from "lucide-react";
 import { useUiStore } from "../../store/uiStore";
-import { ConnectionsList } from "./ConnectionsList";
+import { RuntimeCard } from "./RuntimeCard";
 import { ModelsList } from "./ModelsList";
 
-type Tab = "connections" | "models";
+type Tab = "runtime" | "models";
 
-export function ConnectionsPanel() {
+export function RuntimePanel() {
   const { t } = useTranslation();
   const setActiveView = useUiStore((s) => s.setActiveView);
-  const [tab, setTab] = useState<Tab>("connections");
+  const [tab, setTab] = useState<Tab>("runtime");
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -22,11 +24,11 @@ export function ConnectionsPanel() {
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-base font-semibold">{t("connections.title")}</h1>
+        <h1 className="text-base font-semibold">{t("runtime.title")}</h1>
       </div>
 
       <div className="flex gap-1 border-b border-[var(--border-color)] px-6 pt-3">
-        {(["connections", "models"] as const).map((tabOption) => (
+        {(["runtime", "models"] as const).map((tabOption) => (
           <button
             key={tabOption}
             onClick={() => setTab(tabOption)}
@@ -36,13 +38,13 @@ export function ConnectionsPanel() {
                 : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             }`}
           >
-            {t(tabOption === "connections" ? "connections.tabConnections" : "connections.tabModels")}
+            {t(tabOption === "runtime" ? "runtime.tabRuntime" : "runtime.tabModels")}
           </button>
         ))}
       </div>
 
       <div className="mx-auto w-full max-w-2xl px-6 py-6">
-        {tab === "connections" ? <ConnectionsList /> : <ModelsList />}
+        {tab === "runtime" ? <RuntimeCard /> : <ModelsList />}
       </div>
     </div>
   );

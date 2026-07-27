@@ -2,7 +2,9 @@
 
 **Spec**: `.specs/features/single-active-connection/spec.md`
 **Design**: inline (escopo Medium — sem `design.md`; as decisões de arquitetura estão abaixo e nas próprias tasks)
-**Status**: Complete (2026-07-25)
+**Status**: Complete (2026-07-25) — **e revogada em 2026-07-27 (AD-042)**: a
+metade "conexão ativa" desta feature deixou de existir com o runtime único. Ver
+o banner de `spec.md`. Nenhuma task aqui é executável hoje.
 
 ---
 
@@ -244,7 +246,12 @@ Phase 4 (Docs — sem código)
 - [x] Bolinha: verde = ativa e disponível, vermelha = ativa e indisponível, cinza = nenhuma ativa
 - [x] Tooltip nomeia a conexão ativa (ou "nenhuma")
 - [x] Gate check passa: `npm run build` **e** `npm run tauri dev` sobe até `Finished` + `Running` sem erro
-- [ ] Verificação manual na UI: ativar Ollama → ativar LM Studio → confirmar que só a última fica marcada; escolher um modelo da outra conexão → confirmar que a conexão ativa acompanhou
+- [x] ❌ ~~Verificação manual na UI: ativar Ollama → ativar LM Studio → confirmar que só a última fica marcada; escolher um modelo da outra conexão → confirmar que a conexão ativa acompanhou~~
+      — **item impossível desde 2026-07-27 (AD-042).** Não há mais conexões para
+      alternar: o `ConnectionsSection.tsx` foi apagado e o M9 deixou um runtime
+      só. Ficou aberto por dois dias descrevendo um teste que ninguém poderia
+      executar. **Nunca foi feito enquanto era possível fazê-lo** — a invariante
+      de conexão ativa única foi provada por teste de banco, nunca clicando
 
 **Tests**: none
 **Gate**: full

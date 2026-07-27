@@ -208,6 +208,18 @@ jobs:
           prerelease: false
           args: --bundles ${{ matrix.bundles }}
 
+      # Records whether the .deb keeps the execute bit on the vendored
+      # llama-server (Open Question #1 of the self-contained-runtime design).
+      # A missing binary fails the build; a missing bit only prints, because
+      # `runtime::bundled::ensure_executable` repairs that at run time.
+      - name: Conferir os componentes dentro do .deb
+        if: matrix.os == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEB=$(find src-tauri/target/release/bundle/deb -name '*.deb' | head -n 1)
+          node scripts/check-linux-bundle.mjs "$DEB"
+
       # Tauri has no portable target and the official updater has no portable
       # path on Windows, so this bundle is assembled and signed by hand — with
       # the same key, so both update paths share one trust root.
