@@ -4,6 +4,12 @@ Todas as mudanças relevantes deste projeto são registradas aqui.
 O formato segue [Conventional Commits](https://www.conventionalcommits.org/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] - 2026-07-27
+
+### Outros
+
+- Atualiza o README.md para refletir mudanças na descrição do LocalMind, destacando a operação local do chat de IA, a base de conhecimento, e a privacidade dos dados. Remove seções obsoletas e reorganiza informações sobre pré-requisitos e funcionalidades, enfatizando a experiência do usuário e a simplicidade de uso do instalador.
+
 ## [0.1.1] - 2026-07-26
 
 ### Correções
@@ -65,6 +71,7 @@ e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 - **chat:** Add message sending, streaming and per-chat attachments
 - **chat:** Enhance chat functionality with global RAG and attachment handling
 - **update:** Implement automatic update checks and user settings
+- **runtime:** Implement self-contained runtime and sidecar lifecycle management
 
 ### Outros
 
@@ -75,6 +82,7 @@ This reverts commit 5e3dec6f719f4d32d553cb9d3b91a098e646c5d1.
 ### Refatoração
 
 - **db:** Centralize require_conn and check connections concurrently
+- Remove obsolete connection and model command files
 
 ### Testes
 
