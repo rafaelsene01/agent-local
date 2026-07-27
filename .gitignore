@@ -38,4 +38,12 @@ localmind.key*
 
 # Binary components vendored into the installer by `npm run vendor`.
 # ~120 MB of build artefact, pinned in scripts/vendor.json — not source.
-src-tauri/resources/
+#
+# The contents are ignored, not the directory: `bundle.resources` names
+# `resources/` and tauri-build fails the whole build when that path is missing.
+# Ignoring `src-tauri/resources/` outright kept it out of a fresh checkout, and
+# `cargo test` — which never goes through the Tauri CLI, so never runs the
+# vendoring — died in the build script. Git cannot re-include a file whose
+# parent directory is excluded, hence the `/*` form plus the .gitkeep exception.
+src-tauri/resources/*
+!src-tauri/resources/.gitkeep

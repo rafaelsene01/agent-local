@@ -103,7 +103,8 @@ Cadeia de verificação cumprida. O que foi confirmado e o que ficou declarado c
 | `chat_commands::send_message` | Deixa de resolver `ActivePair` e passa a pedir o cliente e o modelo ao `runtime` |
 | `chat::context_assembler` (`budget_context`) | Continua chamando `model_limits`, agora no cliente concreto |
 | Migrações `db.rs` | Ganha a migração 6; o mecanismo de `PRAGMA user_version` já existe desde a AD-020 |
-| `release.yml` / `ci.yml` | O vendoring entra via `beforeBuildCommand`, então nenhum passo novo de workflow é obrigatório |
+| `release.yml` | O vendoring entra via `beforeBuildCommand`, então nenhum passo novo de workflow é obrigatório — vale porque quem constrói é o `tauri-action`, que passa pelo Tauri CLI |
+| `ci.yml` | **Não vale.** O job `rust` chama `cargo test` direto e nunca percorre o CLI, então a pasta de recursos nunca é criada e o `tauri-build` aborta. Resolvido versionando `src-tauri/resources/.gitkeep` (AD-049), não com passo de workflow |
 | `make-portable.mjs` | Passa a copiar a pasta de recursos junto do `.exe` |
 
 ### CONCERNS.md — o que esta feature toca

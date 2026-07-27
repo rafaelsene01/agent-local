@@ -1,0 +1,9 @@
+This file exists so `src-tauri/resources/` survives a clone.
+
+`tauri.conf.json` declares `bundle.resources: ["resources/"]`, and tauri-build
+aborts with "resource path `resources` doesn't exist" when the directory is
+absent. Everything else in here is downloaded by `npm run vendor`, which only
+runs through the Tauri CLI (`beforeBuildCommand` / `beforeDevCommand`) — plain
+`cargo test` / `cargo check` never triggers it. Measured in tauri-utils 2.9.3
+(`resources.rs`): a directory that exists but is empty is skipped silently, so
+this placeholder is all the build needs.

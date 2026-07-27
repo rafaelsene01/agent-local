@@ -62,7 +62,7 @@ decisão do mantenedor.
 | T10 | ✅ | `src/components/Runtime/{RuntimePanel,RuntimeCard,ModelsList,ModelDownloadCard,ModelConfigForm}.tsx`; `src/components/Connections/` apagado |
 | T11 | ✅ | `RuntimeSection.tsx`; view `connections` → `runtime`; `MessageInput` passou a olhar `activeModel` |
 | T12 | ✅ | `scripts/vendor.json` + `vendor-runtime.mjs` + 11 testes. **Rodado de verdade**: 120,5 MB baixados, extraídos e podados; segunda execução é no-op pelo stamp |
-| T13 | ✅ | `bundle.resources: ["resources/"]`, `beforeBuildCommand`/`beforeDevCommand` com `npm run vendor`, `cargo:rerun-if-changed=resources` no `build.rs`, `src-tauri/resources/` no `.gitignore` |
+| T13 | ✅ | `bundle.resources: ["resources/"]`, `beforeBuildCommand`/`beforeDevCommand` com `npm run vendor`, `cargo:rerun-if-changed=resources` no `build.rs`, o conteúdo de `src-tauri/resources/` no `.gitignore`. **Corrigido em 2026-07-27 (AD-049):** o ignore era da pasta inteira, e sem ela o `tauri-build` aborta em qualquer clone limpo — o job `rust` do CI quebrou por isso. Hoje o `.gitkeep` é versionado e só o conteúdo é ignorado |
 | T14 | ✅ | `runtime/bundled.rs`: `resource_root`, `find_file`, `llama_server`, `onnxruntime_dylib`, `pdfium_library`, `ensure_executable`. 6 testes (3 só compilam em Unix) |
 | T15 | ✅ | `rag/pdfium.rs` perdeu `asset_url`, `RELEASE` e o download |
 | T16 | ✅ | `rag/onnxruntime.rs` perdeu `asset_url`, `ORT_VERSION` e o download |
