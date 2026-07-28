@@ -199,6 +199,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # linuxdeploy strips every ELF it deploys, and it aborts the whole
+          # AppImage when `strip` refuses one of them. Since the M9 the AppDir
+          # carries 256 MB of third-party binaries — two llama-server builds,
+          # ONNX Runtime and pdfium — that nothing here compiled.
+          #
+          # The correlation is in the published artifacts, not in a guess:
+          # v0.2.0 predates `bundle.resources` and its AppImage is on the
+          # release; v0.3.0 is the first build to ship the vendored tree and the
+          # first to die in linuxdeploy, with the .deb of the same run bundling
+          # fine (the .deb does not relocate or strip anything).
+          #
+          # Stripping them buys nothing anyway: the app's own binary is already
+          # stripped by the release profile (REL-27, measured at −26,7%), and
+          # AD-046 is the standing reminder that touching these vendored files
+          # is how the runtime stopped executing last time.
+          NO_STRIP: "true"
         with:
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: LocalMind ${{ needs.prepare.outputs.tag }}
@@ -206,7 +222,11 @@ jobs:
           # Stays a draft until `finalize` confirms every artifact landed.
           releaseDraft: true
           prerelease: false
-          args: --bundles ${{ matrix.bundles }}
+          # `--verbose` so a future linuxdeploy failure arrives with the reason
+          # attached. The v0.3.0 log had `failed to run linuxdeploy` and not one
+          # line from linuxdeploy itself, which is why this had to be diagnosed
+          # from published artifacts instead of from the error.
+          args: --bundles ${{ matrix.bundles }} --verbose
 
       # Records whether the .deb keeps the execute bit on the vendored
       # llama-server (Open Question #1 of the self-contained-runtime design).

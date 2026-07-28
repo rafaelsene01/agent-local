@@ -236,7 +236,9 @@ Confirmado por documentação oficial e pela CLI local — **não** deduzido:
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 **Coverage:** 27 total, 27 mapeados para tasks, 27 implementados.
 
-⚠️ **Nenhum requisito está `Verified` no sentido forte**, com uma exceção (REL-21). O gate desta feature é uma release publicada de verdade e um update aplicado de verdade — nada disso aconteceu ainda, porque depende da chave de assinatura (T2, ação humana). "Implemented" aqui significa "escrito, compila e tem os testes que dava para escrever", não "funciona".
+⚠️ **Esta ressalva envelheceu e foi corrigida em 2026-07-27.** Ela dizia que *"nenhum requisito está `Verified` no sentido forte, com uma exceção (REL-21)"* e que *"o gate desta feature é uma release publicada de verdade — nada disso aconteceu ainda, porque depende da chave de assinatura"*. **As duas metades deixaram de valer:** a T2 foi feita pelo mantenedor em 2026-07-26, e `v0.1.1` e `v0.2.0` foram publicadas de verdade em 2026-07-27 (AD-048), o que moveu REL-01, REL-02, REL-06, REL-08 e REL-11 para evidência de execução. REL-21, REL-25 e REL-27 também estão `Verified` na tabela acima.
+
+**O que continua não verificado**, e é o que sobra da T24: nada foi **instalado** e **nenhum update foi aplicado** — REL-13 a REL-24 seguem como "escrito, compila e tem os testes que dava para escrever". E a `v0.2.0` publicada como "Latest" é anterior ao M9, ou seja, é o app quebrado em runtime da AD-042; só uma release nova a partir de `master` resolve, e disparar release é do mantenedor.
 
 ---
 

@@ -1,13 +1,17 @@
 # Roadmap
 
-**Current Milestone:** M6 — Memória de conversa. **8 das 9 tasks implementadas; a T9 rodou e a conversa lembrou** (2026-07-27, ver AD-047 e AD-048). Sobram dois itens da T9 que exigem clique: o backfill e o efeito de desligar o toggle.
+**Current Milestone:** M6 — Memória de conversa. **9 das 9 tasks. A T9 fechou inteira em 2026-07-27** (AD-050): o backfill rodou numa conversa real e o efeito de desligar o toggle foi observado na resposta, os dois dirigindo a UI do app.
 **Status:** In Progress — M3.1, M7, M7.1, M5 e M4 concluídos; **M8 implementado em 2026-07-26** (23 das 24 tasks; falta só a T24, que é publicar uma release de verdade e atualizar nos dois modos); **M9 implementado em 2026-07-27** (21 das 22; falta a T22, a verificação numa máquina sem rede). **Todo milestone tem spec agora** — o M6 era o último sem, e ganhou a sua em 2026-07-27.
 
 > **Atualizado em 2026-07-27 (AD-048).** Das quatro pendências de UAT, **duas fecharam**: a T7 do M7.1 (janela e `taskkill`, medidos no app real) e o item central da T9 (a conversa lembrou do primeiro turno depois de 16 turnos). E a T24 deixou de estar bloqueada: **`v0.1.1` e `v0.2.0` foram publicadas de verdade**.
 >
 > ⚠️ **Mas a `v0.2.0` marcada como "Latest" não serve.** A tag é anterior ao M9 e carrega o estado quebrado em runtime da AD-042 — frontend chamando comandos que o backend já não registra. **Uma release nova a partir de `master` é o que resolve**, e disparar release é do mantenedor.
 >
-> **O que continua exigindo uma pessoa:** instalar sem administrador e aplicar um update de verdade (T24), instalar com a rede desligada e conversar (T22), e clicar no backfill e no toggle de memória (T9).
+> **Atualizado em 2026-07-27 (AD-050).** A UAT que faltava foi executada **dirigindo o app** — `tauri dev` com o debug remoto do WebView2 exposto, cada ação despachada como evento DOM na página real, e o seletor de arquivos nativo respondido por um script Win32 à parte. Isso fechou: a **T9 do M6** inteira, a **T12 do M4** inteira, e a importação de documento do **M5**.
+>
+> ⚠️ **E achou um defeito que nenhum gate automatizado pegaria:** com *"usar meus documentos"* ligado e um PDF irrelevante na base, a pergunta sobre o primeiro turno era respondida a partir do PDF. Medido, corrigido e reverificado no mesmo cenário. Ver AD-050.
+>
+> **O que continua exigindo uma pessoa:** instalar sem administrador e aplicar um update de verdade (T24), e instalar com a rede desligada e conversar (T22).
 
 > **Mudança de rumo aplicada (2026-07-27):** o M9 removeu Ollama, LM Studio e a URL manual, e passou a embutir os componentes binários no instalador. O PROJECT.md foi atualizado junto (T21) — ele não promete mais detectar runtimes externos.
 
@@ -229,9 +233,11 @@ flowchart TB
 
 ---
 
-## M6 — Memória de conversa (RAG híbrido) — ⚙️ IMPLEMENTADO E VERIFICADO CONVERSANDO, COM DUAS PONTAS SOLTAS (2026-07-27)
+## M6 — Memória de conversa (RAG híbrido) — ✅ COMPLETE (2026-07-27, 9/9 tasks)
 
-> **Leia isto antes de confiar no "implementado".** A conversa **lembrou**: 16 turnos, 35.220 caracteres, e a pergunta sobre o primeiro turno respondida inteira — depois de a primeira tentativa ter falhado e o código ter sido corrigido (AD-047, confirmada por medição na AD-048). O que **ainda não** aconteceu: o backfill nunca rodou numa conversa real, e ninguém observou o efeito de **desligar** o toggle. Gates: 174 testes Rust, `npm run build` limpo.
+> **A T9 fechou inteira em 2026-07-27 (AD-050).** Além da recuperação já registrada na AD-047/AD-048, os dois critérios que faltavam foram medidos em A/B, com a pergunta feita **uma única vez por conversa**: numa conversa cujo histórico nunca fora indexado, ligar a memória e clicar em *Indexar histórico* (12 turnos, ~1,6 s, `vectors/` +133.963 B) fez a pergunta sobre o turno 1 ser respondida com **"Falcão Azul … 82 mil reais"**; e numa conversa cuja memória **existia** no banco vetorial, desligar o toggle bastou para o modelo responder *"não tenho a capacidade de lembrar interações anteriores"*. Gates: **177 testes Rust**, `npm run build` limpo.
+>
+> ⚠️ **A camada mudou de forma na mesma sessão (AD-050).** A memória continua a ser a última a receber **orçamento**, mas deixou de ser sempre a última em **posição**: quando o turno recuperado é o acerto mais próximo, é ele que fica colado na pergunta. Isso revisa MEM-10 e MEM-12.
 
 **Goal:** Serializar a conversa e usá-la como memória via RAG híbrido, junto das outras camadas.
 **Target:** Chat lembra de coisas ditas muito antes (além da janela de contexto) recuperando turnos relevantes.
@@ -254,7 +260,7 @@ flowchart TB
 - Namespace exclusivo, disjunto do de anexos (`chat:<id>`) e do global — restrição explícita do usuário, verificada contra um LanceDB real
 - Excluir o chat apaga os dois namespaces
 
-**Toggle e backfill** — CÓDIGO PRONTO, NENHUM CLIQUE (MEM-14…MEM-20) — a gravação foi provada ligando/desligando o toggle (AD-047), mas o **backfill** e o efeito de desligar sobre a **resposta** seguem sem observação
+**Toggle e backfill** — VERIFICADO CLICANDO (MEM-14…MEM-20, AD-050) — o botão de indexar foi clicado numa conversa real, o progresso (`Indexando histórico… (3/15)`) foi lido da tela, e o efeito de desligar o toggle foi observado **na resposta**, não só na gravação
 
 - Interruptor por conversa, ligado por padrão (migração **8**); desligado para de recuperar **e** de gravar
 - Indexação do histórico existente **sob demanda**, por conversa, com progresso — a varredura automática no boot foi recusada no planejamento: numa base grande é CPU de embedding logo depois de um update, o que se parece com travamento

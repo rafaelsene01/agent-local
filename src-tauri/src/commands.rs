@@ -1,11 +1,12 @@
 // SPEC: app-shell (SHELL-03, SHELL-04, SHELL-05, SHELL-06, SHELL-07),
 //       chat-messaging (CHAT-12), conversation-memory (MEM-09)
 
+use crate::chat::cancellation::CancellationRegistry;
 use crate::db::{require_conn, DbState};
 use crate::models::{Chat, Message};
 use chrono::Utc;
 use rusqlite::params;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 #[tauri::command]
@@ -106,6 +107,17 @@ pub async fn delete_chat(
     db: State<'_, DbState>,
     id: String,
 ) -> Result<(), String> {
+    // Before anything is removed (C-14). A generation left running against a
+    // deleted chat burns GPU for an answer the database now refuses — since
+    // foreign keys were enforced (AD-040) the insert fails instead of creating
+    // an orphan row, so the cost is wasted work rather than corruption, but it
+    // is wasted work the user sees as the machine staying busy.
+    //
+    // Signalling first also narrows the window `chat::memory::record_turn`
+    // guards with its existence check: the sooner the loop stops, the less
+    // likely it is to reach the point of writing memory at all.
+    app.state::<CancellationRegistry>().cancel(&id);
+
     {
         let mut guard = db.0.lock().map_err(|e| e.to_string())?;
         let conn = guard

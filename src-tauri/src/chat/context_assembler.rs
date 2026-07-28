@@ -302,20 +302,39 @@ fn question_with_context(
     new_message: &str,
     memory_blocks: &[String],
     context_blocks: &[String],
+    memory_outranks_documents: bool,
 ) -> String {
-    let mut sections: Vec<String> = Vec::new();
-    if !memory_blocks.is_empty() {
-        sections.push(format!(
+    let memory_section = (!memory_blocks.is_empty()).then(|| {
+        format!(
             "{MEMORY_PREAMBLE}\n\n{}",
             memory_blocks.join("\n\n---\n\n")
-        ));
-    }
-    if !context_blocks.is_empty() {
-        sections.push(format!(
+        )
+    });
+    let document_section = (!context_blocks.is_empty()).then(|| {
+        format!(
             "{CONTEXT_PREAMBLE}\n\n{}",
             context_blocks.join("\n\n---\n\n")
-        ));
+        )
+    });
+
+    // Nearest last, because last is what touches the question.
+    //
+    // Documents used to be unconditionally closer, on the reasoning that an
+    // imported file is the user's explicit intent. That held right up until the
+    // base had nothing to do with the question: a Civil Code passage at 0.3150
+    // sat against the question while the turn holding the answer, at 0.2817, sat
+    // behind it — and the model answered from the Civil Code (AD-050, measured
+    // through the app's own UI). Priority by layer is a guess about relevance;
+    // the distance is a measurement of it.
+    let mut sections: Vec<String> = Vec::new();
+    if memory_outranks_documents {
+        sections.extend(document_section);
+        sections.extend(memory_section);
+    } else {
+        sections.extend(memory_section);
+        sections.extend(document_section);
     }
+
     if sections.is_empty() {
         return new_message.to_string();
     }
@@ -370,6 +389,7 @@ pub async fn assemble(
 
     let mut retrieval_error = None;
     let mut recalled: Vec<MemoryHit> = Vec::new();
+    let mut memory_outranks_documents = false;
     if budget.remaining > 0 {
         let memory_for = if use_memory { Some(chat_id) } else { None };
         match retrieve(app, &namespaces, memory_for, new_message).await {
@@ -380,6 +400,7 @@ pub async fn assemble(
                     }
                 }
                 recalled = found.memory;
+                memory_outranks_documents = found.memory_outranks_documents;
                 // The answer still goes out with its documents; the user is
                 // told the memory did not take part (MEM-13).
                 if let Some(e) = found.memory_error {
@@ -419,6 +440,7 @@ pub async fn assemble(
         new_message,
         &memory_blocks,
         &context_blocks,
+        memory_outranks_documents,
     )));
     Ok(Assembled {
         messages: merge_consecutive_turns(messages),
@@ -525,6 +547,13 @@ struct Retrieved {
     /// discard passages that were already found would drop the user's own
     /// documents out of the prompt — the exact failure mode AD-033 chased.
     memory_error: Option<String>,
+    /// The best recalled turn is nearer the question than the best document.
+    ///
+    /// This is what decides which block ends up adjacent to the question, and
+    /// it is the whole fix for AD-050: AD-033 measured that the model answers
+    /// from what sits next to the question, so the position has to follow the
+    /// ranking rather than the layer.
+    memory_outranks_documents: bool,
 }
 
 /// Appends the chunk that follows a hit, when it was not already selected on
@@ -594,20 +623,10 @@ async fn retrieve(
         }
     }
 
-    let ranked = rank_candidates(candidates, TOP_K);
-    let selected: std::collections::HashSet<_> = ranked.iter().map(|c| c.key()).collect();
-
-    let mut documents = Vec::new();
-    for candidate in &ranked {
-        let text = with_neighbour(&store, candidate, &selected).await;
-        let label = source_name(app, &candidate.namespace, &candidate.doc_id);
-        documents.push(source_block(&label, &text));
-    }
-
-    let mut memory = Vec::new();
     let mut memory_error = None;
-    if let Some(chat_id) = memory_for {
-        let namespace = memory::memory_namespace(chat_id);
+    let memory_namespace = memory_for.map(memory::memory_namespace);
+    let mut memory_candidates: Vec<Candidate> = Vec::new();
+    if let (Some(chat_id), Some(namespace)) = (memory_for, memory_namespace.as_ref()) {
         let found = match memory::search(&store, chat_id, &query_vec, MEMORY_CANDIDATES).await {
             Ok(found) => found,
             Err(e) => {
@@ -615,7 +634,7 @@ async fn retrieve(
                 Vec::new()
             }
         };
-        let recalled: Vec<Candidate> = found
+        memory_candidates = found
             .into_iter()
             .map(|chunk| Candidate {
                 namespace: namespace.clone(),
@@ -625,29 +644,91 @@ async fn retrieve(
                 distance: chunk.distance,
             })
             .collect();
-        // The same relative floor as the documents: a conversation always has
-        // *some* nearest turn, and without a floor every message would drag in
-        // two unrelated exchanges.
-        // Ranked down to the candidate pool, not to the final cap: the turns
-        // already quoted verbatim are only known later, and cutting to one here
-        // is what left nothing to inject once that one turned out to be a
-        // duplicate.
-        let ranked_memory = rank_candidates(recalled, MEMORY_CANDIDATES);
-        let selected_memory: std::collections::HashSet<_> =
-            ranked_memory.iter().map(|c| c.key()).collect();
-        for candidate in &ranked_memory {
-            memory.push(MemoryHit {
-                answer_id: candidate.doc_id.clone(),
-                text: with_neighbour(&store, candidate, &selected_memory).await,
-            });
-        }
+    }
+
+    // One pool, one ranking (AD-050).
+    //
+    // The two layers answer the *same* question with the *same* metric, so
+    // their distances are directly comparable — and ranking them apart is what
+    // let an unrelated document take the four slots nearest the question while
+    // the turn that actually held the answer sat further away with one slot.
+    // Measured against the user's own base: the best Civil Code chunk scored
+    // 0.3150 and the recalled turn 0.2817, and the model answered from the Civil
+    // Code.
+    //
+    // The floor stays relative because an absolute one is not available: the
+    // worst genuine hit on that corpus is 0.3077 and the best irrelevant one
+    // 0.3150, a 0.0073 gap that no threshold survives (`retrieval_quality`).
+    // What separates them here is not a cutoff, it is the comparison.
+    let mut pool = candidates;
+    pool.extend(memory_candidates.iter().cloned());
+    let ranked_all = rank_candidates(pool, usize::MAX);
+
+    let is_memory = |c: &Candidate| Some(&c.namespace) == memory_namespace.as_ref();
+    let memory_best = ranked_all.iter().find(|c| is_memory(c)).map(|c| c.distance);
+    let documents_best = ranked_all.iter().find(|c| !is_memory(c)).map(|c| c.distance);
+
+    // The cap is now shared. A conversation with something to recall costs the
+    // documents one slot — not four, and not zero: `MEMORY_TOP_K` still bounds
+    // how much of the prompt a long conversation can take from the file the
+    // user just imported, which is what MEM-12 was for.
+    let document_slots = if memory_best.is_some() {
+        TOP_K.saturating_sub(MEMORY_TOP_K)
+    } else {
+        TOP_K
+    };
+
+    let ranked_documents: Vec<Candidate> = ranked_all
+        .iter()
+        .filter(|c| !is_memory(c))
+        .take(document_slots)
+        .cloned()
+        .collect();
+    // Every surviving turn is carried forward, not just `MEMORY_TOP_K` of them:
+    // the duplicate filter runs later, and cutting to the final cap before it is
+    // exactly the funnel AD-047 had to undo.
+    let ranked_memory: Vec<Candidate> = ranked_all
+        .into_iter()
+        .filter(|c| is_memory(c))
+        .collect();
+
+    let selected: std::collections::HashSet<_> = ranked_documents.iter().map(|c| c.key()).collect();
+    let mut documents = Vec::new();
+    for candidate in &ranked_documents {
+        let text = with_neighbour(&store, candidate, &selected).await;
+        let label = source_name(app, &candidate.namespace, &candidate.doc_id);
+        documents.push(source_block(&label, &text));
+    }
+
+    let selected_memory: std::collections::HashSet<_> =
+        ranked_memory.iter().map(|c| c.key()).collect();
+    let mut memory = Vec::new();
+    for candidate in &ranked_memory {
+        memory.push(MemoryHit {
+            answer_id: candidate.doc_id.clone(),
+            text: with_neighbour(&store, candidate, &selected_memory).await,
+        });
     }
 
     Ok(Retrieved {
         documents,
         memory,
         memory_error,
+        memory_outranks_documents: nearer(memory_best, documents_best),
     })
+}
+
+/// Whether `a` is a nearer hit than `b`, with "no hit at all" losing to any hit.
+///
+/// Split out because the comparison decides which block sits next to the
+/// question, and `Option<f32>` ordering is the kind of thing that is wrong in a
+/// way nobody notices — `None` must not compare as zero distance.
+fn nearer(a: Option<f32>, b: Option<f32>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a < b,
+        (Some(_), None) => true,
+        _ => false,
+    }
 }
 
 /// Resolves a `doc_id` back to the file the user recognizes. Global chunks
@@ -944,6 +1025,7 @@ mod tests {
             "continue a frase",
             &[],
             &[source_block("codigo.pdf", "Art. 968. A inscrição do")],
+            false,
         );
 
         assert!(
@@ -959,7 +1041,7 @@ mod tests {
         // Told to cite sources with none given, a small model invents them —
         // observed as "[fonte: GPT-3 informações geral]".
         assert_eq!(
-            question_with_context("o que é rust?", &[], &[]),
+            question_with_context("o que é rust?", &[], &[], false),
             "o que é rust?"
         );
     }
@@ -973,6 +1055,7 @@ mod tests {
             "e o prazo?",
             &[memory_block("Usuário: qual era o prazo?\nAssistente: trinta dias")],
             &[],
+            false,
         );
 
         assert!(question.starts_with(MEMORY_PREAMBLE));
@@ -983,21 +1066,76 @@ mod tests {
     }
 
     #[test]
-    fn the_document_sits_closer_to_the_question_than_the_recalled_turn() {
-        // Proximity to the question is what the model reads (AD-033), and the
-        // document is the user's explicit intent — so it goes last.
+    fn the_document_sits_closer_to_the_question_when_it_is_the_better_hit() {
+        // Proximity to the question is what the model reads (AD-033). While the
+        // document is the nearer hit, it keeps the position it always had.
         let question = question_with_context(
             "resuma",
             &[memory_block("Usuário: oi\nAssistente: olá")],
             &[source_block("contrato.pdf", "cláusula 4")],
+            false,
         );
 
         let memory_at = question.find("[conversa anterior]").unwrap();
         let document_at = question.find("[fonte: contrato.pdf]").unwrap();
         assert!(
             memory_at < document_at,
-            "a memória fica acima do documento, e o documento colado na pergunta"
+            "com o documento à frente no ranking, ele é quem fica colado na pergunta"
         );
+    }
+
+    #[test]
+    fn the_recalled_turn_takes_the_place_next_to_the_question_when_it_wins() {
+        // AD-050. Measured failure: an unrelated Civil Code chunk at 0.3150 sat
+        // against the question while the turn that held the answer, at 0.2817,
+        // sat behind it — and the model answered from the Civil Code. When the
+        // recall is the nearer hit, it is the recall that touches the question.
+        let question = question_with_context(
+            "qual era o apelido?",
+            &[memory_block("Usuário: chame de Falcão Azul\nAssistente: combinado")],
+            &[source_block("codigo.pdf", "das obrigações de dar")],
+            true,
+        );
+
+        let memory_at = question.find("[conversa anterior]").unwrap();
+        let document_at = question.find("[fonte: codigo.pdf]").unwrap();
+        assert!(
+            document_at < memory_at,
+            "o acerto mais próximo é o que fica colado na pergunta, seja de que camada for"
+        );
+        assert!(question.ends_with("qual era o apelido?"));
+    }
+
+    #[test]
+    fn a_lone_layer_keeps_the_position_next_to_the_question_either_way() {
+        // The flag reorders two sections; with only one, it must not be able to
+        // push it away from the question or drop it.
+        for wins in [false, true] {
+            let only_memory = question_with_context(
+                "e daí?",
+                &[memory_block("Usuário: a\nAssistente: b")],
+                &[],
+                wins,
+            );
+            assert!(only_memory.starts_with(MEMORY_PREAMBLE));
+            assert!(only_memory.ends_with("e daí?"));
+
+            let only_documents =
+                question_with_context("e daí?", &[], &[source_block("x.pdf", "y")], wins);
+            assert!(only_documents.starts_with(CONTEXT_PREAMBLE));
+            assert!(only_documents.ends_with("e daí?"));
+        }
+    }
+
+    #[test]
+    fn no_hit_never_outranks_a_hit() {
+        // `None` must not read as distance zero: a layer that found nothing
+        // cannot win the position next to the question.
+        assert!(nearer(Some(0.28), Some(0.31)));
+        assert!(!nearer(Some(0.31), Some(0.28)));
+        assert!(nearer(Some(0.9), None), "algum acerto ganha de nenhum");
+        assert!(!nearer(None, Some(0.9)), "nenhum acerto não ganha de nada");
+        assert!(!nearer(None, None));
     }
 
     #[test]
@@ -1008,6 +1146,7 @@ mod tests {
             "pergunta",
             &[],
             &[source_block("a.pdf", "trecho")],
+            false,
         );
         assert_eq!(
             with_documents,
@@ -1077,5 +1216,219 @@ mod tests {
         let chars = budget_chars(Some(1024));
         assert_eq!(chars, (1024 - 512) * CHARS_PER_TOKEN);
         assert!(budget_chars(Some(100)) == 0, "a tiny window reserves nothing");
+    }
+}
+
+/// Mede o defeito que a UAT da T9 encontrou, contra o banco vetorial real.
+///
+/// The measured failure (2026-07-27, driving the app through its own UI): a
+/// twelve-turn conversation, the fact planted in turn 1 and backfilled into the
+/// memory, and the question asked once. With **"usar meus documentos" off** the
+/// answer was right — *"Falcão Azul … 82 mil reais"*. With it **on**, and the
+/// only document in the base being an unrelated Civil Code PDF, the same
+/// question in the same conversation shape produced *"Projeto de Código Civil
+/// Brasileiro 115 … R$ 250.000,00"*. The document was not merely useless: it
+/// displaced the recall.
+///
+/// The suspected mechanism is `rank_candidates`. Its floor is **relative to the
+/// best hit of the same query**, so a namespace whose best hit is already
+/// irrelevant still contributes: the bad best defines the cutoff and its equally
+/// bad siblings clear it. Nothing in the funnel can say "this whole namespace
+/// had nothing to offer".
+///
+/// This module measures rather than argues it. Both paths come from the
+/// environment and are never guessed, because one of them points at the user's
+/// own data:
+///
+/// ```text
+/// LOCALMIND_EMBED_CACHE=<copy of models--intfloat--multilingual-e5-small's parent>
+/// LOCALMIND_ORT_DYLIB=<path to onnxruntime.dll>
+/// LOCALMIND_VECTORS_COPY=<copy of the user's vectors/ folder>
+/// cargo test --lib chat::retrieval_quality -- --ignored --nocapture
+/// ```
+#[cfg(test)]
+mod retrieval_quality {
+    use super::*;
+    use crate::rag::embedding;
+    use crate::rag::store::VectorStore;
+
+    /// The question from the UAT, verbatim. Changing it changes what is being
+    /// measured, so it is a constant rather than an inline literal.
+    const QUESTION: &str =
+        "Voltando ao começo: qual foi o apelido que eu dei ao meu projeto e quanto foi liberado de verba?";
+
+    /// The turn that was in the conversation's memory, serialized the way
+    /// `chat::memory` stores it.
+    fn planted_turn() -> String {
+        crate::chat::memory::serialize_turn(
+            "Guarde isto para o resto da conversa: o codinome do meu projeto é Falcão Azul \
+             e o orçamento aprovado foi de 82 mil reais.",
+            "Codinome do projeto: Falcão Azul\nOrçamento: 82 mil reais",
+        )
+    }
+
+    fn squared_l2(a: &[f32], b: &[f32]) -> f32 {
+        a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
+    }
+
+    #[tokio::test]
+    #[ignore = "needs LOCALMIND_EMBED_CACHE, LOCALMIND_ORT_DYLIB and LOCALMIND_VECTORS_COPY"]
+    async fn an_unrelated_document_still_clears_the_relative_floor() {
+        let Ok(cache) = std::env::var("LOCALMIND_EMBED_CACHE") else {
+            panic!("set LOCALMIND_EMBED_CACHE to a *copy* of the model cache");
+        };
+        let Ok(dylib) = std::env::var("LOCALMIND_ORT_DYLIB") else {
+            panic!("set LOCALMIND_ORT_DYLIB to the onnxruntime shared library");
+        };
+        let Ok(vectors) = std::env::var("LOCALMIND_VECTORS_COPY") else {
+            panic!("set LOCALMIND_VECTORS_COPY to a *copy* of the vectors folder — never the original");
+        };
+        std::env::set_var("ORT_DYLIB_PATH", &dylib);
+        embedding::set_cache_dir(std::path::PathBuf::from(cache));
+
+        let query = embedding::embed_query(QUESTION).expect("query embedding failed");
+        let store = VectorStore::open(std::path::Path::new(&vectors))
+            .await
+            .expect("could not open the vectors copy");
+
+        let hits = store
+            .search(GLOBAL_NAMESPACE, &query, PER_NAMESPACE_K)
+            .await
+            .expect("global search failed");
+
+        println!("\npergunta: {QUESTION}");
+        println!("\n-- base global ({} candidatos) --", hits.len());
+        for (rank, hit) in hits.iter().enumerate() {
+            let head: String = hit.text.chars().take(90).collect();
+            println!("  #{rank} {:.4}  {}", hit.distance, head.replace('\n', " "));
+        }
+
+        // The memory turn is embedded here rather than read from the store: the
+        // conversation this came from was deleted when the UAT cleaned up after
+        // itself, and the number that matters is the distance, not the row.
+        let turn = planted_turn();
+        let turn_vec = &embedding::embed_passages(&[turn.clone()]).expect("embedding failed")[0];
+        let turn_distance = squared_l2(&query, turn_vec);
+        println!("\n-- memória --");
+        println!("  {:.4}  {}", turn_distance, turn.replace('\n', " | "));
+
+        let Some(best_document) = hits.first().map(|h| h.distance) else {
+            panic!("a base global está vazia nesta cópia — o teste não tem o que medir");
+        };
+        let cutoff = (best_document * RELATIVE_DISTANCE_FLOOR).max(MIN_DISTANCE_CUTOFF);
+        let survivors = hits.iter().filter(|h| h.distance <= cutoff).count();
+
+        println!("\n-- o funil como ele é hoje --");
+        println!("  melhor documento .......... {best_document:.4}");
+        println!("  turno da memória .......... {turn_distance:.4}");
+        println!("  corte relativo (×{RELATIVE_DISTANCE_FLOOR}) ...... {cutoff:.4}");
+        println!("  documentos que passam ..... {survivors} de {}", hits.len());
+        println!(
+            "  o documento está {:.2}× mais LONGE da pergunta que o turno da memória",
+            turn_distance.max(0.0001).recip() * best_document
+        );
+
+        // The point of the measurement: the document block is built from hits
+        // that are further from the question than the memory turn, and the
+        // relative floor lets them through anyway.
+        assert!(
+            survivors > 0,
+            "nenhum documento passou o corte — a falha medida na UAT não reproduz \
+             com esta base, e este teste precisa de dados novos"
+        );
+        assert!(
+            best_document > turn_distance,
+            "o documento ficou MAIS PERTO que o turno da memória ({best_document:.4} \
+             contra {turn_distance:.4}): a causa do defeito não é o piso relativo, \
+             e o diagnóstico precisa ser refeito"
+        );
+    }
+
+    /// Procura o limiar **absoluto** que separaria um acerto real de um trecho
+    /// que só é o menos ruim de uma base que não tem a resposta.
+    ///
+    /// The first test above establishes that the relative floor cannot make that
+    /// distinction: with no good hit anywhere, the best of a bad lot sets the bar
+    /// and everything clears it. An absolute ceiling could — but only if the two
+    /// populations actually sit in different bands, and the comment on
+    /// `RELATIVE_DISTANCE_FLOOR` asserts they do not.
+    ///
+    /// So this measures both populations against the same corpus instead of
+    /// arguing about them: questions the Civil Code genuinely answers, and
+    /// questions it has nothing to do with. A threshold is only worth writing
+    /// down if the worst real hit is nearer than the best irrelevant one.
+    #[tokio::test]
+    #[ignore = "needs LOCALMIND_EMBED_CACHE, LOCALMIND_ORT_DYLIB and LOCALMIND_VECTORS_COPY"]
+    async fn the_gap_between_a_real_hit_and_the_least_bad_one_is_measured_not_assumed() {
+        let Ok(cache) = std::env::var("LOCALMIND_EMBED_CACHE") else {
+            panic!("set LOCALMIND_EMBED_CACHE to a *copy* of the model cache");
+        };
+        let Ok(dylib) = std::env::var("LOCALMIND_ORT_DYLIB") else {
+            panic!("set LOCALMIND_ORT_DYLIB to the onnxruntime shared library");
+        };
+        let Ok(vectors) = std::env::var("LOCALMIND_VECTORS_COPY") else {
+            panic!("set LOCALMIND_VECTORS_COPY to a *copy* of the vectors folder");
+        };
+        std::env::set_var("ORT_DYLIB_PATH", &dylib);
+        embedding::set_cache_dir(std::path::PathBuf::from(cache));
+        let store = VectorStore::open(std::path::Path::new(&vectors))
+            .await
+            .expect("could not open the vectors copy");
+
+        // Questions the corpus answers. The corpus is the Brazilian Civil Code,
+        // so these are all things it actually contains.
+        let relevant = [
+            "Qual é o prazo de prescrição da pretensão de reparação civil?",
+            "O que caracteriza a posse de boa-fé?",
+            "Quando começa a personalidade civil da pessoa natural?",
+            "O que é usucapião extraordinária?",
+        ];
+        // Questions it has nothing to do with, of the shape a chat actually
+        // produces -- including the one from the UAT.
+        let irrelevant = [
+            QUESTION,
+            "Como faço arroz de forno?",
+            "Qual é a fórmula química da água?",
+            "Quem ganhou a Copa do Mundo de 2002?",
+        ];
+
+        let mut best_relevant: Vec<f32> = Vec::new();
+        let mut best_irrelevant: Vec<f32> = Vec::new();
+
+        println!("
+== perguntas que o corpus responde ==");
+        for q in relevant {
+            let v = embedding::embed_query(q).expect("query embedding failed");
+            let hits = store.search(GLOBAL_NAMESPACE, &v, 1).await.expect("search failed");
+            let d = hits.first().map(|h| h.distance).unwrap_or(f32::NAN);
+            best_relevant.push(d);
+            println!("  {d:.4}  {q}");
+        }
+
+        println!("
+== perguntas que ele não responde ==");
+        for q in irrelevant {
+            let v = embedding::embed_query(q).expect("query embedding failed");
+            let hits = store.search(GLOBAL_NAMESPACE, &v, 1).await.expect("search failed");
+            let d = hits.first().map(|h| h.distance).unwrap_or(f32::NAN);
+            best_irrelevant.push(d);
+            println!("  {d:.4}  {q}");
+        }
+
+        let worst_relevant = best_relevant.iter().cloned().fold(f32::MIN, f32::max);
+        let best_of_bad = best_irrelevant.iter().cloned().fold(f32::MAX, f32::min);
+        println!("
+== a faixa ==");
+        println!("  pior acerto real .............. {worst_relevant:.4}");
+        println!("  melhor acerto irrelevante ..... {best_of_bad:.4}");
+        if worst_relevant < best_of_bad {
+            println!(
+                "  SEPARAM-SE: qualquer limiar entre {worst_relevant:.4} e {best_of_bad:.4}                  corta os irrelevantes sem perder nenhum acerto real"
+            );
+        } else {
+            println!(
+                "  NÃO SE SEPARAM: as duas populações se sobrepõem, e um limiar absoluto                  perderia acerto real junto com o lixo"
+            );
+        }
     }
 }

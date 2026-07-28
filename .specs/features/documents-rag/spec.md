@@ -104,22 +104,24 @@ O usuário quer importar documentos para uma base de conhecimento global e ter o
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| DOC-01 | P1: Importar documento (seletor nativo) | Implemented | Implemented |
+| DOC-01 | P1: Importar documento (seletor nativo) | Implemented | ✅ **Verificado clicando (2026-07-27)** — o seletor nativo do Windows foi aberto pelo botão e respondido; o arquivo escolhido apareceu na lista em 517 ms |
 | DOC-02 | P1: Copiar para pasta + registrar "na fila" | Implemented | Implemented |
 | DOC-03 | P1: Rejeitar arquivo inválido/grande demais | Implemented | Implemented |
 | DOC-04 | P1: Pipeline extrair→chunk→embed→indexar | Implemented | Implemented |
-| DOC-05 | P1: UI de progresso por documento | Implemented | Implemented |
+| DOC-05 | P1: UI de progresso por documento | Implemented | ✅ **Verificado na tela (2026-07-27)** — a linha do documento passou por `Indexando` (+5,8 s) e chegou a `Pronto` em 16,6 s, num TXT de 134 KB. `Na fila`/`Lendo`/`Dividindo` **não foram capturados**: passam em menos que o intervalo de leitura de 120 ms |
 | DOC-06 | P1: Status "erro" com mensagem | Implemented | Implemented |
 | DOC-07 | P1: Processar múltiplos sem travar UI | Implemented | Implemented |
 | DOC-08 | P1: Listar documentos com status | Implemented | Implemented |
-| DOC-09 | P1: Remover documento (arquivo + embeddings) | Implemented | Implemented |
-| DOC-10 | P2: Retrieval top-k por similaridade | Implemented | Implemented (revisto em 2026-07-26 — AD-036: ranqueamento entre namespaces, piso de relevância relativo e expansão para o chunk seguinte) |
+| DOC-09 | P1: Remover documento (arquivo + embeddings) | Implemented | ✅ **Verificado clicando (2026-07-27)** pelo lado da lista — o botão Remover tirou o documento da tela. Que os embeddings saem junto continua provado por teste contra LanceDB real, não pela UI |
+| DOC-10 | P2: Retrieval top-k por similaridade | Implemented | Implemented (revisto em 2026-07-26 — AD-036: ranqueamento entre namespaces, piso de relevância relativo e expansão para o chunk seguinte). ⚠️ **Revisto de novo em 2026-07-27 pela AD-050**: o pool passou a incluir a memória da conversa, o teto de 4 é compartilhado, e o documento só fica colado na pergunta enquanto for o acerto mais próximo |
 | DOC-11 | P2: Retrieval vazio sem erro quando base vazia | Implemented | Implemented |
-| DOC-12 | P2: Expor origem/citação dos trechos | Implemented | Implemented |
+| DOC-12 | P2: Expor origem/citação dos trechos | Implemented | ✅ **Verificado no app (2026-07-27)** — resposta de um chat com anexo saiu como `3,72 unidades [fonte: relatorio-anexo.txt]`, com o nome do arquivo certo |
 
 **ID format:** `DOC-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 12 total, 12 implementados (2026-07-25). Verificado por teste real: embeddings via ONNX Runtime, isolamento de namespace e deletes no LanceDB. Falta exercitar a importação clicando na UI.
+**Coverage:** 12 total, 12 implementados. Verificado por teste real: embeddings via ONNX Runtime, isolamento de namespace e deletes no LanceDB. **A importação foi exercitada clicando em 2026-07-27** (DOC-01, DOC-05, DOC-09, DOC-12), o que fecha a pendência que esta linha registrava desde 2026-07-25.
+
+⚠️ **DOC-10 mudou de sentido pela AD-050** — ver a linha na tabela. A medição que motivou a mudança está em `chat::context_assembler::retrieval_quality`: contra a base real do usuário, a pior pergunta que o corpus **responde** fica a 0,3077 e a melhor que ele **não** responde a 0,3150. As duas populações se separam por 0,0073, o que descarta um limiar absoluto e é o motivo de a correção ter sido comparativa em vez de um corte.
 
 ---
 

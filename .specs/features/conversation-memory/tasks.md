@@ -324,14 +324,53 @@ i18n nos dois idiomas.
 - [x] Numa conversa com mais turnos do que o orçamento comporta, uma pergunta sobre o primeiro turno
       é respondida corretamente — **com o número de turnos e o orçamento registrados**.
       **Feito em 2026-07-27** — ver "A recuperação em conversa real", abaixo
-- [ ] O backfill roda numa conversa real e a pergunta sobre o turno mais antigo é respondida
-- [ ] Desligar o toggle faz o modelo parar de se prender ao que já respondeu
+- [x] O backfill roda numa conversa real e a pergunta sobre o turno mais antigo é respondida —
+      **feito em 2026-07-27**, ver "O backfill e o toggle, medidos em A/B" abaixo
+- [x] Desligar o toggle faz o modelo parar de se prender ao que já respondeu — **feito em
+      2026-07-27**, na mesma sessão e com a mesma pergunta
 - [x] O custo de armazenamento é **medido** contra o `vectors/` real (Open Question #3 do design) —
-      **~9,5 KB por turno** (AD-047); o `vectors/` da máquina está em **5,7 MB**
+      **~9,5 KB por turno** (AD-047); confirmado de novo pelo backfill de 2026-07-27, que gravou
+      **+133.963 bytes para 12 turnos (≈11,2 KB/turno)**
 - [x] A Open Question #1 (o turno rotulado é bom material de embedding?) recebe uma resposta medida —
       **sim**, e os rótulos ajudam (1,37× com eles contra 1,33× sem). Rodado de novo em 2026-07-27
 - [x] Gate check passa: `cargo test` **174 / 0 falhas / 13 ignorados**, `npm run build` limpo,
       `npm run test:scripts` **49**
+
+### O backfill e o toggle, medidos em A/B (2026-07-27)
+
+Os dois critérios que faltavam foram fechados **dirigindo a UI de verdade** — o app aberto com o
+debug remoto do WebView2 exposto, e cada ação despachada como evento DOM na página que o usuário vê,
+não por `invoke` direto. Um `invoke` provaria o backend e não provaria a tela.
+
+**A primeira tentativa reprovou por erro meu de método, e o registro fica porque o erro é
+instrutivo.** Eu fiz a mesma pergunta duas vezes na mesma conversa — uma com a memória desligada,
+outra com ela ligada — e a resposta errada da primeira virou o turno imediatamente anterior à
+segunda. O modelo repetiu a si mesmo: *"Flor do Abacate"* virou *"Flor do Abacão"*. É a AD-033
+acontecendo dentro do próprio experimento. A pergunta passou a ser feita **uma única vez por
+conversa**, e as duas leituras foram para conversas separadas.
+
+Desenho final: 12 turnos, o fato plantado no turno 1 e empurrado para fora da janela verbatim pelos
+11 seguintes (`RECENT_HISTORY_LIMIT` são **20 mensagens**; com 24 na conversa, o turno 1 está fora).
+A pergunta é a mesma nas duas, palavra por palavra, e não repete nenhum termo da resposta guardada.
+
+| Conversa | Memória durante | Toggle na pergunta | `vectors/` | Resposta |
+| --- | --- | --- | --- | --- |
+| A | **desligada** | ligada + backfill | +0 B em 12 turnos, depois **+133.963 B** no backfill | **"Falcão Azul" … "82 mil reais"** ✅ |
+| B | **ligada** | **desligada** | **+190.814 B** durante a conversa | *"não tenho a capacidade de lembrar interações ou conversas anteriores"* ✅ |
+
+Os dois lados são fortes pelo mesmo motivo: em B a memória **existia** no banco vetorial — foi
+gravada turno a turno — e mesmo assim não foi recuperada. O que suprimiu foi o toggle, não a
+ausência de dado. E em A o `vectors/` não cresceu **um byte** ao longo de 12 turnos com o toggle
+desligado, o que fecha o MEM-14 pelo lado da gravação sem depender de leitura de código.
+
+O backfill em si: **12 turnos em ~1,6 s**, com o progresso lido na tela (`Indexando histórico…
+(3/15)` numa execução de 15 turnos) — o que fecha o MEM-18 por observação e não por "o evento é
+emitido". A linha de resultado apareceu como `12 turno(s) adicionado(s) à memória desta conversa`.
+
+**Um defeito real saiu daqui, e ele não é do M6:** as duas conversas acima rodaram com *"usar meus
+documentos"* **desligado**. Com ele ligado — e com um único PDF do Código Civil na base, que nada
+tem a ver com a pergunta — a mesma pergunta na mesma forma de conversa foi respondida com
+*"Projeto de Código Civil Brasileiro 115 … R$ 250.000,00"*. Ver AD-050.
 
 ### A recuperação em conversa real (2026-07-27)
 

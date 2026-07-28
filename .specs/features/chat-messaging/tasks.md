@@ -302,10 +302,14 @@ T8, T10, T11 ──→ T12 (integração final)
 
 **Done when**:
 - [x] `npm run build` passa
-- [ ] `npm run tauri dev`: com um modelo real configurado (via M3), enviar uma mensagem simples e ver streaming funcionando
-- [ ] Anexar um `.txt` pequeno com um fato inventado, perguntar sobre ele, confirmar que a resposta reflete o conteúdo
-- [ ] Repetir a mesma pergunta (sobre o fato do anexo) em outro chat e confirmar que NÃO usa esse contexto (CHAT-11)
-- [ ] Excluir o chat com anexo e confirmar que `chats/<id>/tmp/` some do disco (CHAT-12)
+- [x] `npm run tauri dev`: com um modelo real configurado (via M3), enviar uma mensagem simples e ver streaming funcionando — **feito em 2026-07-27**
+- [x] Anexar um `.txt` pequeno com um fato inventado, perguntar sobre ele, confirmar que a resposta reflete o conteúdo — **feito em 2026-07-27** pelos **dois** caminhos: um `.txt` de 310 B (`injected_whole`, abaixo do limite de 8.000 caracteres) e um de 34.983 B, que é o que passa pelo RAG do chat. Nos dois a resposta foi `3,72 unidades` com `[fonte: <arquivo>]`
+- [x] Repetir a mesma pergunta (sobre o fato do anexo) em outro chat e confirmar que NÃO usa esse contexto (CHAT-11) — **feito em 2026-07-27**: o chat sem o anexo respondeu *"não tenho acesso a dados específicos"*, sem o número
+- [x] Excluir o chat com anexo e confirmar que `chats/<id>/tmp/` some do disco (CHAT-12) — **feito em 2026-07-27**: antes do clique o `tmp/` continha `632b32c2-…-relatorio-grande.txt` (o prefixo de id da AD-040, item D, visto em arquivo real); depois, a pasta do chat não existe mais
+
+> **Como isso foi exercitado.** O app foi aberto com o debug remoto do WebView2 (`--remote-debugging-port`) e dirigido por eventos DOM na página real; o seletor de arquivos nativo, que fica fora da webview, foi respondido por um script à parte. O `[P]` disso é que nenhum `invoke` foi chamado direto — o que estava em teste era a tela.
+>
+> **Os dois chats rodaram com "usar meus documentos" desligado**, de propósito: a AD-050 mediu um documento irrelevante da base global deslocando o bloco recuperado, e deixá-lo ligado arriscaria um falso negativo por um motivo que nada tem a ver com anexos.
 
 **Tests**: none
 **Gate**: full (`npm run tauri dev` + os 4 fluxos manuais acima)

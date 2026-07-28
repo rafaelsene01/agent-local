@@ -122,16 +122,16 @@ Consome diretamente:
 | CHAT-08 | P1: Usar trechos do anexo no contexto da resposta | Implemented | Implemented |
 | CHAT-09 | P1: Injetar anexo pequeno inteiro (sem RAG) | Implemented | Implemented |
 | CHAT-10 | P1: Falha de anexo não bloqueia envio da mensagem | Implemented | Implemented |
-| CHAT-11 | P1: Isolamento de namespace por chat_id | Implemented | Implemented — **estava furado até 2026-07-26** (AD-040): a linha temporária que um anexo grande cria em `documents` era reprocessada no boot com o namespace **global** se o app morresse durante a indexação. Fechado pela migração 6 (coluna `namespace`) |
-| CHAT-12 | P1: Apagar tmp/ e embeddings ao excluir chat | Implemented | Implemented |
-| CHAT-13 | P2: Combinar RAG global + RAG do chat | Implemented | Implemented |
+| CHAT-11 | P1: Isolamento de namespace por chat_id | Implemented | Implemented — **estava furado até 2026-07-26** (AD-040): a linha temporária que um anexo grande cria em `documents` era reprocessada no boot com o namespace **global** se o app morresse durante a indexação. Fechado pela migração 6 (coluna `namespace`). ✅ **Verificado no app em 2026-07-27** pelos dois caminhos de anexo: com o arquivo grande (34.983 B, que vai para o namespace `chat:<id>`) o chat dono respondeu `3,72 unidades [fonte: relatorio-grande.txt]` e um segundo chat, com a mesma pergunta, respondeu que não tem o dado |
+| CHAT-12 | P1: Apagar tmp/ e embeddings ao excluir chat | Implemented | ✅ **Verificado no app (2026-07-27)** — pelo lado do disco, que é onde a UI não alcança: `chats/afd9e7fd…/tmp/632b32c2-…-relatorio-grande.txt` existia antes do clique em Excluir e a pasta do chat não existe depois. Que os embeddings saem junto segue provado por teste contra LanceDB real |
+| CHAT-13 | P2: Combinar RAG global + RAG do chat | Implemented | Implemented. ⚠️ **A combinação mudou em 2026-07-27 (AD-050)**: o pool passou a incluir também a memória da conversa, com teto compartilhado, e a posição relativa à pergunta segue o ranqueamento em vez da camada |
 | CHAT-14 | P2: Toggle de uso da base global por chat | Implemented | Implemented |
 | CHAT-15 | P2: Priorização de orçamento de contexto | Implemented | Implemented |
 | CHAT-16 | P3: Indicador de uso do contexto | Implemented | ✅ **Verificado no app (2026-07-27)** — anel ao lado de Enviar, tooltip `Contexto: 8.805 de 21.760 tokens`. O teto espelha o `budget_context` do backend (window configurada, senão o `current_context` que o runtime informa), depois de a primeira versão mostrar `8.805 de 4.096` por assumir o default |
 
 **ID format:** `CHAT-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 16 total, 16 implementados. Streaming verificado contra socket real (frame partido entre leituras). **O fluxo pela UI foi exercitado em 2026-07-27**: chat criado, mensagem enviada e resposta em streaming em 11,2 s contra o runtime empacotado, mais 12 turnos seguidos na mesma conversa.
+**Coverage:** 16 total, 16 implementados. Streaming verificado contra socket real (frame partido entre leituras). **O fluxo pela UI foi exercitado em 2026-07-27**: chat criado, mensagem enviada e resposta em streaming em 11,2 s contra o runtime empacotado, mais 12 turnos seguidos na mesma conversa. **Em 2026-07-27 a T12 fechou inteira**: anexo com fato inventado nos dois caminhos (injeção inteira e RAG do chat), isolamento entre chats e limpeza do `tmp/` ao excluir — todos dirigindo a UI, com o seletor de arquivos nativo respondido por fora da webview.
 
 ---
 

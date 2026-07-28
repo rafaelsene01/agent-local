@@ -13,8 +13,7 @@
 
 use super::openai_stream;
 use super::{
-    ChatMessage, ChatStream, InstalledModel, ModelLimits, ProviderError, HEALTH_CHECK_TIMEOUT,
-    SHORT_REQUEST_TIMEOUT,
+    ChatMessage, ChatStream, InstalledModel, ModelLimits, ProviderError, SHORT_REQUEST_TIMEOUT,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -55,18 +54,10 @@ impl LlamaServerClient {
         Ok(format!("http://127.0.0.1:{port}"))
     }
 
-    pub async fn health_check(&self) -> Result<(), ProviderError> {
-        let resp = super::http_client()
-            .get(format!("{}/v1/models", self.base_url()?))
-            .timeout(HEALTH_CHECK_TIMEOUT)
-            .send()
-            .await?;
-        if resp.status().is_success() {
-            Ok(())
-        } else {
-            Err(ProviderError::Unavailable)
-        }
-    }
+    // `health_check` used to live here. Nothing in the app called it once the
+    // Conexões screen went (AD-042) — `runtime_status` answers from the database
+    // row and the child process, without a request. Its only caller was the test
+    // below, which now makes the same point through `model_limits` (C-11).
 
     /// Installed = the GGUF files in the models folder, not the one the running
     /// server happens to have loaded. `/v1/models` would only ever report that
@@ -221,10 +212,6 @@ mod tests {
     #[tokio::test]
     async fn a_stopped_runtime_is_unavailable_rather_than_an_error_string() {
         let client = LlamaServerClient::new(None, PathBuf::from("/models"));
-        assert!(matches!(
-            client.health_check().await,
-            Err(ProviderError::Unavailable)
-        ));
         assert!(matches!(
             client.model_limits("phi.gguf").await,
             Err(ProviderError::Unavailable)

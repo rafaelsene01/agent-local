@@ -1,3 +1,18 @@
+// SPEC: connections-models (CONN-08)
+
+/// The quantization schemes the estimate knows how to weigh.
+///
+/// Only `Q4` is constructed today — every one of the six curated models is a
+/// `Q4_K_M` GGUF. The other three are kept because this table describes the
+/// **quantization scheme**, not our current catalogue: an entry added with a
+/// different quant must find a byte count here rather than a compile error, and
+/// deleting them would leave `estimate_ram_gb` silently specialised to Q4 while
+/// still being named as if it were general.
+///
+/// The `allow` is explicit rather than inherited so that the reason travels with
+/// the code — a bare warning trains the eye to skip compiler output, which is
+/// how a real warning gets missed (C-11).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Quant {
     Q4,

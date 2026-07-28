@@ -106,7 +106,12 @@ O terceiro é consequência de resolver o primeiro: hoje os logs do `llama-serve
 
 **ID format:** `SIDE-[NUMBER]`
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 11 total, 0 mapeados para tasks ainda
+**Coverage:** 11 total, 11 mapeados para as 8 tasks, 0 sem cobertura. **6 verificados contra
+recurso real** (SIDE-02, SIDE-04, SIDE-05, SIDE-09, SIDE-10, SIDE-11), 5 implementados. A linha
+dizia "0 mapeados para tasks ainda" desde o planejamento, sobrevivendo ao milestone inteiro ficar
+`✅ COMPLETE` (AD-041) e à T7 fechar contra o app real (AD-048) — mesmo tipo de divergência que a
+AD-036 achou no M8 e a AD-044 no M7.1: o documento não acompanhou a execução. Corrigido em
+2026-07-27.
 
 ---
 

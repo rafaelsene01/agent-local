@@ -158,7 +158,10 @@ export interface DownloadableModelsResponse {
   models: DownloadableModel[];
 }
 
-export type PullStatus = "downloading" | "verifying" | "success" | "error";
+// Mirrors `providers::PullStatus`. "verifying" was Ollama's checksum phase and
+// was removed on the Rust side (C-11); a value that the backend can no longer
+// send has no place here either.
+export type PullStatus = "downloading" | "success" | "error";
 
 export interface PullProgress {
   status: PullStatus;

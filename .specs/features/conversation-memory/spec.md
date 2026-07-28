@@ -193,11 +193,11 @@ exercitado num app aberto — a diferença é o que a T9 fecha.
 | MEM-11 | P1: Orçamento entre as camadas | T4 | ✅ Implementado — orçamento zerado devolve lista vazia, sem erro |
 | MEM-12 | P1: Orçamento entre as camadas | T4 | ✅ Implementado — `MEMORY_TOP_K` separado do `TOP_K`, e **reduzido de 2 para 1** depois de medir que o piso de relevância não filtra nada nesta camada (Open Question #1 do design) |
 | MEM-13 | P1: Orçamento entre as camadas | T4 | ⚠️ Implementado — reusa o `retrieval_error`, que já existia; o caminho de falha **não foi provocado** |
-| MEM-14 | P1: Ligar e desligar por conversa | T1, T3, T7 | ✅ Implementado — desligado não grava (teste) e não recupera (código) |
-| MEM-15 | P1: Ligar e desligar por conversa | T1 | ✅ Implementado — default da coluna, 2 testes de migração |
+| MEM-14 | P1: Ligar e desligar por conversa | T1, T3, T7 | ✅ **Verificado no app (2026-07-27)** nos dois sentidos: com o toggle desligado o `vectors/` não cresceu **um byte** em 12 turnos; e numa conversa cuja memória **existia** no banco, desligar bastou para o modelo responder *"não tenho a capacidade de lembrar interações anteriores"* |
+| MEM-15 | P1: Ligar e desligar por conversa | T1 | ✅ **Verificado na tela (2026-07-27)** — chat recém-criado nasce com o interruptor marcado, lido do DOM; mais os 2 testes de migração |
 | MEM-16 | P1: Ligar e desligar por conversa | T1, T3, T7 | ✅ **Verificado no app (2026-07-27)** — o interruptor foi clicado numa conversa real e a gravação parou: `vectors/` ficou em 5.748.117 bytes antes e depois do turno seguinte, byte a byte |
-| MEM-17 | P2: Backfill sob demanda | T2, T6 | ⚠️ Implementado — `pair_turns` testado; o comando nunca rodou |
-| MEM-18 | P2: Backfill sob demanda | T6, T7 | ⚠️ Implementado — evento emitido e ouvido; **nenhum clique** |
+| MEM-17 | P2: Backfill sob demanda | T2, T6 | ✅ **Verificado no app (2026-07-27)** — botão clicado numa conversa de 12 turnos: `12 turno(s) adicionado(s)` em ~1,6 s, `vectors/` +133.963 B, e a pergunta sobre o turno 1 passou a ser respondida |
+| MEM-18 | P2: Backfill sob demanda | T6, T7 | ✅ **Verificado na tela (2026-07-27)** — `Indexando histórico… (3/15)` lido do DOM durante a execução, não deduzido do `emit` |
 | MEM-19 | P2: Backfill sob demanda | T2 | ✅ **Verificado** contra LanceDB real — reindexar deixa um registro |
 | MEM-20 | P2: Backfill sob demanda | T2, T7 | ✅ Implementado — conversa sem par completo devolve 0, 2 testes |
 
@@ -227,8 +227,15 @@ exercitado num app aberto — a diferença é o que a T9 fecha.
 | MEM-20 | Conversa sem par completo termina o backfill sem erro |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
-**Coverage:** 20 no total, 20 mapeados para tasks, 0 sem task. **3 verificados contra recurso real,
-16 implementados com teste unitário, 1 parcial.** Nenhum verificado clicando — é o que a T9 responde.
+**Coverage:** 20 no total, 20 mapeados para tasks, 0 sem task. **Atualizado em 2026-07-27, depois da
+T9 rodar inteira contra o app:** 3 verificados contra recurso real (LanceDB/modelo de embedding),
+**5 verificados dirigindo a UI** (MEM-14, MEM-15, MEM-16, MEM-17, MEM-18), 11 implementados com
+teste unitário, 1 parcial (MEM-13, cujo caminho de falha nunca foi provocado).
+
+⚠️ **MEM-10 e MEM-12 mudaram de sentido pela AD-050.** A memória continua a ser a última a receber
+**orçamento**, mas deixou de ser sempre a última em **posição**: quando o turno recuperado é o acerto
+mais próximo, é ele que fica colado na pergunta, e os documentos cedem uma vaga do teto. O motivo
+está medido na AD-050 — a regra antiga fazia um PDF irrelevante deslocar a resposta certa.
 
 ---
 

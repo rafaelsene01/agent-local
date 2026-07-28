@@ -60,11 +60,12 @@ Não há mais servidor externo a autenticar. O sidecar é filho do app, escuta e
 **Risco (era):** apagar um chat durante uma geração inseria a resposta num chat inexistente, como linha órfã silenciosa; e a primeira funcionalidade de apagar conexão herdaria `model_configs` órfãos confiando numa declaração que não valia.
 **Resolução:** pragma ligado no `open`, com três testes — que o pragma está ativo, que o CASCADE dispara, e que uma mensagem órfã é recusada. Ver AD-040.
 
-### C-14: `delete_chat` não cancela a geração em andamento
+### C-14: ~~`delete_chat` não cancela a geração em andamento~~ — **RESOLVIDO (2026-07-27)**
 
-**Evidência:** `commands.rs::delete_chat` apaga mensagens, anexos e o chat, mas não toca no `CancellationRegistry`.
-**Risco:** apagar um chat que está gerando deixa o `send_message` rodando até o fim, gastando GPU/CPU para um resultado que agora é recusado pelo banco (desde a C-13). Desperdício visível como lentidão, não como erro.
-**Fix sugerido:** chamar o cancelamento antes da transação, do mesmo jeito que `cancel_generation` faz.
+**Evidência (era):** `commands.rs::delete_chat` apagava mensagens, anexos e o chat, mas não tocava no `CancellationRegistry`.
+**Resolução:** `app.state::<CancellationRegistry>().cancel(&id)` como **primeira** linha do comando, antes da transação — a mesma via do `cancel_generation`. Sinalizar antes de apagar também estreita a janela que `chat::memory::record_turn` cobre com a checagem de existência: quanto antes o laço para, menos provável é ele chegar ao ponto de gravar memória.
+
+**O que isto não tem:** teste automatizado. `delete_chat` é um comando Tauri que só orquestra I/O, e a matriz do `TESTING.md` põe isso explicitamente na coluna "nenhum teste" — não há runner de integração Tauri, e o comando precisa de um `AppHandle`. **A prova é de UAT e ainda não foi feita**: apagar um chat no meio de uma geração e observar o sidecar parar.
 
 > **O M6 encostou nisto sem resolver (2026-07-27, AD-044).** A gravação de memória roda no fim da geração, então uma conversa apagada no meio poderia receber vetores num namespace que o `delete_chat` já limpou — órfãos que nada mais apagaria. `chat::memory::record_turn` confere que o chat ainda existe antes do `upsert`, o mesmo padrão do `still_exists` do pipeline. Isso fecha a janela nova; **a concern original continua aberta**.
 
@@ -72,11 +73,18 @@ Não há mais servidor externo a autenticar. O sidecar é filho do app, escuta e
 
 Não há semeadura: a tabela `connections` foi derrubada pela migração 7 e o runtime é um só, descoberto no `resource_dir` do próprio app.
 
-### C-11: Variantes `Quant::Q5/Q8/F16` sem uso (warning permanente no build)
+### C-11: ~~Variantes `Quant::Q5/Q8/F16` sem uso (warning permanente no build)~~ — **RESOLVIDO (2026-07-27)**
 
-**Evidência:** warning `variants Q5, Q8 and F16 are never constructed` em `cargo check` — os 6 modelos curados (eram 8 a mais antes da AD-042) usam todos `Quant::Q4`. Sob `cargo test` o warning encolhe para `Q5 and F16`, porque um teste de `memory_estimate` constrói `Q8`; o código de produção não constrói nenhuma das três.
-**Risco:** nenhum funcional, mas warning constante treina o olho a ignorar a saída do compilador, o que esconde warnings reais.
-**Fix sugerido:** ou usar as variantes (adicionar modelos com outro quant ao catálogo), ou `#[allow(dead_code)]` explícito com comentário dizendo que existem pra completude da fórmula.
+**Evidência (era):** warning `variants Q5, Q8 and F16 are never constructed` em `cargo check` — os 6 modelos curados usam todos `Quant::Q4`.
+**Resolução:** `#[allow(dead_code)]` explícito no enum, com o motivo escrito ao lado: a tabela descreve o **esquema de quantização**, não o catálogo atual, e apagar as variantes deixaria `estimate_ram_gb` especializada em Q4 continuando a se chamar como se fosse geral.
+
+**Três warnings vizinhos foram varridos na mesma passada, e dois eram código morto de verdade:**
+
+- `HEALTH_CHECK_TIMEOUT` e `LlamaServerClient::health_check` — sobras da tela de Conexões, que saiu com o M9 (AD-042). O único chamador restante era um teste, isto é, o método existia para que o teste tivesse o que chamar. Removidos os dois; o teste continua, exercitando `model_limits`.
+- `PullStatus::Verifying` — a fase de checksum do `pull` do Ollama. Um GGUF baixado por um GET não tem essa fase. Removido no Rust **e** em `src/types.ts`, que espelha o enum à mão (C-03).
+- Um `let mut` desnecessário num teste de `db.rs`.
+
+**Estado:** `cargo check --lib` e `cargo check --lib --tests` passam com **zero warnings**. Isso é o pré-requisito que faltava para o C-09 poder ligar `clippy -D warnings` sem virar refatoração disfarçada — embora o `clippy` em si ainda não tenha sido rodado.
 
 ### C-12: Verificação só em Windows
 

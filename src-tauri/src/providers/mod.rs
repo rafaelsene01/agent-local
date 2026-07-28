@@ -4,10 +4,11 @@ pub mod openai_stream;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-/// Every provider lives on localhost, so an unreachable one should fail fast
-/// instead of holding the Conexões screen. Applied per-request rather than on
-/// the client, which also serves streaming answers and model downloads.
-pub const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
+// `HEALTH_CHECK_TIMEOUT` lived here to keep the Conexões screen from stalling on
+// an unreachable provider. Both the screen and the providers went with the M9
+// (AD-042), and the only caller left was `LlamaServerClient::health_check`,
+// itself reached only from a test — removed together (C-11). Runtime status is
+// read from a database row plus the child process's state, with no HTTP call.
 
 /// Hard ceiling on a single answer. Without one, generation is unlimited and
 /// a model that misses its stop token keeps going until the whole context
@@ -47,11 +48,15 @@ pub struct InstalledModel {
     pub size_bytes: Option<u64>,
 }
 
+/// `Verifying` was Ollama's: its pull reported a checksum phase between the
+/// download and success. A GGUF fetched by a plain GET has no such phase, and
+/// nothing has constructed the variant since the M9 removed the provider
+/// (AD-042). Removed here **and** in `src/types.ts`, which mirrors this enum by
+/// hand (C-03).
 #[derive(Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PullStatus {
     Downloading,
-    Verifying,
     Success,
     Error,
 }

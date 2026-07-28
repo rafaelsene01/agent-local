@@ -367,7 +367,7 @@ mod tests {
         // the combination that could fail only on a user's disk.
         let file = temp_db();
         {
-            let mut conn = Connection::open(&file).unwrap();
+            let conn = Connection::open(&file).unwrap();
             for (version, sql) in MIGRATIONS.iter().take_while(|(v, _)| *v <= 5) {
                 conn.execute_batch(sql).unwrap();
                 conn.pragma_update(None, "user_version", *version).unwrap();
